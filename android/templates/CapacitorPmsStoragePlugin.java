@@ -37,14 +37,57 @@ import javax.crypto.spec.GCMParameterSpec;
 public final class CapacitorPmsStoragePlugin extends Plugin {
   private final ExecutorService io = Executors.newSingleThreadExecutor();
   private volatile LocalPmsRepository repository;
+  private static volatile CapacitorPmsStoragePlugin activePlugin;
 
-  @Override public void load() { super.load(); }
+  @Override public void load() {
+    super.load();
+    activePlugin = this;
+  }
 
   private synchronized LocalPmsRepository repository() {
     if (repository == null) repository = new LocalPmsRepository(getContext());
     return repository;
   }
-  @Override protected void handleOnDestroy() { io.shutdown(); super.handleOnDestroy(); }
+
+  /** Close the native DB before clearing the only in-memory DEK copy. */
+  private void closeRepositoryAndLock() {
+    try {
+      synchronized (this) {
+        if (repository != null) {
+          try { repository.close(); }
+          finally { repository = null; }
+        }
+      }
+    } finally {
+      PmsUnlockManager.lock();
+    }
+  }
+
+  /** Called by MainActivity.onStop; serialize behind any in-flight repository operation. */
+  static void lockForLifecycle() {
+    CapacitorPmsStoragePlugin plugin = activePlugin;
+    if (plugin == null) {
+      PmsUnlockManager.lock();
+      return;
+    }
+    try {
+      plugin.io.execute(plugin::closeRepositoryAndLock);
+    } catch (java.util.concurrent.RejectedExecutionException destroyed) {
+      plugin.closeRepositoryAndLock();
+    }
+  }
+
+  @Override protected void handleOnDestroy() {
+    CapacitorPmsStoragePlugin current = activePlugin;
+    if (current == this) activePlugin = null;
+    try {
+      io.execute(this::closeRepositoryAndLock);
+    } catch (java.util.concurrent.RejectedExecutionException ignored) {
+      closeRepositoryAndLock();
+    }
+    io.shutdown();
+    super.handleOnDestroy();
+  }
 
   @PluginMethod public void getOrCreateLocalIdentity(PluginCall call) {
     io.execute(() -> { try {
@@ -200,10 +243,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
 
   @PluginMethod public void lockDatabase(PluginCall call) {
     io.execute(() -> { try {
-      synchronized(this) {
-        if(repository!=null) { repository.close(); repository=null; }
-      }
-      PmsUnlockManager.lock();
+      closeRepositoryAndLock();
       JSObject result=new JSObject(); result.put("locked",true); call.resolve(result);
     } catch(Exception e) { call.reject("PMS database lock failed", "PMS_LOCK_FAILED", e); } });
   }
