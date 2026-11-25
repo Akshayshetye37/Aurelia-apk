@@ -3473,7 +3473,7 @@ window.printGuestPreview=function(){
       message='SAVED DATA NEEDS RECOVERY — Do not clear app data. Restore a verified backup before continuing.';
     }else if(LOCAL_STATE_STATUS==='idb-pending'){
       message='SAVING TO DEVICE DATABASE — Keep the app open until the save finishes.';
-    }else if(LOCAL_STATE_STATUS==='unavailable'||LOCAL_STATE_STATUS==='write-failed'||window.__aureliaStorage?.memoryOnly){
+    }else if(LOCAL_STATE_STATUS==='unavailable'||LOCAL_STATE_STATUS==='write-failed'){
       message='STORAGE ERROR — Changes are not saved permanently. Do not close the app. Check device storage and restore a backup.';
     }
     let banner=document.getElementById('aurelia-storage-warning');
@@ -3565,7 +3565,7 @@ window.printGuestPreview=function(){
       committed=true;
       closeS();
       render();
-      folio(booking.id);
+      if(booking.st==='in')folio(booking.id);
       toast('Stay extended by '+result.addedNights+' night(s). Additional charge: '+K(result.addedCharge)+'.');
     }catch(error){
       if(!committed&&oldBooking&&booking){
