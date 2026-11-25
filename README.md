@@ -29,6 +29,10 @@ Booking folios, payment history, guest balances, cancellation records and accoun
 
 A UPI intent/QR is a payment request, not independent proof of settlement. Staff must verify receipt in the receiving UPI/bank account before recording a payment as received.
 
+## Aurelia UPI workspace
+
+The Aurelia UPI collection, notification evidence, FIFO queue, manual reconciliation, refund register and local QR implementation are documented in [docs/AURELIA_UPI.md](docs/AURELIA_UPI.md). The Sovereign PMS shell uses Overview, Chambers, Stays, Dining, Vault and Aurelia UPI as primary navigation. The supplied HTML is used as the visual reference; its static demo data and simulated payment confirmation are not used as production settlement logic.
+
 ## Branch audit and adoption policy — 24 November 2026
 
 A branch inventory identified 73 branches. Many feature, integration, backup and release branches are deeply diverged from `main`; branch commit counts and compare totals are not evidence that all changes are complete. GitHub compare responses for several large branches were capped at 300 changed files.
@@ -47,10 +51,9 @@ Do not import multi-provider payment adapters, gateway SDKs, provider onboarding
 
 ### APK workflow and verification boundary
 
-The workflow at `.github/workflows/build-apk.yml` is configured to run for changes to the application entry point, package/Capacitor configuration, Android templates, build scripts, or the workflow itself. A README-only update does not match its path filters and does not start an APK build.
+Both `.github/workflows/android-apk.yml` and `.github/workflows/build-apk.yml` are manual-dispatch only on this feature branch. They do not run on push or pull-request events. Do not dispatch either APK workflow until the owner explicitly approves an APK build.
 
-The workflow preserves `android/templates` while generating the Capacitor Android project, applies the native patch, verifies generated bridge files, and then runs the debug APK build. A successful run on an earlier commit is not proof that later native-patch changes build successfully. Treat build evidence as valid only for the exact commit SHA reported by GitHub Actions. No APK build is being requested or represented as verified by this documentation update.
-
+The separate `.github/workflows/android-native-compile.yml` workflow compiles generated Android Java sources with `:app:compileDebugJavaWithJavac`; it has no APK assembly or artifact-upload step and asserts that no APK file was produced. The Node contract workflow runs the source tests and local web bundle build. Treat each result as evidence only for the exact commit SHA reported by GitHub Actions.
 ### Branding
 
 The maintained application name, package name, app title, and Capacitor app name are `Aurelia PMS` / `aurelia-pms`. Third-party platform names in security and integration notes refer to dependencies or disabled historical integrations, not alternate application branding or enabled payment methods.
