@@ -149,7 +149,7 @@ export function transitionSession(session, nextStatus, patch = {}, nowMs = Date.
     error.code = "AURELIA_UPI_ILLEGAL_TRANSITION";
     throw error;
   }
-  const protectedFields = new Set([
+  if (nextStatus === SESSION_STATUS.CONFIRMED && patch.manualVerified !== true) {\n    const error = new Error("Aurelia UPI settlement requires explicit operator verification.");\n    error.code = "AURELIA_UPI_MANUAL_VERIFICATION_REQUIRED";\n    throw error;\n  }\n  const protectedFields = new Set([
     "id", "amountPaise", "currency", "rail", "vpa", "reference", "createdAt", "upiUri"
   ]);
   for (const key of Object.keys(patch)) {
