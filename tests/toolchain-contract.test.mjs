@@ -98,6 +98,6 @@ test('GitHub workflows do not persist checkout tokens into repositories used by 
   ];
   for (const path of paths) {
     const workflow = await readFile(new URL(path, import.meta.url), 'utf8');
-    assert.match(workflow, /uses: actions\\/checkout@[\\w.]+[\\s\\S]{0,100}persist-credentials:\\s*false/, path);
+    assert.match(workflow, /checkout@[\\w.]+\\n\\s+with:\\n\\s+persist-credentials: false/, path);
   }
 });
