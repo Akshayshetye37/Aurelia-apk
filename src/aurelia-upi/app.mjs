@@ -99,16 +99,17 @@ async function refreshData() {
         amountPaise: Number(item.amountPaise),
         currency: "INR",
         utr: item.utr || null,
-        receivedAt: item.receivedAt || new Date().toISOString(),
+        receivedAt: typeof item.receivedAt === "number" ? new Date(item.receivedAt).toISOString() : (item.receivedAt || new Date().toISOString()),
         rawText: item.rawText || "",
         status: item.status || "UNMATCHED",
         native: true
       };
       if (normalized.id && !state.evidence.some(row => row.id === normalized.id)) {
         const match = matchEvidenceToSessions(normalized, state.sessions);
-        normalized.matchDecision = match.decision;
-        normalized.matchReason = match.reason;
-        normalized.suggestedSessionId = match.suggestedSessionId || null;
+        const terminalEvidenceStatus = ["DUPLICATE", "CONFLICT", "REJECTED", "CONFIRMED"].includes(normalized.status);
+        normalized.matchDecision = terminalEvidenceStatus ? normalized.status : match.decision;
+        normalized.matchReason = terminalEvidenceStatus ? "native_evidence_status_" + normalized.status.toLowerCase() : match.reason;
+        normalized.suggestedSessionId = normalized.matchDecision === "REVIEW_REQUIRED" ? (match.suggestedSessionId || null) : null;
         state.evidence.unshift(normalized);
       }
     }
@@ -264,7 +265,10 @@ function renderReviewCard(evidence) {
     (evidence.matchReason ? '<p class="au-hint">Match result: ' + esc(evidence.matchReason) + '. Matching is a suggestion only.</p>' : '') +
     (canReview ? '<label class="au-review-check"><input type="checkbox" id="au-verify-' + esc(evidence.id) + '"><span>I checked the credit in the receiving bank account and verified this transaction.</span></label>' +
       '<label class="au-review-utr"><span>Verified UTR / bank reference</span><input id="au-utr-' + esc(evidence.id) + '" value="' + esc(evidence.utr || "") + '" maxlength="30" placeholder="Enter UTR if available"></label>' +
-      (session ? '<button class="au-primary au-wide" type="button" data-upi-action="confirm" data-id="' + esc(evidence.id) + '">Verify and apply payment</button>' : '<div class="au-warning">No unique collection request matches this alert. Do not apply it to a folio automatically.</div>') +
+      (session ? '<button class="au-primary au-wide" type="button" data-upi-action="confirm" data-id="' + esc(evidence.id) + '">Verify and apply payment</button>' :
+      '<label><span>Assign exact-amount collection</span><select id="au-assign-' + esc(evidence.id) + '"><option value="">Select request</option>' +
+      state.sessions.filter(row => Number(row.amountPaise) === Number(evidence.amountPaise) && ["ACTIVE", "EXPIRED", "CANCELLED", "REVIEW_REQUIRED"].includes(row.status)).map(row => '<option value="' + esc(row.id) + '">' + esc(row.reference + " · " + (row.guestName || row.kind)) + '</option>').join("") +
+      '</select></label><button class="au-secondary au-wide" type="button" data-upi-action="assign" data-id="' + esc(evidence.id) + '">Assign for manual review</button>') +
       '<button class="au-link au-danger" type="button" data-upi-action="reject" data-id="' + esc(evidence.id) + '">Reject / not a credit</button>'
       : '<div class="au-hint">This evidence has already been reviewed. It cannot trigger a second settlement.</div>') +
     (isNative ? '<small class="au-native-source">Captured by Aurelia Android notification observer · encrypted local queue</small>' : '') +
@@ -298,7 +302,7 @@ function renderControls() {
     '<section class="au-panel"><span class="au-kicker">ANDROID OBSERVER</span><h3>Incoming notification evidence</h3>' +
     '<p class="au-copy">Optional Android notification access can capture supported payment alerts. Aurelia stores them as evidence, not as confirmed payments.</p>' +
     '<button class="au-secondary au-wide" type="button" data-upi-action="notification-settings">Open notification access settings</button>' +
-    '<div class="au-warning">Observer access is optional and sensitive. Grant it only if you want Aurelia to read payment notifications. No SMS-read permission is requested.</div>' +
+    '<div class="au-warning">Observer access is optional and sensitive. Grant it only if you want Aurelia to read allowlisted payment notifications. No SMS-read permission is requested. Evidence is persisted only while the encrypted PMS store is unlocked.</div>' +
     '</section></div>' +
     '<section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">STORAGE</span><h3>' + (repository.isNative ? "Encrypted local repository" : "Preview storage") + '</h3></div>' +
     badge(repository.isNative ? "NATIVE" : "PREVIEW") + '</div>' +
@@ -379,12 +383,31 @@ async function importEvidence() {
   const parsed = parseIncomingUpiNotification({ text, source: "MANUAL_IMPORT" });
   if (!parsed.ok) throw new Error("Alert not accepted: " + parsed.reason.replaceAll("_", " ") + ".");
   const evidence = parsed.evidence;
+  const normalizedText = evidence.rawText.toLowerCase().replace(/\\s+/g, " ").trim();
+  evidence.fingerprint = [evidence.amountPaise, evidence.utr || "", normalizedText].join("|").slice(0, 4200);
+  const duplicate = state.evidence.find(row => evidence.utr && row.utr &&
+    String(row.utr).toUpperCase() === String(evidence.utr).toUpperCase());
+  const sameFingerprint = state.evidence.find(row => row.fingerprint && row.fingerprint === evidence.fingerprint);
   const match = matchEvidenceToSessions(evidence, state.sessions);
-  evidence.matchDecision = match.decision;
-  evidence.matchReason = match.reason;
-  evidence.suggestedSessionId = match.suggestedSessionId || null;
-  evidence.candidateSessionIds = match.candidates.map(row => row.id);
-  evidence.status = match.decision;
+  if (sameFingerprint || (duplicate && Number(duplicate.amountPaise) === evidence.amountPaise)) {
+    evidence.matchDecision = "DUPLICATE";
+    evidence.matchReason = "duplicate_evidence";
+    evidence.suggestedSessionId = null;
+    evidence.candidateSessionIds = [];
+    evidence.status = "DUPLICATE";
+  } else if (duplicate && Number(duplicate.amountPaise) !== evidence.amountPaise) {
+    evidence.matchDecision = "CONFLICT";
+    evidence.matchReason = "same_utr_different_amount";
+    evidence.suggestedSessionId = null;
+    evidence.candidateSessionIds = [];
+    evidence.status = "CONFLICT";
+  } else {
+    evidence.matchDecision = match.decision;
+    evidence.matchReason = match.reason;
+    evidence.suggestedSessionId = match.suggestedSessionId || null;
+    evidence.candidateSessionIds = match.candidates.map(row => row.id);
+    evidence.status = match.decision;
+  }
   await repository.saveEvidence(evidence);
   state.evidence.unshift(evidence);
   if (evidence.suggestedSessionId) {
@@ -400,6 +423,28 @@ async function importEvidence() {
   audit("Incoming evidence imported", (evidence.utr || "No UTR") + " · " + formatPaise(evidence.amountPaise));
   notify("Payment alert added for manual review. No settlement was made.");
   state.view = "review";
+  rerender();
+}
+
+async function assignEvidence(id) {
+  const evidence = state.evidence.find(row => row.id === id);
+  if (!evidence) throw new Error("Payment evidence was not found.");
+  const selectedId = document.getElementById("au-assign-" + id)?.value;
+  const session = state.sessions.find(row => row.id === selectedId);
+  if (!session) throw new Error("Select a collection request to assign this evidence.");
+  if (Number(session.amountPaise) !== Number(evidence.amountPaise)) throw new Error("Evidence amount does not exactly match the selected collection.");
+  if (!["ACTIVE", "EXPIRED", "CANCELLED", "REVIEW_REQUIRED"].includes(session.status)) throw new Error("Only active or late-payment sessions can be reviewed.");
+  evidence.suggestedSessionId = session.id;
+  evidence.matchDecision = "REVIEW_REQUIRED";
+  evidence.matchReason = "operator_assigned_exact_amount";
+  evidence.status = "REVIEW_REQUIRED";
+  if (session.status !== SESSION_STATUS.REVIEW_REQUIRED) {
+    const updated = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: evidence.id });
+    await repository.saveSession(updated, "AURELIA_UPI_EVIDENCE_MANUALLY_ASSIGNED");
+    state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
+  }
+  await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_MANUALLY_ASSIGNED");
+  audit("Evidence assigned for review", evidence.id + " → " + session.reference);
   rerender();
 }
 
@@ -459,14 +504,12 @@ async function confirmEvidence(id) {
   }
 
   evidence.status = "CONFIRMED";
+  evidence.matchDecision = "CONFIRMED";
   evidence.reviewedAt = now;
   evidence.reviewedBy = "LOCAL_OPERATOR";
   evidence.transactionReference = utr || null;
-  if (evidence.native) {
-    await repository.updateNativeNotificationEvidence(evidence.id, "CONFIRMED", "Verified by local operator");
-  } else {
-    await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REVIEWED");
-  }
+  if (evidence.native) await repository.updateNativeNotificationEvidence(evidence.id, "CONFIRMED", "Verified by local operator");
+  await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REVIEWED");
   await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
   state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
   state.evidence = state.evidence.map(row => row.id === evidence.id ? evidence : row);
@@ -485,17 +528,20 @@ async function confirmEvidence(id) {
 async function rejectEvidence(id) {
   const evidence = state.evidence.find(row => row.id === id);
   if (!evidence) return;
-  if (evidence.native) {
-    await repository.updateNativeNotificationEvidence(id, "REJECTED", "Rejected by local operator");
-  } else {
-    evidence.status = "REJECTED";
-    await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REJECTED");
-  }
+  evidence.status = "REJECTED";
+  evidence.matchDecision = "REJECTED";
+  if (evidence.native) await repository.updateNativeNotificationEvidence(id, "REJECTED", "Rejected by local operator");
+  await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REJECTED");
   const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
   if (session && session.status === SESSION_STATUS.REVIEW_REQUIRED) {
     const rejected = transitionSession(session, SESSION_STATUS.REJECTED, { rejectedAt: new Date().toISOString() });
     await repository.saveSession(rejected, "AURELIA_UPI_SESSION_REJECTED");
     state.sessions = state.sessions.map(row => row.id === rejected.id ? rejected : row);
+    const promoted = promoteNextSession(state.sessions, session.vpa);
+    if (promoted.promoted) {
+      await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
+      state.sessions = promoted.sessions;
+    }
   }
   audit("Evidence rejected", evidence.utr || evidence.id);
   await refreshData();
@@ -631,6 +677,7 @@ function onActionClick(event) {
     if (action === "open") { await openSession(state.sessions.find(row => row.id === id)); return; }
     if (action === "cancel") { await cancelSession(id); return; }
     if (action === "import-evidence") { await importEvidence(); return; }
+    if (action === "assign") { await assignEvidence(id); return; }
     if (action === "confirm") { await confirmEvidence(id); return; }
     if (action === "reject") { await rejectEvidence(id); return; }
     if (action === "refund") {
