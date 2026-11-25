@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const { findStayExtensionConflict, buildStayExtension } = require('../scripts/stay-extension.js');
@@ -94,4 +95,14 @@ test('web build copies the stay-extension rules and the app loads them', async (
   assert.ok(html.includes('scripts/stay-extension.js'));
   assert.ok(html.includes('Extend stay'));
   assert.ok(html.includes('Change departure'));
+});
+
+
+test('all inline application scripts parse after the persistence and stay-extension changes', () => {
+  const blocks = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
+    .filter(match => !match[1].includes('src='));
+  assert.ok(blocks.length >= 18, 'expected inline application scripts');
+  blocks.forEach((match, index) => {
+    new vm.Script(match[2], { filename: 'index.html:inline-script-' + index });
+  });
 });
