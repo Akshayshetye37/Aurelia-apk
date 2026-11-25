@@ -133,7 +133,7 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
     for (String word : EXCLUDE) if (normalized.contains(word)) return null;
     boolean credit = false;
     for (String word : CREDIT) if (normalized.contains(word)) { credit = true; break; }
-    if (!credit || !Pattern.compile("\\bupi\\b|vpa|utr|rrn", Pattern.CASE_INSENSITIVE).matcher(text).find()) return null;
+    if (!credit || (!Pattern.compile("\\bupi\\b|vpa|utr|rrn", Pattern.CASE_INSENSITIVE).matcher(text).find() && !VPA.matcher(text).find())) return null;
     Matcher amountMatcher = AMOUNT.matcher(text);
     if (!amountMatcher.find()) return null;
     try {
