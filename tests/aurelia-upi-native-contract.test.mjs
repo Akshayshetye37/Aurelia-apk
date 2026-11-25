@@ -49,11 +49,15 @@ test('native plugin exposes evidence review and the notification settings bridge
 test('web packaging includes the pinned local QR engine and all Aurelia UPI modules', async () => {
   const pkg = JSON.parse(await read('package.json'));
   const build = await read('scripts/prepare-web.js');
+  const qrEntry = await read('scripts/qr-browser-entry.cjs');
   assert.equal(pkg.dependencies.qrcode, '1.5.4');
   assert.equal(pkg.devDependencies.esbuild, '0.28.1');
   assert.equal(pkg.engines.node, '>=22.0.0');
   assert.match(build, /require\('esbuild'\)/);
-  assert.match(build, /entryPoints:\s*\[require\.resolve\('qrcode'\)\]/);
+  assert.match(build, /entryPoints:\s*\[path\.join\(root, 'scripts', 'qr-browser-entry\.cjs'\)\]/);
+  assert.match(qrEntry, /QRCodeCore\.create/);
+  assert.match(qrEntry, /SvgRenderer\.render/);
+  assert.doesNotMatch(qrEntry, /require\(['"](pngjs|stream|util)['"]\)/);
   assert.match(build, /platform:\s*'browser'/);
   assert.match(build, /globalName:\s*'QRCode'/);
   assert.match(build, /QRCode\.toString/);
