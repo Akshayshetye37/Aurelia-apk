@@ -77,5 +77,6 @@ test('native patch wires manifest policy, R8 rules and release WebView debugging
   assert.match(patchSource, /disableManifestBackup\(manifest\)/);
   assert.match(patchSource, /hardenGroovyReleaseBuild\(gradle\)/);
   assert.match(patchSource, /proguard-rules\.pro/);
-  assert.match(patchSource, /if \(!BuildConfig\.DEBUG\) WebView\.setWebContentsDebuggingEnabled\(false\)/);
+  assert.match(patchSource, /ApplicationInfo\.FLAG_DEBUGGABLE/);
+  assert.doesNotMatch(patchSource, /BuildConfig\.DEBUG/);
 });
