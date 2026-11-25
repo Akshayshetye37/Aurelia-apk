@@ -193,6 +193,7 @@ test('app reset cannot be undone by the pagehide persistence handler', () => {
   assert.ok(persistStart >= 0 && resetStart >= 0);
   assert.ok(html.slice(persistStart, persistStart + 180).includes('if(APP_STATE_RESETTING)return true'));
   assert.ok(html.slice(resetStart, resetStart + 600).includes('APP_STATE_RESETTING=true'));
+  assert.ok(html.slice(resetStart, resetStart + 600).includes('await APP_STATE_WRITE_CHAIN;await deleteAppStateDb()'));
   assert.ok(html.includes("window.addEventListener('pagehide',()=>{persist()})"));
 });
 
