@@ -3357,5 +3357,161 @@ window.printGuestPreview=function(){
 })();
 </script>
 
+
+<script src="scripts/stay-extension.js"></script>
+<script id="aurelia-persistence-and-stay-extension">
+(function(){
+  function storageNotice(){
+    const target=document.getElementById('v');
+    if(!target)return;
+    let message='';
+    if(RECOVERY_CHECK_PENDING||LOCAL_STATE_STATUS==='recovery-pending'){
+      message='RECOVERY CHECK IN PROGRESS — Keep the app open. New changes are not saved until recovery finishes.';
+    }else if(LOCAL_STATE_STATUS==='invalid'){
+      message='SAVED DATA NEEDS RECOVERY — Do not clear app data. Restore a verified backup before continuing.';
+    }else if(LOCAL_STATE_STATUS==='unavailable'||LOCAL_STATE_STATUS==='write-failed'||window.__aureliaStorage?.memoryOnly){
+      message='STORAGE ERROR — Changes are not saved permanently. Do not close the app. Check device storage and restore a backup.';
+    }
+    let banner=document.getElementById('aurelia-storage-warning');
+    if(!message){if(banner)banner.remove();return}
+    if(!banner){
+      banner=document.createElement('div');
+      banner.id='aurelia-storage-warning';
+      banner.setAttribute('role','alert');
+      banner.style.cssText='margin:0 0 14px;padding:12px 14px;border:1px solid #df7c70;border-radius:14px;background:#3b1c18;color:#ffe5df;font:500 13px/1.45 system-ui,sans-serif';
+      target.prepend(banner);
+    }
+    banner.textContent=message;
+  }
+
+  const originalRender=render;
+  render=function(){
+    const result=originalRender.apply(this,arguments);
+    storageNotice();
+    return result;
+  };
+
+  function extensionConflictMessage(error){
+    const conflict=error&&error.conflict;
+    if(!conflict)return error&&error.message?error.message:'Stay extension could not be saved.';
+    return 'Cannot extend room '+conflict.room+': '+(conflict.g||'another guest')+' is booked from '+fd(conflict.in)+' to '+fd(conflict.out)+'. Assign another room or offer an alternative.';
+  }
+
+  window.extendStay=function(id){
+    const booking=bk(Number(id));
+    if(!booking||!['in','res'].includes(booking.st)){
+      toast('Only arriving or in-house bookings can be extended.');
+      return;
+    }
+    const room=rm(booking.room);
+    if(!room){toast('The booked room could not be found.');return}
+    const nextDate=ymd(Number(booking.out)+1);
+    const title=booking.st==='in'?'Extend stay':'Change departure before check-in';
+    openS(`<h2 class="foil">${title}</h2>
+      <div class="lab">${esc(booking.g)} · Room ${esc(String(booking.room))}<br>
+      Current checkout: ${esc(ymd(booking.out))} at ${esc(booking.checkOutTime||defCheckOutTime())}<br>
+      Rate: ${K(room.r)} per additional night</div>
+      <label class="fld"><span>New checkout date</span><input id="stay-extension-date" type="date" min="${nextDate}" value="${nextDate}" onchange="previewStayExtension(${booking.id})" required></label>
+      <label class="fld"><span>New checkout time</span><input id="stay-extension-time" type="time" value="${esc(booking.checkOutTime||defCheckOutTime())}" onchange="previewStayExtension(${booking.id})" required></label>
+      <div id="stay-extension-preview" class="card" style="margin:12px 0;padding:12px"></div>
+      <p class="lab">The existing booking is updated; no duplicate booking is created. The actual arrival and check-in time remain unchanged. The additional room charge is added to the same folio.</p>
+      <button class="btn" style="width:100%" onclick="confirmStayExtension(${booking.id})">Confirm stay extension</button>
+      <button class="btn ghost" style="width:100%;margin-top:8px" onclick="closeS()">Cancel</button>`);
+    previewStayExtension(booking.id);
+  };
+
+  window.previewStayExtension=function(id){
+    const booking=bk(Number(id)),date=document.getElementById('stay-extension-date'),box=document.getElementById('stay-extension-preview');
+    if(!booking||!date||!box)return;
+    if(!date.value){box.textContent='Select the new checkout date.';return}
+    const newOut=offOf(date.value),nights=newOut-Number(booking.out),room=rm(booking.room);
+    if(!Number.isInteger(newOut)||nights<1){box.textContent='Choose a checkout date later than '+ymd(booking.out)+'.';return}
+    const conflict=AureliaStayExtension.findStayExtensionConflict(booking,newOut,S.b);
+    if(conflict){box.textContent='Unavailable: room '+booking.room+' is already booked for '+conflict.g+' from '+fd(conflict.in)+' to '+fd(conflict.out)+'.';return}
+    const rate=Number(room&&room.r)||0;
+    if(!(rate>0)){box.textContent='Set a valid nightly rate for this room before extending the stay.';return}
+    box.textContent=nights+' additional night'+(nights===1?'':'s')+' · Additional room charge: '+K(nights*rate)+'. No overlapping booking found.';
+  };
+
+  window.confirmStayExtension=function(id){
+    const booking=bk(Number(id)),date=document.getElementById('stay-extension-date')?.value||'',time=document.getElementById('stay-extension-time')?.value||'';
+    if(!booking||!['in','res'].includes(booking.st)){toast('This booking can no longer be extended.');return}
+    const room=rm(booking.room);
+    try{
+      const result=AureliaStayExtension.buildStayExtension(booking,{
+        newOut:offOf(date),newCheckoutDate:date,newCheckoutTime:time,
+        previousCheckoutDate:ymd(booking.out),roomRate:Number(room&&room.r),
+        bookings:S.b,now:new Date().toISOString()
+      });
+      const oldBooking={...booking,extensionHistory:Array.isArray(booking.extensionHistory)?booking.extensionHistory.slice():[]};
+      const oldAudit=S.aud.slice();
+      Object.assign(booking,result.booking);
+      aud('Stay extended',booking.g+' · Room '+booking.room+' · '+result.addedNights+' night(s) · '+K(result.addedCharge)+' · checkout '+date+' '+time);
+      if(!persist()){
+        Object.keys(booking).forEach(key=>delete booking[key]);
+        Object.assign(booking,oldBooking);
+        S.aud=oldAudit;
+        toast('Extension NOT saved. Check device storage; the original booking has been retained.');
+        storageNotice();
+        return;
+      }
+      closeS();
+      render();
+      folio(booking.id);
+      toast('Stay extended by '+result.addedNights+' night(s). Additional charge: '+K(result.addedCharge)+'.');
+    }catch(error){
+      toast(extensionConflictMessage(error));
+    }
+  };
+
+  const originalStays=V.stays;
+  V.stays=function(){
+    let html=originalStays.apply(this,arguments);
+    html=html.replace(/<button class="btn sm" onclick="cin\((\d+)\)">Check in<\/button>/g,
+      (match,id)=>match+'<button class="btn sm ghost" onclick="extendStay('+id+')">Change departure</button>');
+    html=html.replace(/<button class="btn sm ghost" onclick="folio\((\d+)\)">Open folio<\/button>/g,
+      (match,id)=>match+'<button class="btn sm ghost" onclick="extendStay('+id+')">Extend stay</button>');
+    return html;
+  };
+
+  const originalFolio=folio;
+  folio=function(id){
+    originalFolio.apply(this,arguments);
+    const booking=bk(Number(id)),panel=document.getElementById('pan');
+    if(!booking||!panel||booking.st!=='in')return;
+    const actions=document.createElement('div');
+    actions.style.cssText='display:grid;gap:8px;margin-top:12px';
+    const button=document.createElement('button');
+    button.type='button';button.className='btn ghost';button.textContent='Extend stay';
+    button.onclick=()=>extendStay(booking.id);
+    actions.appendChild(button);
+    panel.appendChild(actions);
+    if(Array.isArray(booking.extensionHistory)&&booking.extensionHistory.length){
+      const history=document.createElement('div');
+      history.className='card';history.style.cssText='margin-top:12px;padding:12px';
+      const heading=document.createElement('h3');heading.textContent='Stay extension history';history.appendChild(heading);
+      booking.extensionHistory.forEach(item=>{
+        const line=document.createElement('div');line.className='lab';line.style.marginTop='8px';
+        line.textContent=item.previousCheckoutDate+' → '+item.newCheckoutDate+' · '+item.nightsAdded+' night(s) · '+K(item.addedCharge)+' · '+item.newCheckoutTime;
+        history.appendChild(line);
+      });
+      panel.appendChild(history);
+    }
+  };
+
+  const originalCheckIn=cin;
+  cin=function(id){
+    originalCheckIn.apply(this,arguments);
+    const booking=bk(Number(id)),panel=document.getElementById('pan');
+    if(!booking||!panel||booking.st!=='res')return;
+    const button=document.createElement('button');
+    button.type='button';button.className='btn ghost';button.style.cssText='width:100%;margin-top:8px';
+    button.textContent='Change departure before check-in';
+    button.onclick=()=>extendStay(booking.id);
+    panel.appendChild(button);
+  };
+})();
+</script>
+
 </body>
 </html>
