@@ -17,10 +17,10 @@ manifest = stripForbiddenPermissions(manifest);
 manifest = disableManifestBackup(manifest);
 if (!manifest.includes('AureliaUPINotificationListener')) {
   const observer = '    <service android:name="com.aurelia.pms.AureliaUPINotificationListener" ' +
-    'android:label="Aurelia UPI notification observer" android:exported="false" ' +
+    'android:label="Aurelia UPI notification observer" android:exported="true" ' +
     'android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">' +
     '<intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>';
-  manifest = manifest.replace('</application>', observer + '\\n</application>');
+  manifest = manifest.replace('</application>', observer + '\n</application>');
 }
 fs.writeFileSync(manifestPath, manifest);
 
@@ -717,7 +717,7 @@ public class MainActivity extends BridgeActivity {
           if ("upi".equals(scheme)) {
             String pa = target.getQueryParameter("pa"), amount = target.getQueryParameter("am"), currency = target.getQueryParameter("cu");
             if (!"pay".equalsIgnoreCase(target.getHost()) || pa == null || !pa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}") ||
-                amount == null || !amount.matches("[0-9]{1,9}\\\\.[0-9]{2}") || !"INR".equals(currency) || url.length() > 2048)
+                amount == null || !amount.matches("[0-9]{1,9}\\.[0-9]{2}") || !"INR".equals(currency) || url.length() > 2048)
               throw new SecurityException("Invalid Aurelia UPI payment intent");
           } else if (!scheme.matches("https|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
           runOnUiThread(() -> { try { Intent intent = new Intent(Intent.ACTION_VIEW, target); startActivity(intent); } catch (Exception e) { js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open link") + ")"); } });
