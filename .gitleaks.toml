@@ -1,0 +1,49 @@
+title = "Aurelia PMS secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Reviewed synthetic credentials and idempotency values used only by automated test fixtures"
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''^tests/.*\.test\.mjs$''',
+    '''^payment-backend/test/.*\.test\.mjs$'''
+  ]
+  regexes = [
+    '''(?i)\b(?:idempotencyKey|testToken|workingKey|API_KEY|HOSTED_KEY|NOTIFY_KEY|ACCESS|KEY)\b'''
+  ]
+
+  [[rules.allowlists]]
+  description = "Documented placeholders in the checked-in environment example"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^payment-backend/\.env\.example$''']
+  regexes = [
+    '''(?i)^(?:GATEWAY_MASTER_KEY|SESSION_TOKEN_PEPPER|AURELIA_OWNER_ORIGINS)=.*(?:replace|change|example|placeholder).*$'''
+  ]
+
+  [[rules.allowlists]]
+  description = "Security prose describing rollback conditions, not credential material"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/RELEASE_CHECKLIST\.md$''']
+  regexes = ['''Roll back immediately on database integrity failure.*payment posting.*mismatch''']
+
+  [[rules.allowlists]]
+  description = "Architecture prose describing server-side signature verification"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC\.md$''']
+  regexes = ['''Native Android code owns provider communication, credential access, signature/evidence verification''']
+
+  [[rules.allowlists]]
+  description = "Firebase MFA factor selection logic, not an API credential"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^index\.html$''']
+  regexes = ['''resolver\.hints\.map\(\(hint,index\)''']
