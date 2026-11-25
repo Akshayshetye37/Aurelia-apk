@@ -2,6 +2,12 @@
 
 Aurelia UPI is the only payment rail exposed by the PMS payment UI. The implementation is local-first: it creates UPI intents and QR codes on-device, records collection sessions in the encrypted PMS repository, observes optional Android notifications, and requires a local operator to verify the bank credit before posting a payment to a folio or dining ledger.
 
+## Sovereign PMS shell
+
+The supplied sovereign PMS HTML is used as the visual reference, while the existing Aurelia PMS business logic and data model remain the source of truth. The primary navigation is now **Overview → Chambers → Stays → Dining → Vault → Aurelia UPI**. The Vault opens the existing settings, guest, housekeeping, inventory, report and backup sections as a tile-based workspace rather than a dropdown.
+
+The responsive header carries the property identity, fixed INR currency, language indicator, theme toggle, profile/settings shortcut and local-node status. The overview exposes a direct **Aurelia UPI** collection shortcut. The shell styling is packaged in `assets/aurelia-sovereign-theme.css`; it does not load Tailwind, Google Fonts, icon fonts or other presentation assets from a CDN. The theme switch persists locally.
+
 ## Payment policy
 
 - Rail identifier: `AURELIA_UPI`; customer-facing label: **Aurelia UPI**.
