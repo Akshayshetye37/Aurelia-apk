@@ -58,5 +58,5 @@ test('Aurelia UPI domain includes customer-claim and manual refund transitions',
   assert.match(domain, /completeRefundRecord/);
   assert.match(app, /markCustomerReportedPaid/);
   assert.match(app, /completeRefund/);
-  assert.match(app, /notificationEvidenceCanSettle/);
+  assert.match(app, /manualVerified/);
 });
