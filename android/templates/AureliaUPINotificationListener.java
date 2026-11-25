@@ -76,10 +76,13 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
   @Override public void onListenerConnected() {
     super.onListenerConnected();
     connected = true;
+    getSharedPreferences("aurelia_upi_observer", MODE_PRIVATE).edit()
+      .putBoolean("connected", true).putLong("last_connected_at", System.currentTimeMillis()).apply();
   }
 
   @Override public void onListenerDisconnected() {
     connected = false;
+    getSharedPreferences("aurelia_upi_observer", MODE_PRIVATE).edit().putBoolean("connected", false).apply();
     super.onListenerDisconnected();
   }
 
@@ -160,6 +163,7 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
 
   @Override public void onDestroy() {
     connected = false;
+    getSharedPreferences("aurelia_upi_observer", MODE_PRIVATE).edit().putBoolean("connected", false).apply();
     worker.shutdown();
     super.onDestroy();
   }
