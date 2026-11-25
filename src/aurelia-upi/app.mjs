@@ -897,6 +897,8 @@ function initialize() {
   document.addEventListener("change", onKindChange);
   document.addEventListener("change", onBookingChange);
   document.addEventListener("change", onTableChange);
+  globalThis.addEventListener?.("focus", () => refreshData());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshData(); });
   domObserver = new MutationObserver(records => {
     for (const record of records) {
       for (const node of record.addedNodes) {
