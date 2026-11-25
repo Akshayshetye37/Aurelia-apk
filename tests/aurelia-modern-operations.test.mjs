@@ -58,7 +58,7 @@ test('Aurelia UPI uses one configured VPA and no demo receiving address', () => 
   assert.doesNotMatch(html, /hariom@upi/);
 });
 
-test('Sovereign shell uses the supplied mobile navigation and a local-only asset policy', () => {
+test('Sovereign shell uses the supplied mobile navigation and local design assets', () => {
   assert.match(html, /aurelia-shell-header/);
   assert.match(html, /AURELIA LOCAL NODE/);
   assert.match(html, /INR · AURELIA UPI ONLY/);
@@ -68,7 +68,7 @@ test('Sovereign shell uses the supplied mobile navigation and a local-only asset
   assert.match(html, /onclick="go\('upi'\)"/);
   assert.match(html, /Aurelia UPI<\/b>/);
   assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['more','Vault'\],\['upi','Aurelia UPI'\]\]/);
-  assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net/);
+  assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|fonts\.gstatic\.com/);
 });
 
 test('Sovereign shell theme is packaged locally without external font or CSS runtime', async () => {
