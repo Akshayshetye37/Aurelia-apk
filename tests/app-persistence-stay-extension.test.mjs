@@ -141,3 +141,20 @@ test('runtime storage adapter throws when a previously available localStorage st
   );
   assert.equal(values.has('aurelia_lodge_v2'), false, 'failed write is never stored in memory as if durable');
 });
+
+
+test('app state has an IndexedDB fallback larger than the localStorage quota', () => {
+  assert.ok(html.includes('indexedDB.open(PHOTO_DB,2)'));
+  assert.ok(html.includes("createObjectStore('appState')"));
+  assert.ok(html.includes('function writeAppStateDb'));
+  assert.ok(html.includes('function readAppStateDb'));
+  assert.ok(html.includes('function enqueueAppStateWrite'));
+  assert.ok(html.includes('LOCAL_STATE_STATUS=\'idb-pending\''));
+});
+
+test('startup awaits durable IndexedDB state before enabling normal app interaction', () => {
+  assert.ok(html.includes('APP_STATE_LOAD_PROMISE=loadAppStateFromIndexedDB()'));
+  assert.ok(html.includes('await APP_STATE_LOAD_PROMISE'));
+  assert.ok(html.includes('function loadAppStateFromIndexedDB'));
+  assert.ok(html.includes('function flushAppStateWrites'));
+});
