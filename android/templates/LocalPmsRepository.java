@@ -3,7 +3,6 @@ package com.aurelia.pms;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
 import org.json.JSONArray;
@@ -166,7 +165,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
         if(hasSnapshot||hasBackup) {
           if(!hasSnapshot||!hasBackup||!rawJson.equals(existing.getString(0))||!rawJson.equals(backup.getString(0))||!sha256Hex(rawJson).equals(backup.getString(1)))throw new IllegalStateException("legacy_migration_backup_mismatch");
         } else {
-          if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
+          if(longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
           long now=System.currentTimeMillis();
           ContentValues backupRow=new ContentValues();backupRow.put("backup_id",migrationId);backupRow.put("raw_json",rawJson);backupRow.put("sha256",sha256Hex(rawJson));backupRow.put("created_at",now);db.insertOrThrow("pms_legacy_backup",null,backupRow);
           ContentValues snapshotRow=new ContentValues();snapshotRow.put("snapshot_id",migrationId);snapshotRow.put("source_key",sourceKey);snapshotRow.put("raw_json",rawJson);snapshotRow.put("source_timestamp",sourceTimestamp);snapshotRow.put("created_at",now);snapshotRow.put("format_version",1);db.insertOrThrow("pms_migration_snapshots",null,snapshotRow);
@@ -369,6 +368,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static String sha256Hex(String value) { try { byte[] digest=MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));StringBuilder out=new StringBuilder(digest.length*2);for(byte b:digest)out.append(String.format(java.util.Locale.ROOT,"%02x",b&0xff));return out.toString(); } catch(Exception e){throw new IllegalStateException("sha256_unavailable",e);} }
 
   private static String isoTimestamp(long value){java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));return f.format(new java.util.Date(value));}
+  private static long longForQuery(SQLiteDatabase db,String sql,String[] args){try(Cursor c=db.rawQuery(sql,args)){if(!c.moveToFirst())throw new IllegalStateException("scalar_query_returned_no_rows");return c.getLong(0);}}
   private static long entityVersion(SQLiteDatabase db,String type,String id){try(Cursor c=db.rawQuery("SELECT version FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})){return c.moveToFirst()?c.getLong(0):0;}}
   private static void validateEvent(JSONObject e,String type,String id,long sequence){try{for(String k:new String[]{"eventId","tenantId","propertyId","deviceId","eventType"})validateIdentity(e.getString(k),k);if(!type.equals(e.getString("entityType"))||!id.equals(e.getString("entityId"))||safeJsonInteger(e,"sequence",1)!=sequence||safeJsonInteger(e,"schemaVersion",1)<1||!Double.isFinite(parseDate(e.getString("occurredAt"))))throw new IllegalArgumentException("invalid_pms_outbox_event");if(e.has("payload")&&safeSerialize(e.get("payload"))==null)throw new IllegalArgumentException("invalid_payload");}catch(RuntimeException x){throw x;}catch(Exception x){throw new IllegalArgumentException("invalid_pms_outbox_event",x);}}
   private static long safeJsonInteger(JSONObject object,String key,long minimum)throws Exception{Object raw=object.get(key);if(!(raw instanceof Number))throw new IllegalArgumentException("invalid_integer_"+key);double number=((Number)raw).doubleValue();if(!Double.isFinite(number)||number!=Math.rint(number)||number<minimum||number>9007199254740991d)throw new IllegalArgumentException("invalid_integer_"+key);return ((Number)raw).longValue();}
