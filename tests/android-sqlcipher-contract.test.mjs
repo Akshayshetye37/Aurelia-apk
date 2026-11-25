@@ -307,3 +307,10 @@ test('encrypted local identity reads fail closed when the original Keystore key 
   assert.match(plugin, /Cipher\.ENCRYPT_MODE,identityKey\(true\)/);
   assert.match(plugin, /Cipher\.DECRYPT_MODE,identityKey\(false\)/);
 });
+
+
+test('SQLCipher repository scalar queries use SQLCipher cursors, not Android SQLite DatabaseUtils', () => {
+  assert.doesNotMatch(repository, /android\.database\.DatabaseUtils/);
+  assert.match(repository, /private static long longForQuery\(SQLiteDatabase db,String sql,String\[\] args\)/);
+  assert.match(repository, /longForQuery\(db,"SELECT COUNT\(\*\) FROM pms_entities",null\)/);
+});
