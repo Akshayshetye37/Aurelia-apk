@@ -853,7 +853,7 @@ async function resetAll(){
  APP_STATE_RESETTING=true;
  let localRemoved=false;
  try{(window.__aureliaStorage||localStorage).removeItem(SK);localRemoved=true}catch(e){}
- try{await deleteAppStateDb()}catch(e){APP_STATE_RESETTING=false;console.error('Could not erase durable application data.',e);toast('Reset failed: durable app data could not be erased.');return}
+ try{await APP_STATE_WRITE_CHAIN;await deleteAppStateDb()}catch(e){APP_STATE_RESETTING=false;console.error('Could not erase durable application data.',e);toast('Reset failed: durable app data could not be erased.');return}
  if(!localRemoved&&!window.__aureliaStorage?.memoryOnly){APP_STATE_RESETTING=false;toast('Reset incomplete: local application data could not be erased.');return}
  location.reload();
 }
