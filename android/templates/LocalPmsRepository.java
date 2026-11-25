@@ -369,6 +369,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
         if(!c.moveToFirst())throw new IllegalArgumentException("upi_evidence_not_found");current=c.getString(0);
       }
       if("CONFIRMED".equals(current)||"REJECTED".equals(current))throw new IllegalStateException("upi_evidence_already_reviewed");
+      if("DUPLICATE".equals(current)||"CONFLICT".equals(current))throw new SecurityException("upi_duplicate_or_conflict_cannot_settle");
       long now=System.currentTimeMillis();ContentValues update=new ContentValues();update.put("status",status);
       update.put("review_note",reviewNote==null?"":reviewNote.substring(0,Math.min(240,reviewNote.length())));
       update.put("reviewed_by","LOCAL_OPERATOR");update.put("reviewed_at",now);update.put("updated_at",now);
