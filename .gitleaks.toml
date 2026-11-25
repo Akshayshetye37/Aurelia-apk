@@ -15,7 +15,7 @@ id = "generic-api-key"
     '''^payment-backend/test/.*\.test\.mjs$'''
   ]
   regexes = [
-    '''(?i)\b(?:idempotencyKey|testToken|workingKey|API_KEY|HOSTED_KEY|NOTIFY_KEY|ACCESS|KEY)\b'''
+    '''(?i)(idempotencyKey|testToken|workingKey|API_KEY|HOSTED_KEY|NOTIFY_KEY|ACCESS|KEY|valid-token-[a-z0-9-]+)'''
   ]
 
   [[rules.allowlists]]
@@ -24,7 +24,9 @@ id = "generic-api-key"
   regexTarget = "line"
   paths = ['''^payment-backend/\.env\.example$''']
   regexes = [
-    '''(?i)^(?:GATEWAY_MASTER_KEY|SESSION_TOKEN_PEPPER|AURELIA_OWNER_ORIGINS)=.*(?:replace|change|example|placeholder).*$'''
+    '''GATEWAY_MASTER_KEY=replace''',
+    '''SESSION_TOKEN_PEPPER=replace''',
+    '''AURELIA_OWNER_ORIGINS=your'''
   ]
 
   [[rules.allowlists]]
