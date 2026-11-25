@@ -4,11 +4,11 @@ import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
-test('all application sections are reachable from one accessible dropdown', () => {
-  assert.match(html, /id=["']aurelia-section-menu["']/);
-  assert.match(html, /aria-label=["']Navigate to application section["']/);
-  assert.match(html, /TL\.map|sectionEntries/);
-  assert.match(html, /new Set\(/);
+test('Aurelia UPI is a first-class app destination, not a settings-section dropdown', () => {
+  assert.match(html, /\['upi','Aurelia UPI'\]/);
+  assert.match(html, /V\.upi\s*=/);
+  assert.match(html, /AureliaUPI\.render/);
+  assert.doesNotMatch(html, /aurelia-section-menu|installSectionMenu/);
 });
 
 test('thermal receipts have independent 80 mm and 58 mm paper profiles', () => {
@@ -27,11 +27,33 @@ test('A4 document printing remains separate from thermal receipt printing', () =
 
 test('legacy direct checkout cannot bypass explicit UPI receipt confirmation', () => {
   assert.match(html, /aurelia-upi-settlement-guard/);
-  assert.match(html, /Record and confirm the Aurelia UPI payment before check-out/);
+  assert.match(html, /Verify and post the Aurelia UPI payment before checkout/);
+  assert.match(html, /Only manually verified Aurelia UPI payments can be posted/);
   assert.match(html, /AureliaPaymentPolicy/);
 });
 
 test('Aurelia payment policy remains UPI-only with no payment gateways', () => {
-  assert.match(html, /enabledMethods:\s*Object\.freeze\(\['UPI'\]\)/);
+  assert.match(html, /enabledMethods:Object\.freeze\(\['AURELIA_UPI'\]\)/);
+  assert.match(html, /automaticSettlement:false/);
+  assert.match(html, /notificationEvidenceCanSettle:false/);
   assert.match(html, /providerGatewaysEnabled:\s*false/);
+});
+
+test('Aurelia UPI QR generation is local and does not call a hosted QR service', () => {
+  assert.match(html, /data-aurelia-upi-qr/);
+  assert.doesNotMatch(html, /api\.qrserver\.com/);
+  assert.match(html, /\.\/assets\/qrcode\.min\.js/);
+  assert.match(html, /\.\/src\/aurelia-upi\/app\.mjs/);
+});
+
+test('legacy payment signals are review-only and cannot auto-post a folio payment', () => {
+  assert.match(html, /function addSig\(o\)/);
+  assert.match(html, /function sigA\(id,i\).*AureliaUPI\.importSignal/);
+  assert.match(html, /Only manually verified Aurelia UPI payments can be posted/);
+  assert.doesNotMatch(html, /addPay\(p,s\.amt,'UPI',[^;]*true\)/);
+});
+
+test('Aurelia UPI uses one configured VPA and no demo receiving address', () => {
+  assert.match(html, /Aurelia UPI ID \(VPA\)/);
+  assert.doesNotMatch(html, /hariom@upi/);
 });
