@@ -29,6 +29,8 @@ test('native plugin exposes evidence review and the notification settings bridge
   const plugin = await read('android/templates/CapacitorPmsStoragePlugin.java');
   const actions = await read('android/templates/AureliaNativeActionsPlugin.java');
   const patcher = await read('scripts/patch-android.js');
+  const apkWorkflow = await read('.github/workflows/android-apk.yml');
+  const buildWorkflow = await read('.github/workflows/build-apk.yml');
   assert.match(plugin, /listUpiEvidence/);
   assert.match(plugin, /updateUpiEvidence/);
   assert.match(plugin, /getUpiObserverStatus/);
@@ -38,6 +40,10 @@ test('native plugin exposes evidence review and the notification settings bridge
   assert.match(patcher, /BIND_NOTIFICATION_LISTENER_SERVICE/);
   assert.match(patcher, /ACTION_NOTIFICATION_LISTENER_SETTINGS/);
   assert.match(patcher, /Invalid Aurelia UPI payment intent/);
+  assert.match(apkWorkflow, /workflow_dispatch:/);
+  assert.doesNotMatch(apkWorkflow, /pull_request:|push:/);
+  assert.match(buildWorkflow, /workflow_dispatch:/);
+  assert.doesNotMatch(buildWorkflow, /pull_request:|push:/);
 });
 
 test('web packaging includes the pinned local QR engine and all Aurelia UPI modules', async () => {
