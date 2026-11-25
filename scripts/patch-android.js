@@ -190,10 +190,12 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.Arrays;
 
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
+  private static final int MAX_DOCUMENT_BYTES = 64 * 1024 * 1024;
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
   private byte[] pendingBytes = new byte[0];
@@ -220,6 +222,13 @@ public class MainActivity extends BridgeActivity {
     // Backgrounding closes SQLCipher before dropping the in-memory DEK.
     CapacitorPmsStoragePlugin.lockForLifecycle();
     super.onStop();
+  }
+
+  @Override protected void onDestroy() {
+    if (pendingBytes != null) Arrays.fill(pendingBytes, (byte) 0);
+    pendingBytes = new byte[0];
+    backupExecutor.shutdown();
+    super.onDestroy();
   }
 
   private void js(String script) {
@@ -294,12 +303,17 @@ public class MainActivity extends BridgeActivity {
     try (InputStream in = getContentResolver().openInputStream(uri);
          java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
       if (in == null) throw new IllegalStateException("Could not read saved backup for verification");
-      byte[] buffer = new byte[16384]; int count;
-      while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+      byte[] buffer = new byte[16384]; int count; long total = 0;
+      while ((count = in.read(buffer)) != -1) {
+        total += count;
+        if (total > MAX_DOCUMENT_BYTES) throw new IllegalArgumentException("Selected backup exceeds the 64 MiB document limit.");
+        out.write(buffer, 0, count);
+      }
       return out.toByteArray();
     }
   }
   private void writeDocument(Uri uri, byte[] bytes) throws Exception {
+    if (bytes == null || bytes.length > MAX_DOCUMENT_BYTES) throw new IllegalArgumentException("Backup exceeds the 64 MiB document limit.");
     try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
       if (out == null) throw new IllegalStateException("Could not open backup destination");
       out.write(bytes); out.flush();
@@ -808,10 +822,15 @@ public class MainActivity extends BridgeActivity {
             String message = e.getMessage() == null ? "Could not save or verify the selected file." : e.getMessage();
             if (isBackup) backupResult(completedId, false, message);
             else js("window.aureliaNativeFileSaveResult && window.aureliaNativeFileSaveResult(" + q(completedId) + ",false," + q(message) + ")");
+          } finally {
+            Arrays.fill(expected, (byte) 0);
           }
         });
-      } else if (isBackup) backupResult(completedId, false, "Save cancelled");
-      else js("window.aureliaNativeFileSaveResult && window.aureliaNativeFileSaveResult(" + q(completedId) + ",false,'Save cancelled')");
+      } else {
+        Arrays.fill(expected, (byte) 0);
+        if (isBackup) backupResult(completedId, false, "Save cancelled");
+        else js("window.aureliaNativeFileSaveResult && window.aureliaNativeFileSaveResult(" + q(completedId) + ",false,'Save cancelled')");
+      }
     }
   }
 }
