@@ -1340,7 +1340,7 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
   receipt.classList.toggle('roll-80',width===80);receipt.classList.toggle('roll-58',width===58);
   let style=document.getElementById('aurelia-thermal-page-style');
   if(!style){style=document.createElement('style');style.id='aurelia-thermal-page-style';document.head.appendChild(style)}
-  style.textContent=\`@page{size:\${width}mm 200mm;margin:2mm}\`;
+  style.textContent='@page{size:'+width+'mm 200mm;margin:2mm}';
   document.body.classList.add('aurelia-thermal-print');
   const cleanup=()=>{document.body.classList.remove('aurelia-thermal-print');style.textContent='';window.removeEventListener('afterprint',cleanup)};
   window.addEventListener('afterprint',cleanup,{once:true});
@@ -1377,7 +1377,7 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
   const wrapped=function(sale){const result=original.apply(this,arguments);addThermalLaunchButton('Print thermal receipt · 80 / 58 mm',()=>window.aureliaPrintRestaurantThermal(sale));return result};
   wrapped.__aureliaThermal=true;window.openRestaurantReceipt=wrapped;
  }
- /* The old direct-settlement shortcut is not a payment confirmation path. */
+ /* aurelia-upi-settlement-guard: the old direct-settlement shortcut is not a payment confirmation path. */
  if(typeof window.out==='function'&&!window.out.__aureliaUpiGuard){
   const original=window.out;
   const guarded=function(...args){
