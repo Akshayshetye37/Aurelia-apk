@@ -233,32 +233,44 @@ function guestContactActions(name,phone){
 </script>
 <script id="aurelia-safe-storage">
 (function(){
-  var mem = {};
   function canLS(){
     try{
       var k="__aurelia_ls_test__";
       window.localStorage.setItem(k,"1");
+      var verified=window.localStorage.getItem(k)==="1";
       window.localStorage.removeItem(k);
-      return true;
+      return verified;
     }catch(e){return false}
   }
   var ok = canLS();
+  function unavailable(cause){
+    var error=new Error("Persistent device storage is unavailable. This change cannot survive closing the app.");
+    error.code="AURELIA_PERSISTENCE_UNAVAILABLE";
+    if(cause)error.cause=cause;
+    return error;
+  }
   window.__aureliaStorage = {
     getItem: function(k){
-      try{ if(ok) return localStorage.getItem(k); }catch(e){}
-      return mem[k] != null ? mem[k] : null;
+      if(!ok)throw unavailable();
+      try{return window.localStorage.getItem(k)}
+      catch(e){throw unavailable(e)}
     },
     setItem: function(k,v){
-      try{ if(ok){ localStorage.setItem(k,v); return; } }catch(e){}
-      mem[k]=String(v);
+      if(!ok)throw unavailable();
+      var value=String(v);
+      try{
+        window.localStorage.setItem(k,value);
+        if(window.localStorage.getItem(k)!==value)throw new Error("Persistent storage read-back did not match the saved value.");
+      }catch(e){throw unavailable(e)}
     },
     removeItem: function(k){
-      try{ if(ok) localStorage.removeItem(k); }catch(e){}
-      delete mem[k];
+      if(!ok)throw unavailable();
+      try{window.localStorage.removeItem(k)}
+      catch(e){throw unavailable(e)}
     },
-    memoryOnly: !ok
+    memoryOnly: !ok,
+    isAvailable: function(){return ok}
   };
-  /* localStorage fallback is silent */
 })();
 </script>
 
@@ -1081,7 +1093,8 @@ async function restoreGo(){
   DK.forEach(k=>{if(restored[k]!==undefined)S[k]=restored[k]});
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
-  persist();
+  LOCAL_STATE_STATUS='missing';
+  if(!persist())throw new Error('Restored records could not be saved to persistent device storage.');
   const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
   S.rst=null;S.rstMode=null;location.reload();return true;
@@ -1094,10 +1107,28 @@ async function restoreGo(){
  }
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
-function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o))}catch(e){if(!S.qw){S.qw=1;toast('Device storage is full. Back up, then remove old items.')}}}
+function persist(){
+ if(RECOVERY_CHECK_PENDING){LOCAL_STATE_STATUS='recovery-pending';return false}
+ if(LOCAL_STATE_STATUS==='invalid'||LOCAL_STATE_STATUS==='unavailable'){
+  console.error('Persistence blocked to protect unreadable or unavailable saved data.');
+  return false;
+ }
+ try{
+  const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);
+  const serialized=JSON.stringify(o),storage=window.__aureliaStorage||localStorage;
+  storage.setItem(SK,serialized);
+  if(storage.getItem(SK)!==serialized)throw new Error('Application state read-back verification failed.');
+  S.qw=0;LOCAL_STATE_STATUS='valid';return true;
+ }catch(e){
+  LOCAL_STATE_STATUS='write-failed';
+  console.error('Aurelia state was NOT saved persistently.',e);
+  if(!S.qw){S.qw=1;toast('NOT SAVED: device storage failed. Do not close the app; check storage and restore a backup.')}
+  return false;
+ }
+}
 let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
 function loadAll(){
- let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}
+ let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='unavailable';console.error('Persistent app storage could not be read.',e);return}
  if(!raw){LOCAL_STATE_STATUS='missing';return}
  try{
   const o=JSON.parse(raw);
