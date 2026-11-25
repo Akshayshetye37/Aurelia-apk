@@ -34,9 +34,10 @@ The optional `AureliaUPINotificationListener` is registered as an Android `Notif
 - Duplicate UTRs and same-UTR/different-amount conflicts are flagged.
 - Raw notification evidence is stored only in the SQLCipher-backed PMS database.
 - The observer does not request `READ_SMS`, does not read the SMS inbox, and does not send notifications to a remote service.
+- Google Messages and Samsung Messages are included only so bank/UPI alerts delivered as message notifications can be recognized. Android Notification Access can expose notification previews from those apps to the listener; only credit-like UPI notifications are persisted.
 - If the encrypted PMS store is locked, the observer does not create a plaintext fallback; that notification is not persisted.
 
-Notification Access is sensitive. Enable it only on the device used to operate Aurelia PMS and only if the operator accepts the scope of the allowlisted notification sources.
+Notification Access is sensitive. Enable it only on the device used to operate Aurelia PMS and only if the operator accepts the scope of the allowlisted notification sources, including message-notification previews.
 
 ## Reconciliation and refunds
 
