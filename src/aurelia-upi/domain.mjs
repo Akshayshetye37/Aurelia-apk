@@ -276,7 +276,7 @@ export function parseIncomingUpiNotification(input = {}) {
     const match = pattern.exec(normalized);
     if (match?.[1]) { utr = match[1].trim().toUpperCase(); break; }
   }
-  const vpaMatch = /(?:from|by|vpa|upi\s*id)[\s:]+(?:[a-zA-Z\s]+[\(\[])?([a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9._-]{2,32})/i.exec(normalized);
+  const vpaMatch = /([a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9.-]{2,64})/i.exec(normalized);
   const parsedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
   return {
     ok: true,
