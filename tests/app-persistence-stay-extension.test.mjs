@@ -176,3 +176,12 @@ test('localStorage quota failure does not block reading existing legacy app reco
   assert.equal(context.window.__aureliaStorage.isAvailable(), false);
   assert.equal(context.window.__aureliaStorage.memoryOnly, false);
 });
+
+
+test('stay extension refuses to commit a zero-rate room without an explicit tariff', () => {
+  const active = { id: 20, room: '202', in: 0, out: 2, st: 'in' };
+  assert.throws(() => buildStayExtension(active, {
+    newOut: 3, newCheckoutDate: '2026-11-27', newCheckoutTime: '11:00',
+    roomRate: 0, bookings: [active]
+  }), error => error.message.includes('greater than zero'));
+});
