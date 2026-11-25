@@ -116,3 +116,9 @@ body[data-theme="light"] .hero{color:#edf5ee}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+/* Keep the dedicated Aurelia UPI workspace on the same design tokens as the PMS shell. */
+.au-shell{--au-bg:var(--bg);--au-panel:var(--s1);--au-panel-2:var(--s2);--au-line:var(--ln);--au-gold:var(--gold);--au-ivory:var(--tx);--au-muted:var(--mu);--au-green:var(--em)}
+body[data-theme="light"] .au-shell{--au-bg:#f2f6f1;--au-panel:#fff;--au-panel-2:#f6faf6;--au-line:rgba(35,72,48,.16);--au-gold:#8b6423;--au-ivory:#17271d;--au-muted:#5c7363;--au-green:#267d57}
+body[data-theme="light"] .au-form input,body[data-theme="light"] .au-form select,body[data-theme="light"] .au-panel input,body[data-theme="light"] .au-panel select,body[data-theme="light"] .au-panel textarea{background:#fff;color:#17271d}
+body[data-theme="light"] .au-panel,body[data-theme="light"] .au-metric{background:linear-gradient(145deg,#fff,#f3f8f3)}
