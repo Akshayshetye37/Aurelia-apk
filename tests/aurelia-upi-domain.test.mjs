@@ -1,0 +1,145 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  AURELIA_UPI_POLICY,
+  SESSION_STATUS,
+  parseMoneyToPaise,
+  formatPaise,
+  normalizeVpa,
+  buildUpiIntent,
+  createPaymentSession,
+  transitionSession,
+  enqueueSession,
+  promoteNextSession,
+  parseIncomingUpiNotification,
+  matchEvidenceToSessions,
+  createRefundRecord
+} from '../src/aurelia-upi/domain.mjs';
+
+const base = {
+  vpa: 'aurelia@okaxis',
+  payeeName: 'Aurelia Homestay',
+  amountPaise: 125050,
+  reference: 'AUR-TEST-1001',
+  createdAt: '2026-11-26T04:00:00.000Z',
+  expiresAt: '2026-11-26T04:05:00.000Z',
+  currency: 'INR',
+  rail: 'AURELIA_UPI',
+  status: SESSION_STATUS.ACTIVE
+};
+
+test('Aurelia UPI policy is direct, INR-only and has no external gateway', () => {
+  assert.deepEqual(AURELIA_UPI_POLICY.enabledRails, ['AURELIA_UPI']);
+  assert.equal(AURELIA_UPI_POLICY.externalPaymentGateways, false);
+  assert.equal(AURELIA_UPI_POLICY.automaticSettlement, false);
+  assert.equal(AURELIA_UPI_POLICY.currency, 'INR');
+});
+
+test('amount parsing uses integer paise and rejects ambiguous or zero values', () => {
+  assert.equal(parseMoneyToPaise('1,250.50'), 125050);
+  assert.equal(parseMoneyToPaise('₹75'), 7500);
+  assert.equal(formatPaise(125050), '₹1,250.50');
+  assert.throws(() => parseMoneyToPaise('0'));
+  assert.throws(() => parseMoneyToPaise('1.999'));
+  assert.throws(() => parseMoneyToPaise('1e3'));
+});
+
+test('VPA validation and UPI intent encode the exact INR amount', () => {
+  assert.equal(normalizeVpa(' aurelia@okaxis '), 'aurelia@okaxis');
+  assert.throws(() => normalizeVpa('not-a-vpa'));
+  const uri = buildUpiIntent({
+    vpa: 'aurelia@okaxis',
+    payeeName: 'Aurelia Homestay',
+    amountPaise: 125050,
+    reference: 'AUR-TEST-1001'
+  });
+  const url = new URL(uri);
+  assert.equal(url.protocol, 'upi:');
+  assert.equal(url.searchParams.get('pa'), 'aurelia@okaxis');
+  assert.equal(url.searchParams.get('am'), '1250.50');
+  assert.equal(url.searchParams.get('cu'), 'INR');
+  assert.equal(url.searchParams.get('tr'), 'AUR-TEST-1001');
+});
+
+test('sessions are queued FIFO per receiving VPA', () => {
+  const first = createPaymentSession({ ...base, id: 'first' }, Date.parse(base.createdAt));
+  const second = createPaymentSession({ ...base, id: 'second', reference: 'AUR-TEST-1002' }, Date.parse(base.createdAt) + 1000);
+  const queued = enqueueSession([], first, { nowMs: Date.parse(base.createdAt) });
+  const both = enqueueSession(queued, second, { nowMs: Date.parse(base.createdAt) + 1000 });
+  assert.equal(both.find(x => x.id === 'first').status, 'ACTIVE');
+  assert.equal(both.find(x => x.id === 'second').status, 'QUEUED');
+  const promoted = promoteNextSession(
+    both.map(x => x.id === 'first' ? { ...x, status: 'EXPIRED' } : x),
+    'aurelia@okaxis',
+    { nowMs: Date.parse(base.createdAt) + 120000 }
+  );
+  assert.equal(promoted.promoted.id, 'second');
+  assert.equal(promoted.promoted.status, 'ACTIVE');
+});
+
+test('illegal state changes are rejected and notifications cannot confirm a payment', () => {
+  const session = createPaymentSession({ ...base, id: 'guarded' }, Date.parse(base.createdAt));
+  assert.throws(() => transitionSession(session, SESSION_STATUS.CONFIRMED), /explicit operator verification/);
+  assert.throws(() => transitionSession(session, SESSION_STATUS.CONFIRMED, { manualVerified: false }));
+  const confirmed = transitionSession(session, SESSION_STATUS.CONFIRMED, {
+    manualVerified: true,
+    confirmedBy: 'LOCAL_OPERATOR'
+  });
+  assert.equal(confirmed.status, 'CONFIRMED');
+  assert.equal(confirmed.manualVerified, true);
+});
+
+test('incoming credit parser rejects debits, failed transactions and OTPs', () => {
+  const incoming = parseIncomingUpiNotification({
+    source: 'MANUAL_IMPORT',
+    text: 'UPI payment received. INR 1,250.50 credited. UTR: 123456789012'
+  });
+  assert.equal(incoming.ok, true);
+  assert.equal(incoming.evidence.amountPaise, 125050);
+  assert.equal(incoming.evidence.utr, '123456789012');
+  assert.equal(parseIncomingUpiNotification({
+    text: 'UPI payment debited INR 1,250.50. UTR: 123456789012'
+  }).ok, false);
+  assert.equal(parseIncomingUpiNotification({
+    text: 'Your OTP for UPI is 123456. Do not share.'
+  }).ok, false);
+});
+
+test('matching suggests review only and flags ambiguous exact-amount candidates', () => {
+  const evidence = {
+    amountPaise: 125050,
+    utr: '123456789012',
+    receivedAt: '2026-11-26T04:02:00.000Z'
+  };
+  const one = matchEvidenceToSessions(evidence, [{
+    ...base,
+    id: 'match-one',
+    customerUtr: '123456789012'
+  }]);
+  assert.equal(one.decision, 'REVIEW_REQUIRED');
+  assert.equal(one.exactUtr, true);
+  assert.equal(one.suggestedSessionId, 'match-one');
+
+  const many = matchEvidenceToSessions(evidence, [
+    { ...base, id: 'match-a' },
+    { ...base, id: 'match-b' }
+  ]);
+  assert.equal(many.decision, 'AMBIGUOUS');
+  assert.equal(many.candidates.length, 2);
+});
+
+test('refunds are records for manual bank transfer, not an API transfer', () => {
+  const refund = createRefundRecord({
+    paymentId: 'payment-1',
+    amountPaise: 5000,
+    capturedPaise: 125050,
+    reason: 'Guest cancellation'
+  }, Date.parse(base.createdAt));
+  assert.equal(refund.status, 'MANUAL_TRANSFER_REQUIRED');
+  assert.equal(refund.rail, 'AURELIA_UPI');
+  assert.throws(() => createRefundRecord({
+    paymentId: 'payment-1',
+    amountPaise: 130000,
+    capturedPaise: 125050
+  }));
+});
