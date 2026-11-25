@@ -590,7 +590,60 @@ const PHOTO_NATIVE_PENDING=new Map();
 let PHOTO_NATIVE_SEQ=0;
 window.aureliaNativePhotoResult=function(id,ok,payload){const p=PHOTO_NATIVE_PENDING.get(String(id));if(!p)return;PHOTO_NATIVE_PENDING.delete(String(id));if(ok){if(p.type==='photoArchive'&&typeof payload==='string'){try{payload=JSON.parse(payload)}catch(e){p.reject(e);return}}p.resolve(payload)}else p.reject(new Error(payload||'Native photo storage failed'))};
 function photoNative(type,extra={}){return new Promise((resolve,reject)=>{if(!nativeActionsAvailable()){reject(new Error('Native photo storage is only available in the Android app'));return}const requestId='photo-'+Date.now()+'-'+(++PHOTO_NATIVE_SEQ);PHOTO_NATIVE_PENDING.set(requestId,{resolve,reject,type});if(!nat({type,requestId,...extra})){PHOTO_NATIVE_PENDING.delete(requestId);reject(new Error('Could not contact native photo storage'))}setTimeout(()=>{const p=PHOTO_NATIVE_PENDING.get(requestId);if(p){PHOTO_NATIVE_PENDING.delete(requestId);p.reject(new Error('Native photo storage timed out'))}},30000)})}
-function photoDb(){return new Promise((resolve,reject)=>{try{if(!window.indexedDB||typeof indexedDB.open!=='function')throw new Error('IndexedDB unavailable');const q=indexedDB.open(PHOTO_DB,1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('originals'))q.result.createObjectStore('originals')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Photo storage unavailable'))}catch(e){reject(e)}})}
+function photoDb(){return new Promise((resolve,reject)=>{try{if(!window.indexedDB||typeof indexedDB.open!=='function')throw new Error('IndexedDB unavailable');const q=indexedDB.open(PHOTO_DB,2);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('originals'))q.result.createObjectStore('originals');if(!q.result.objectStoreNames.contains('appState'))q.result.createObjectStore('appState')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Photo and application storage unavailable'))}catch(e){reject(e)}})}
+const APP_STATE_STORE='appState',APP_STATE_KEY='aurelia-pms-state-v1';
+let APP_STATE_WRITE_CHAIN=Promise.resolve(),APP_STATE_WRITE_PENDING=0,APP_STATE_WRITE_ERROR=null,APP_STATE_LOCAL_SAVED=false,LOCAL_STATE_SAVED_AT=0;
+function readAppStateDb(){
+ return photoDb().then(db=>new Promise((resolve,reject)=>{
+  if(!db.objectStoreNames.contains(APP_STATE_STORE)){db.close();resolve(null);return}
+  const tx=db.transaction(APP_STATE_STORE,'readonly'),request=tx.objectStore(APP_STATE_STORE).get(APP_STATE_KEY);
+  let result=null;
+  request.onsuccess=()=>{result=request.result||null};
+  request.onerror=()=>{db.close();reject(request.error||new Error('Could not read durable app state'))};
+  tx.oncomplete=()=>{db.close();resolve(result)};
+  tx.onerror=()=>{db.close();reject(tx.error||new Error('Durable app-state read failed'))};
+  tx.onabort=()=>{db.close();reject(tx.error||new Error('Durable app-state read was aborted'))};
+ }));
+}
+function writeAppStateDb(payload,savedAt){
+ return photoDb().then(db=>new Promise((resolve,reject)=>{
+  const tx=db.transaction(APP_STATE_STORE,'readwrite');
+  tx.objectStore(APP_STATE_STORE).put({payload,savedAt},APP_STATE_KEY);
+  tx.oncomplete=()=>{db.close();resolve(true)};
+  tx.onerror=()=>{const error=tx.error||new Error('Could not commit durable app state');db.close();reject(error)};
+  tx.onabort=()=>{const error=tx.error||new Error('Durable app-state write was aborted');db.close();reject(error)};
+ }));
+}
+function deleteAppStateDb(){
+ return photoDb().then(db=>new Promise((resolve,reject)=>{
+  const tx=db.transaction(APP_STATE_STORE,'readwrite');
+  tx.objectStore(APP_STATE_STORE).delete(APP_STATE_KEY);
+  tx.oncomplete=()=>{db.close();resolve(true)};
+  tx.onerror=()=>{const error=tx.error||new Error('Could not erase durable app state');db.close();reject(error)};
+  tx.onabort=()=>{const error=tx.error||new Error('Durable app-state erase was aborted');db.close();reject(error)};
+ }));
+}
+function enqueueAppStateWrite(payload,savedAt){
+ APP_STATE_WRITE_PENDING++;
+ const task=APP_STATE_WRITE_CHAIN.then(()=>writeAppStateDb(payload,savedAt));
+ APP_STATE_WRITE_CHAIN=task.then(()=>{
+  APP_STATE_WRITE_PENDING=Math.max(0,APP_STATE_WRITE_PENDING-1);
+  APP_STATE_WRITE_ERROR=null;
+  if(!APP_STATE_LOCAL_SAVED)LOCAL_STATE_STATUS='valid';
+  if(window.aureliaRefreshStorageNotice)window.aureliaRefreshStorageNotice();
+ },error=>{
+  APP_STATE_WRITE_PENDING=Math.max(0,APP_STATE_WRITE_PENDING-1);
+  APP_STATE_WRITE_ERROR=error;
+  if(!APP_STATE_LOCAL_SAVED)LOCAL_STATE_STATUS='write-failed';
+  console.error('IndexedDB app-state commit failed.',error);
+  if(window.aureliaRefreshStorageNotice)window.aureliaRefreshStorageNotice();
+ });
+ return APP_STATE_WRITE_CHAIN;
+}
+async function flushAppStateWrites(){
+ await APP_STATE_WRITE_CHAIN;
+ return !APP_STATE_WRITE_ERROR;
+}
 async function photoPut(key,data){
  if(nativeActionsAvailable())return photoNative('photoStore',{key,data}).then(()=>true);
  if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.set(key,data);return true}
@@ -792,7 +845,13 @@ function sv(){$$('[data-s]').forEach(e=>S.set[e.dataset.s]=e.value);S.set.name=S
 function demoRm(){ask('Remove demo data','Deletes the sample rooms, guests, bookings, stock, dishes, expenses and takings. Anything you added yourself stays.','Remove demo data','demoGo()')}
 function demoGo(){S.b=S.b.filter(x=>!x.demo);S.g=S.g.filter(x=>!x.demo);S.rooms=S.rooms.filter(x=>!x.demo);S.exp=S.exp.filter(x=>!x.demo);S.inv=S.inv.filter(x=>!x.demo);Object.keys(MENU).forEach(c=>{MENU[c]=MENU[c].filter(m=>!m[3]);if(!MENU[c].length)delete MENU[c]});S.t.forEach(t=>{if(t.demo){t.o=[];t.demo=0}});S.hist=[0,0,0,0,0,0];S.today=0;S.aud=[];aud('Demo data removed','');render();toast('Demo data removed')}
 function confirmResetAll(){if(!confirm('Erase all data on this device? A backup will be attempted first.'))return;try{if(typeof runBackup==='function')runBackup(true)}catch(e){}resetAll()}
-function resetAll(){try{(window.__aureliaStorage||localStorage).removeItem(SK)}catch(e){}location.reload()}
+async function resetAll(){
+ let localRemoved=false;
+ try{(window.__aureliaStorage||localStorage).removeItem(SK);localRemoved=true}catch(e){}
+ try{await deleteAppStateDb()}catch(e){console.error('Could not erase durable application data.',e);toast('Reset failed: durable app data could not be erased.');return}
+ if(!localRemoved&&!window.__aureliaStorage?.memoryOnly){toast('Reset incomplete: local application data could not be erased.');return}
+ location.reload();
+}
 /* backup engine */
 const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],SK='aurelia_lodge_v2',hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
 const curHash=()=>hashS(JSON.stringify(DK.map(k=>S[k])));
@@ -1109,20 +1168,31 @@ async function restoreGo(){
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
 function persist(){
  if(RECOVERY_CHECK_PENDING){LOCAL_STATE_STATUS='recovery-pending';return false}
- if(LOCAL_STATE_STATUS==='invalid'||LOCAL_STATE_STATUS==='unavailable'){
-  console.error('Persistence blocked to protect unreadable or unavailable saved data.');
+ if(LOCAL_STATE_STATUS==='invalid'){
+  console.error('Persistence blocked to protect unreadable saved data until it is recovered.');
   return false;
  }
  try{
   const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);
+  const savedAt=Date.now();o.__savedAt=savedAt;
   const serialized=JSON.stringify(o),storage=window.__aureliaStorage||localStorage;
-  storage.setItem(SK,serialized);
-  if(storage.getItem(SK)!==serialized)throw new Error('Application state read-back verification failed.');
-  S.qw=0;LOCAL_STATE_STATUS='valid';return true;
+  let localSaved=false;
+  try{
+   storage.setItem(SK,serialized);
+   if(storage.getItem(SK)!==serialized)throw new Error('Application state read-back verification failed.');
+   localSaved=true;LOCAL_STATE_SAVED_AT=savedAt;
+  }catch(localError){
+   console.warn('localStorage unavailable or full; committing application state to IndexedDB.',localError);
+  }
+  APP_STATE_LOCAL_SAVED=localSaved;
+  enqueueAppStateWrite(serialized,savedAt);
+  S.qw=0;
+  LOCAL_STATE_STATUS=localSaved?'valid':'idb-pending';
+  return true;
  }catch(e){
   LOCAL_STATE_STATUS='write-failed';
-  console.error('Aurelia state was NOT saved persistently.',e);
-  if(!S.qw){S.qw=1;toast('NOT SAVED: device storage failed. Do not close the app; check storage and restore a backup.')}
+  console.error('Aurelia state could not be queued for durable storage.',e);
+  if(!S.qw){S.qw=1;toast('NOT SAVED: device storage failed. Do not close the app; restore a verified backup.')}
   return false;
  }
 }
@@ -1134,11 +1204,30 @@ function loadAll(){
   const o=JSON.parse(raw);
   if(!o||typeof o!=='object'||Array.isArray(o)||!Array.isArray(o.rooms)||!Array.isArray(o.b)||!Array.isArray(o.g)||!Array.isArray(o.t)||!Array.isArray(o.exp)||!Array.isArray(o.inv)||!Array.isArray(o.led)||!Array.isArray(o.aud)||!o.set||typeof o.set!=='object'||!o.menu||typeof o.menu!=='object')throw new Error('Saved application state is incomplete');
   [...DK,'bk','tab'].forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});
-  useMenu(S.menu);S.aud.forEach(a=>a.at=new Date(a.at));S.led.forEach(l=>l[3]=new Date(l[3]));id=Math.max(id,...S.b.map(b=>b.id));LOCAL_STATE_STATUS='valid';
+  useMenu(S.menu);S.aud.forEach(a=>a.at=new Date(a.at));S.led.forEach(l=>l[3]=new Date(l[3]));id=Math.max(id,...S.b.map(b=>b.id));LOCAL_STATE_SAVED_AT=Number(o.__savedAt)||0;APP_STATE_LOCAL_SAVED=true;LOCAL_STATE_STATUS='valid';
  }catch(e){
   LOCAL_STATE_STATUS='invalid';
   try{(window.__aureliaStorage||localStorage).setItem(SK+'_recovery_quarantine_'+Date.now(),raw)}catch(_){}
   console.warn('Saved application state failed validation; recovery will be attempted.',e);
+ }
+}
+async function loadAppStateFromIndexedDB(){
+ try{
+  const entry=await readAppStateDb();
+  if(!entry||typeof entry.payload!=='string'){
+   if(LOCAL_STATE_STATUS==='unavailable')LOCAL_STATE_STATUS='missing';
+   return false;
+  }
+  const o=JSON.parse(entry.payload),savedAt=Number(entry.savedAt||o.__savedAt)||0;
+  if(!o||typeof o!=='object'||Array.isArray(o)||!Array.isArray(o.rooms)||!Array.isArray(o.b)||!Array.isArray(o.g)||!Array.isArray(o.t)||!Array.isArray(o.exp)||!Array.isArray(o.inv)||!Array.isArray(o.led)||!Array.isArray(o.aud)||!o.set||typeof o.set!=='object'||!o.menu||typeof o.menu!=='object')throw new Error('IndexedDB application state failed validation.');
+  if(LOCAL_STATE_STATUS==='valid'&&savedAt<=LOCAL_STATE_SAVED_AT)return false;
+  [...DK,'bk','tab'].forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});
+  useMenu(S.menu);S.aud.forEach(a=>a.at=new Date(a.at));S.led.forEach(l=>l[3]=new Date(l[3]));
+  id=Math.max(id,...S.b.map(b=>+b.id||0));LOCAL_STATE_SAVED_AT=savedAt;APP_STATE_LOCAL_SAVED=false;LOCAL_STATE_STATUS='valid';
+  return true;
+ }catch(error){
+  console.error('IndexedDB application-state recovery failed.',error);
+  return false;
  }
 }
 /* autopilot */
