@@ -208,6 +208,7 @@ function renderActiveSession(session) {
     badge(session.status) + '</div>' +
     '<div class="au-active-bottom"><div><small>Receiving UPI ID</small><strong>' + esc(session.vpa) + '</strong></div>' +
     '<div><small>Request expires in</small><strong id="au-countdown" data-expires="' + expires + '">' + (remaining ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : "—") + '</strong></div></div>' +
+    '<div class="au-active-qr"><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
     '<button class="au-secondary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button>' +
     '</div>';
 }
@@ -461,7 +462,11 @@ async function confirmEvidence(id) {
   evidence.reviewedAt = now;
   evidence.reviewedBy = "LOCAL_OPERATOR";
   evidence.transactionReference = utr || null;
-  await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REVIEWED");
+  if (evidence.native) {
+    await repository.updateNativeNotificationEvidence(evidence.id, "CONFIRMED", "Verified by local operator");
+  } else {
+    await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REVIEWED");
+  }
   await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
   state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
   state.evidence = state.evidence.map(row => row.id === evidence.id ? evidence : row);
