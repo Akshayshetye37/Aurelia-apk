@@ -10,7 +10,8 @@ import {
   promoteNextSession,
   parseIncomingUpiNotification,
   matchEvidenceToSessions,
-  createRefundRecord
+  createRefundRecord,
+  markCustomerPaid
 } from "./domain.mjs";
 import { createAureliaUPIRepository } from "./repository.mjs";
 
@@ -53,7 +54,7 @@ const payeeName = () => String(settings().name || "Aurelia").trim();
 const notify = message => context?.toast?.(message);
 const rerender = () => context?.render?.();
 const allSessions = () => [...state.sessions].sort((a, b) => dateMs(b.createdAt) - dateMs(a.createdAt));
-const activeSession = () => state.sessions.find(row => row.status === SESSION_STATUS.ACTIVE || row.status === SESSION_STATUS.OBSERVED || row.status === SESSION_STATUS.REVIEW_REQUIRED) || null;
+const activeSession = () => state.sessions.find(row => [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING, SESSION_STATUS.OBSERVED, SESSION_STATUS.REVIEW_REQUIRED].includes(row.status)) || null;
 const statusLabel = status => ({
   CREATED: "Created", QUEUED: "Queued", ACTIVE: "Awaiting payment",
   OBSERVED: "Alert observed", REVIEW_REQUIRED: "Needs verification",
@@ -139,7 +140,7 @@ function setView(view) {
 }
 
 function statusSummary() {
-  const active = state.sessions.filter(x => x.status === "ACTIVE").length;
+  const active = state.sessions.filter(x => [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING].includes(x.status)).length;
   const queued = state.sessions.filter(x => x.status === "QUEUED").length;
   const review = state.evidence.filter(x => ["REVIEW_REQUIRED", "AMBIGUOUS"].includes(x.matchDecision || x.status)).length;
   const unmatched = state.evidence.filter(x => (x.matchDecision || x.status) === "UNMATCHED").length;
@@ -203,14 +204,22 @@ function renderOverview() {
 }
 
 function renderActiveSession(session) {
-  const expires = dateMs(session.expiresAt);
-  const remaining = session.status === SESSION_STATUS.ACTIVE && expires ? Math.max(0, Math.ceil((expires - Date.now()) / 1000)) : 0;
+  const target = session.status === SESSION_STATUS.ACTIVE ? dateMs(session.expiresAt) :
+    session.status === SESSION_STATUS.PROCESSING ? dateMs(session.verificationExpiresAt) : 0;
+  const remaining = target ? Math.max(0, Math.ceil((target - Date.now()) / 1000)) : 0;
+  const timerLabel = session.status === SESSION_STATUS.ACTIVE ? "Payment window" :
+    session.status === SESSION_STATUS.PROCESSING ? "Verification window" : "Next action";
+  const timerText = session.status === SESSION_STATUS.ACTIVE || session.status === SESSION_STATUS.PROCESSING
+    ? (remaining ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : "Elapsed")
+    : "Operator review";
   return '<div class="au-active"><div class="au-active-top"><div><span class="au-kicker">REQUEST ' + esc(session.reference) + '</span><h4>' + esc(formatPaise(session.amountPaise)) + '</h4><p>' + esc(session.guestName || "Guest payment") + '</p></div>' +
     badge(session.status) + '</div>' +
     '<div class="au-active-bottom"><div><small>Receiving UPI ID</small><strong>' + esc(session.vpa) + '</strong></div>' +
-    '<div><small>Request expires in</small><strong id="au-countdown" data-expires="' + expires + '">' + (remaining ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : "—") + '</strong></div></div>' +
-    '<div class="au-active-qr"><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
-    '<button class="au-secondary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button>' +
+    '<div><small>' + timerLabel + '</small><strong id="au-countdown" data-status="' + esc(session.status) + '" data-expires="' + target + '">' + timerText + '</strong></div></div>' +
+    (session.status === SESSION_STATUS.ACTIVE ? '<div class="au-active-qr"><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
+      '<button class="au-secondary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button>' +
+      '<button class="au-link au-wide" type="button" data-upi-action="customer-paid" data-id="' + esc(session.id) + '">Customer says payment sent</button>' :
+      '<div class="au-warning">Payment is not settled. Verify the actual credit in the receiving bank account before posting it to a folio.</div>') +
     '</div>';
 }
 
@@ -386,7 +395,7 @@ async function importEvidence() {
   state.evidence.unshift(evidence);
   if (evidence.suggestedSessionId) {
     const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
-    if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED, SESSION_STATUS.OBSERVED].includes(session.status)) {
+    if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED, SESSION_STATUS.OBSERVED].includes(session.status)) {
       const updated = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, {
         observedEvidenceId: evidence.id
       });
@@ -407,7 +416,7 @@ async function assignEvidence(id) {
   const session = state.sessions.find(row => row.id === selectedId);
   if (!session) throw new Error("Select a collection request to assign this evidence.");
   if (Number(session.amountPaise) !== Number(evidence.amountPaise)) throw new Error("Evidence amount does not exactly match the selected collection.");
-  if (!["ACTIVE", "EXPIRED", "CANCELLED", "REVIEW_REQUIRED"].includes(session.status)) throw new Error("Only active or late-payment sessions can be reviewed.");
+  if (!["ACTIVE", "PROCESSING", "EXPIRED", "CANCELLED", "REVIEW_REQUIRED"].includes(session.status)) throw new Error("Only active or late-payment sessions can be reviewed.");
   evidence.suggestedSessionId = session.id;
   evidence.matchDecision = "REVIEW_REQUIRED";
   evidence.matchReason = "operator_assigned_exact_amount";
@@ -455,7 +464,7 @@ async function importSignal(signal = {}) {
   state.evidence.unshift(evidence);
   if (evidence.suggestedSessionId) {
     const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
-    if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED].includes(session.status)) {
+    if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED].includes(session.status)) {
       const updated = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: evidence.id });
       await repository.saveSession(updated, "AURELIA_UPI_LEGACY_SIGNAL_MATCHED");
       state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
@@ -566,6 +575,35 @@ async function rejectEvidence(id) {
   audit("Evidence rejected", evidence.utr || evidence.id);
   await refreshData();
   state.view = "review";
+  rerender();
+}
+
+async function markCustomerReportedPaid(id) {
+  const session = state.sessions.find(row => row.id === id);
+  if (!session || session.status !== SESSION_STATUS.ACTIVE) throw new Error("Only the active request can be marked as customer-reported paid.");
+  const nowMs = Date.now();
+  const updated = markCustomerPaid(session, nowMs, AURELIA_UPI_POLICY.verificationWindowMs);
+  const existingClaim = state.evidence.find(row => row.id === "claim_" + session.id);
+  const claim = existingClaim || {
+    id: "claim_" + session.id,
+    source: "CUSTOMER_CLAIM",
+    sourcePackage: "AURELIA_PMS",
+    amountPaise: session.amountPaise,
+    currency: "INR",
+    utr: null,
+    receivedAt: new Date(nowMs).toISOString(),
+    rawText: "Customer reported that the UPI payment was sent. This is a claim only, not bank confirmation.",
+    status: "REVIEW_REQUIRED",
+    matchDecision: "REVIEW_REQUIRED",
+    matchReason: "customer_claim_only",
+    suggestedSessionId: session.id
+  };
+  await repository.saveSession(updated, "AURELIA_UPI_CUSTOMER_MARKED_PAID");
+  if (!existingClaim) await repository.saveEvidence(claim, "AURELIA_UPI_CUSTOMER_CLAIM_RECORDED");
+  state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
+  if (!existingClaim) state.evidence.unshift(claim);
+  audit("Customer reported payment sent", session.reference + " · awaiting bank verification");
+  notify("Customer claim recorded. Check the receiving bank account; no payment has been settled.");
   rerender();
 }
 
@@ -695,6 +733,7 @@ function onActionClick(event) {
       return;
     }
     if (action === "open") { await openSession(state.sessions.find(row => row.id === id)); return; }
+    if (action === "customer-paid") { await markCustomerReportedPaid(id); return; }
     if (action === "cancel") { await cancelSession(id); return; }
     if (action === "import-evidence") { await importEvidence(); return; }
     if (action === "assign") { await assignEvidence(id); return; }
@@ -753,23 +792,38 @@ function startTicker() {
   ticker = globalThis.setInterval(async () => {
     const active = activeSession();
     const countdown = document.getElementById("au-countdown");
-    if (!active || active.status !== SESSION_STATUS.ACTIVE || !active.expiresAt) return;
-    const remaining = Math.max(0, Math.ceil((dateMs(active.expiresAt) - Date.now()) / 1000));
-    if (countdown) countdown.textContent = Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0");
-    if (remaining > 0) return;
-    try {
-      const expired = transitionSession(active, SESSION_STATUS.EXPIRED, { expiredAt: new Date().toISOString() });
-      await repository.saveSession(expired, "AURELIA_UPI_SESSION_EXPIRED");
-      state.sessions = state.sessions.map(row => row.id === expired.id ? expired : row);
-      const promoted = promoteNextSession(state.sessions, expired.vpa);
-      if (promoted.promoted) {
-        await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
-        state.sessions = promoted.sessions;
-      }
-      audit("Collection expired", active.reference);
-      rerender();
-    } catch (error) {
-      state.storageError = error?.message || "Could not update the Aurelia UPI queue.";
+    if (!active) return;
+    if (active.status === SESSION_STATUS.ACTIVE && active.expiresAt) {
+      const remaining = Math.max(0, Math.ceil((dateMs(active.expiresAt) - Date.now()) / 1000));
+      if (countdown) countdown.textContent = remaining ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : "Elapsed";
+      if (remaining > 0) return;
+      try {
+        const expired = transitionSession(active, SESSION_STATUS.EXPIRED, { expiredAt: new Date().toISOString() });
+        await repository.saveSession(expired, "AURELIA_UPI_SESSION_EXPIRED");
+        state.sessions = state.sessions.map(row => row.id === expired.id ? expired : row);
+        const promoted = promoteNextSession(state.sessions, expired.vpa);
+        if (promoted.promoted) {
+          await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
+          state.sessions = promoted.sessions;
+        }
+        audit("Collection expired", active.reference);
+        rerender();
+      } catch (error) { state.storageError = error?.message || "Could not update the Aurelia UPI queue."; }
+      return;
+    }
+    if (active.status === SESSION_STATUS.PROCESSING && active.verificationExpiresAt) {
+      const remaining = Math.max(0, Math.ceil((dateMs(active.verificationExpiresAt) - Date.now()) / 1000));
+      if (countdown) countdown.textContent = remaining ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : "Elapsed";
+      if (remaining > 0) return;
+      try {
+        const review = transitionSession(active, SESSION_STATUS.REVIEW_REQUIRED, {
+          verificationWindowElapsedAt: new Date().toISOString()
+        });
+        await repository.saveSession(review, "AURELIA_UPI_VERIFICATION_WINDOW_ELAPSED");
+        state.sessions = state.sessions.map(row => row.id === review.id ? review : row);
+        audit("Verification window elapsed", active.reference + " · manual bank review required");
+        rerender();
+      } catch (error) { state.storageError = error?.message || "Could not move the payment into manual review."; }
     }
   }, 1000);
 }
