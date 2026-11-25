@@ -68,6 +68,6 @@ These exclusions keep the payment flow local, avoid third-party credentials, and
 - `npm test`
 - `npm run build`
 
-The web build bundles the `qrcode` browser entry locally with esbuild, smoke-tests SVG generation, and copies the Aurelia UPI modules and CSS into `www/`. Android template patching registers the notification observer and the constrained native UPI intent bridge.
+The web build bundles only the `qrcode` core encoder and SVG renderer through a small esbuild browser entry, smoke-tests SVG generation, and copies the Aurelia UPI modules and CSS into `www/`. This avoids the missing precompiled bundle in qrcode 1.5.4 and excludes its Node-only PNG/stream dependencies. Android template patching registers the notification observer and the constrained native UPI intent bridge.
 
 APK workflows are manual-dispatch only. Do not build or install an APK until the owner explicitly approves device verification.
