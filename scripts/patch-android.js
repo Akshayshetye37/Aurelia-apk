@@ -78,7 +78,7 @@ if (fs.existsSync(appGradleGroovy)) {
     throw new Error('Required SQLCipher and biometric Android dependencies could not be installed into the generated Gradle project.');
   }
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
-    gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
+    gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition-devanagari:16.0.1'");
   }
   gradle = hardenGroovyReleaseBuild(gradle);
   fs.writeFileSync(appGradleGroovy, gradle);
@@ -136,7 +136,7 @@ import android.graphics.BitmapFactory;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions;
 import android.webkit.WebView;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
@@ -656,7 +656,7 @@ public class MainActivity extends BridgeActivity {
           Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
           if (bitmap == null) throw new IllegalArgumentException("Could not decode ID image");
           InputImage image = InputImage.fromBitmap(bitmap, 0);
-          TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+          TextRecognizer recognizer = TextRecognition.getClient(new DevanagariTextRecognizerOptions.Builder().build());
           recognizer.process(image)
             .addOnSuccessListener(result -> {
               JSONObject payload = new JSONObject();
