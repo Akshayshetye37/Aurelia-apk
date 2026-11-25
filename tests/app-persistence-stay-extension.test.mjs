@@ -149,7 +149,7 @@ test('app state has an IndexedDB fallback larger than the localStorage quota', (
   assert.ok(html.includes('function writeAppStateDb'));
   assert.ok(html.includes('function readAppStateDb'));
   assert.ok(html.includes('function enqueueAppStateWrite'));
-  assert.ok(html.includes('LOCAL_STATE_STATUS=\'idb-pending\''));
+  assert.ok(html.includes("'valid':'idb-pending'"));
 });
 
 test('startup awaits durable IndexedDB state before enabling normal app interaction', () => {
