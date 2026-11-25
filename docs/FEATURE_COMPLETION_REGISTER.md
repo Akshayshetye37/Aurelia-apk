@@ -45,7 +45,7 @@ The current main UI includes Home, Stays, Rooms, Dining, and a More area contain
 
 ## Work started on this branch
 
-- Added an accessible All-sections dropdown over the existing main tabs and enabled More modules. Feature-flag filtering is retained.
+- Added an accessible All-sections dropdown over the existing main tabs and all More modules. Disabled modules remain visible but cannot be opened.
 - Switched Android OCR to ML Kit's bundled Devanagari recognizer, which supports both Latin and Devanagari scripts.
 - Added Marathi/Hindi identity-card labels, explicit holder-name detection, format-gated ID suggestions, and masking of checksum-verified Aadhaar candidates before profile persistence.
 - Added source-contract tests for OCR parsing and navigation. They have **not yet been executed** in this environment.
