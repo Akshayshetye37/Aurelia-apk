@@ -82,10 +82,13 @@ test('sessions are queued FIFO per receiving VPA', () => {
 });
 
 test('illegal state changes are rejected and notifications cannot confirm a payment', () => {
-  const session = createPaymentSession({ ...base, id: 'guarded' }, Date.parse(base.createdAt));
-  assert.throws(() => transitionSession(session, SESSION_STATUS.CONFIRMED), /explicit operator verification/);
-  assert.throws(() => transitionSession(session, SESSION_STATUS.CONFIRMED, { manualVerified: false }));
-  const confirmed = transitionSession(session, SESSION_STATUS.CONFIRMED, {
+  const now = Date.parse(base.createdAt);
+  const created = createPaymentSession({ ...base, id: 'guarded' }, now);
+  const active = enqueueSession([], created, { nowMs: now })[0];
+  const review = transitionSession(active, SESSION_STATUS.REVIEW_REQUIRED);
+  assert.throws(() => transitionSession(review, SESSION_STATUS.CONFIRMED), /explicit operator verification/);
+  assert.throws(() => transitionSession(review, SESSION_STATUS.CONFIRMED, { manualVerified: false }));
+  const confirmed = transitionSession(review, SESSION_STATUS.CONFIRMED, {
     manualVerified: true,
     confirmedBy: 'LOCAL_OPERATOR'
   });
