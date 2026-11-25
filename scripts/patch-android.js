@@ -324,8 +324,10 @@ public class MainActivity extends BridgeActivity {
     final long modified;
     final boolean valid;
     final boolean protectedNew;
-    BackupCandidate(Uri uri, long modified, boolean valid, boolean protectedNew) {
-      this.uri = uri; this.modified = modified; this.valid = valid; this.protectedNew = protectedNew;
+    final boolean inspectable;
+    BackupCandidate(Uri uri, long modified, boolean valid, boolean protectedNew, boolean inspectable) {
+      this.uri = uri; this.modified = modified; this.valid = valid;
+      this.protectedNew = protectedNew; this.inspectable = inspectable;
     }
   }
 
@@ -385,10 +387,10 @@ public class MainActivity extends BridgeActivity {
         Uri fileUri = DocumentsContract.buildDocumentUriUsingTree(root, cursor.getString(idCol));
         long modified = modifiedCol >= 0 && !cursor.isNull(modifiedCol) ? cursor.getLong(modifiedCol) : 0L;
         boolean protectedFile = fileUri.equals(protectedNew);
-        boolean valid = false;
+        boolean valid = false, inspectable = true;
         try { valid = isStructurallyValidBackup(readDocument(fileUri)); }
-        catch (Exception invalidOrOversized) { valid = false; }
-        candidates.add(new BackupCandidate(fileUri, modified, valid, protectedFile));
+        catch (Exception unreadableOrOversized) { inspectable = false; }
+        candidates.add(new BackupCandidate(fileUri, modified, valid, protectedFile, inspectable));
       }
     }
     candidates.sort((a, b) -> {
@@ -399,6 +401,8 @@ public class MainActivity extends BridgeActivity {
     int retainedValid = 0;
     Exception deletionFailure = null;
     for (BackupCandidate candidate : candidates) {
+      if (candidate.protectedNew) { if (candidate.valid) retainedValid++; continue; }
+      if (!candidate.inspectable) continue;
       boolean keep = candidate.valid && retainedValid < maximum;
       if (keep) { retainedValid++; continue; }
       try {
