@@ -3342,6 +3342,18 @@ window.printGuestPreview=function(){
   };
   aureliaInvoice.__aureliaUpiInvoice=true;window.inv=aureliaInvoice;
  }
+ const originalSettingsSave=window.sv;
+ if(typeof originalSettingsSave==='function'&&!originalSettingsSave.__aureliaUpiVpaGuard){
+  const guardedSettingsSave=function(){
+   const input=document.querySelector('[data-s="upi"]');
+   const next=String(input?.value||'').trim(),current=String(S.set?.upi||'').trim();
+   const sessions=window.AureliaUPI?.getState?.().sessions||[];
+   const hasOpen=sessions.some(row=>['CREATED','QUEUED','ACTIVE','PROCESSING','OBSERVED','REVIEW_REQUIRED'].includes(row.status));
+   if(next!==current&&hasOpen){toast('Resolve all active and queued Aurelia UPI requests before changing the receiving VPA.');return false;}
+   return originalSettingsSave.apply(this,arguments);
+  };
+  guardedSettingsSave.__aureliaUpiVpaGuard=true;window.sv=guardedSettingsSave;
+ }
  window.AureliaPaymentPolicy=Object.freeze({enabledMethods:Object.freeze(['UPI']),providerGatewaysEnabled:false,reactivationRequiresSourceChange:true});
 })();
 </script>
