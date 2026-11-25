@@ -2,9 +2,12 @@ name: Node contract tests
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feature/aurelia-upi-sovereign-redesign-2026-11-26
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,5 +20,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
       - name: Run repository contract tests
         run: npm test
+      - name: Verify web bundle preparation
+        run: npm run build
