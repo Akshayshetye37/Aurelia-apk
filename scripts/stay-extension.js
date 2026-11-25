@@ -25,8 +25,8 @@ function buildStayExtension(booking, options = {}) {
 
   const oldOut = Number(booking.out);
   const newOut = Number(options.newOut);
-  if (!Number.isInteger(newOut) || !Number.isInteger(oldOut) || newOut <= oldOut) {
-    throw new Error('Choose a later checkout date.');
+  if (!Number.isInteger(newOut) || !Number.isInteger(oldOut) || newOut <= oldOut || newOut < 0) {
+    throw new Error('Choose a later checkout date that is today or in the future.');
   }
 
   const checkoutDate = String(options.newCheckoutDate || '');
