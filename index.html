@@ -3466,6 +3466,8 @@ window.printGuestPreview=function(){
       message='RECOVERY CHECK IN PROGRESS — Keep the app open. New changes are not saved until recovery finishes.';
     }else if(LOCAL_STATE_STATUS==='invalid'){
       message='SAVED DATA NEEDS RECOVERY — Do not clear app data. Restore a verified backup before continuing.';
+    }else if(LOCAL_STATE_STATUS==='idb-pending'){
+      message='SAVING TO DEVICE DATABASE — Keep the app open until the save finishes.';
     }else if(LOCAL_STATE_STATUS==='unavailable'||LOCAL_STATE_STATUS==='write-failed'||window.__aureliaStorage?.memoryOnly){
       message='STORAGE ERROR — Changes are not saved permanently. Do not close the app. Check device storage and restore a backup.';
     }
@@ -3480,6 +3482,7 @@ window.printGuestPreview=function(){
     }
     banner.textContent=message;
   }
+  window.aureliaRefreshStorageNotice=storageNotice;
 
   const originalRender=render;
   render=function(){
@@ -3530,25 +3533,27 @@ window.printGuestPreview=function(){
     box.textContent=nights+' additional night'+(nights===1?'':'s')+' · Additional room charge: '+K(nights*rate)+'. No overlapping booking found.';
   };
 
-  window.confirmStayExtension=function(id){
+  window.confirmStayExtension=async function(id){
     const booking=bk(Number(id)),date=document.getElementById('stay-extension-date')?.value||'',time=document.getElementById('stay-extension-time')?.value||'';
     if(!booking||!['in','res'].includes(booking.st)){toast('This booking can no longer be extended.');return}
     const room=rm(booking.room);
+    let oldBooking=null,oldAudit=null;
     try{
       const result=AureliaStayExtension.buildStayExtension(booking,{
         newOut:offOf(date),newCheckoutDate:date,newCheckoutTime:time,
         previousCheckoutDate:ymd(booking.out),roomRate:Number(room&&room.r),
         bookings:S.b,now:new Date().toISOString()
       });
-      const oldBooking={...booking,extensionHistory:Array.isArray(booking.extensionHistory)?booking.extensionHistory.slice():[]};
-      const oldAudit=S.aud.slice();
+      oldBooking={...booking,extensionHistory:Array.isArray(booking.extensionHistory)?booking.extensionHistory.slice():[]};
+      oldAudit=S.aud.slice();
       Object.assign(booking,result.booking);
       aud('Stay extended',booking.g+' · Room '+booking.room+' · '+result.addedNights+' night(s) · '+K(result.addedCharge)+' · checkout '+date+' '+time);
-      if(!persist()){
+      if(!persist()||!await flushAppStateWrites()){
         Object.keys(booking).forEach(key=>delete booking[key]);
         Object.assign(booking,oldBooking);
         S.aud=oldAudit;
-        toast('Extension NOT saved. Check device storage; the original booking has been retained.');
+        persist();await flushAppStateWrites();
+        toast('Extension NOT saved. The original booking was retained. Check device storage.');
         storageNotice();
         return;
       }
@@ -3557,6 +3562,12 @@ window.printGuestPreview=function(){
       folio(booking.id);
       toast('Stay extended by '+result.addedNights+' night(s). Additional charge: '+K(result.addedCharge)+'.');
     }catch(error){
+      if(oldBooking&&booking){
+        Object.keys(booking).forEach(key=>delete booking[key]);
+        Object.assign(booking,oldBooking);
+        if(oldAudit)S.aud=oldAudit;
+        persist();await flushAppStateWrites();
+      }
       toast(extensionConflictMessage(error));
     }
   };
