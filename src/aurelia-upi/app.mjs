@@ -47,7 +47,7 @@ const dateMs = value => {
 const settings = () => context?.getSettings?.() || {};
 const vpa = () => {
   const config = settings();
-  return String(config.upi || config.restaurantUpi || "").trim();
+  return String(config.upi || "").trim();
 };
 const payeeName = () => String(settings().name || "Aurelia").trim();
 const notify = message => context?.toast?.(message);
