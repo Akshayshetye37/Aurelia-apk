@@ -562,8 +562,11 @@ async function rejectEvidence(id) {
   if (evidence.native) await repository.updateNativeNotificationEvidence(id, "REJECTED", "Rejected by local operator");
   await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REJECTED");
   const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
-  if (session && session.status === SESSION_STATUS.REVIEW_REQUIRED) {
-    const rejected = transitionSession(session, SESSION_STATUS.REJECTED, { rejectedAt: new Date().toISOString() });
+  if (session && [SESSION_STATUS.REVIEW_REQUIRED, SESSION_STATUS.PROCESSING].includes(session.status)) {
+    const reviewSession = session.status === SESSION_STATUS.PROCESSING
+      ? transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { rejectionReviewedAt: new Date().toISOString() })
+      : session;
+    const rejected = transitionSession(reviewSession, SESSION_STATUS.REJECTED, { rejectedAt: new Date().toISOString() });
     await repository.saveSession(rejected, "AURELIA_UPI_SESSION_REJECTED");
     state.sessions = state.sessions.map(row => row.id === rejected.id ? rejected : row);
     const promoted = promoteNextSession(state.sessions, session.vpa);
