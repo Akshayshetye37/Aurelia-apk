@@ -103,3 +103,11 @@ test('GitHub workflows do not persist checkout tokens into repositories used by 
     assert.ok(workflow.slice(checkout, checkout + 180).includes('persist-credentials: false'), path);
   }
 });
+
+
+test('Android APK workflows bound Gradle execution and preserve actionable diagnostics', async () => {
+  for (const path of ['../.github/workflows/android-apk.yml', '../.github/workflows/build-apk.yml']) {
+    const workflow = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.ok(workflow.includes('timeout 25m ./gradlew --no-daemon --stacktrace --console=plain assembleDebug'), path);
+  }
+});
