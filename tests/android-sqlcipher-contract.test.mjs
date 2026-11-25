@@ -299,3 +299,11 @@ test('storage outbox reads expose retry_at_ms in the ISO-8601 boundary format', 
   assert.match(mapper, /row\.put\("retryAt",c\.isNull\(13\)\?JSONObject\.NULL:isoTimestamp\(c\.getLong\(13\)\)\)/);
   assert.doesNotMatch(mapper, /retryAt",c\.isNull\(13\)\?JSONObject\.NULL:c\.getString\(13\)/);
 });
+
+
+test('encrypted local identity reads fail closed when the original Keystore key is missing', () => {
+  assert.match(plugin, /private SecretKey identityKey\(boolean create\)/);
+  assert.match(plugin, /if\(!create\) throw new SecurityException\("Keystore identity key is missing; refusing to replace it\."/);
+  assert.match(plugin, /Cipher\.ENCRYPT_MODE,identityKey\(true\)/);
+  assert.match(plugin, /Cipher\.DECRYPT_MODE,identityKey\(false\)/);
+});
