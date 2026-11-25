@@ -3471,6 +3471,9 @@ window.printGuestPreview=function(){
    const id=Number(session.bookingId),booking=getBooking(id),amount=Number(session.amountPaise)/100;
    if(!booking)throw new Error('The linked guest folio no longer exists.');
    if(!(amount>0)||amount>dueB(booking)+0.009)throw new Error('The linked folio balance changed. Reconcile the balance before posting.');
+   const paymentRef=(utr?String(utr).trim()+' / ':'')+String(session.reference||session.id);
+   const alreadyPosted=(S.aud||[]).some(row=>row.a==='Payment'&&String(row.d||'').includes(String(session.reference||session.id)));
+   if(alreadyPosted)return true;
    folio(id);
    const panel=document.getElementById('pan');if(!panel)throw new Error('Guest folio panel is unavailable.');
    let methods=panel.querySelector('#pm');
@@ -3480,9 +3483,6 @@ window.printGuestPreview=function(){
    const fields=document.createElement('div');fields.id='aurelia-upi-hidden-pay-fields';fields.hidden=true;
    fields.innerHTML='<input id="pa" type="number" value="'+amount.toFixed(2)+'"><input id="pr" type="text" value="'+paymentRef.replace(/[&<>"]/g,'')+'"><input id="pc" type="checkbox" checked>';
    panel.appendChild(fields);
-   const paymentRef=(utr?String(utr).trim()+' / ':'')+String(session.reference||session.id);
-   const alreadyPosted=(S.aud||[]).some(row=>row.a==='Payment'&&String(row.d||'').includes(String(session.reference||session.id)));
-   if(alreadyPosted)return true;
    const before=Number(booking.p||0);
    window.__aureliaUpiApplying=true;
    try{if(typeof window.pay!=='function')throw new Error('Aurelia folio payment action is unavailable.');window.pay(id)}
