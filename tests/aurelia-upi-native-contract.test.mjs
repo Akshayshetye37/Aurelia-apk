@@ -50,6 +50,10 @@ test('native plugin exposes evidence review and the notification settings bridge
   assert.match(buildWorkflow, /workflow_dispatch:/);
   assert.doesNotMatch(buildWorkflow, /pull_request:|push:/);
   assert.match(nativeCompileWorkflow, /compileDebugJavaWithJavac/);
+  assert.match(nativeCompileWorkflow, /platforms;android-36/);
+  assert.match(nativeCompileWorkflow, /build-tools;36\\.0\\.0/);
+  assert.match(apkWorkflow, /platforms;android-36/);
+  assert.match(buildWorkflow, /platforms;android-36/);
   assert.doesNotMatch(nativeCompileWorkflow, /assembleDebug|upload-artifact/);
 });
 
