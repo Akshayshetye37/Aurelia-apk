@@ -116,3 +116,28 @@ test('all inline application scripts parse after the persistence and stay-extens
     new vm.Script(source, { filename: 'index.html:inline-script-' + index });
   });
 });
+
+
+test('runtime storage adapter throws when a previously available localStorage starts rejecting writes', () => {
+  const start = html.indexOf('<script id="aurelia-safe-storage">');
+  const openEnd = html.indexOf('>', start);
+  const end = html.indexOf('</script>', openEnd);
+  let rejectWrites = false;
+  const values = new Map();
+  const localStorage = {
+    setItem(key, value) {
+      if (rejectWrites) throw new Error('QuotaExceededError');
+      values.set(String(key), String(value));
+    },
+    getItem(key) { return values.has(String(key)) ? values.get(String(key)) : null; },
+    removeItem(key) { values.delete(String(key)); }
+  };
+  const context = { window: { localStorage } };
+  vm.runInNewContext(html.slice(openEnd + 1, end), context);
+  rejectWrites = true;
+  assert.throws(
+    () => context.window.__aureliaStorage.setItem('aurelia_lodge_v2', '{"b":[]}'),
+    error => String(error.message).includes('Persistent device storage is unavailable')
+  );
+  assert.equal(values.has('aurelia_lodge_v2'), false, 'failed write is never stored in memory as if durable');
+});
