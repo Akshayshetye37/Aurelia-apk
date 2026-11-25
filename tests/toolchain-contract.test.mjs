@@ -72,3 +72,16 @@ test('backup retention preserves unreadable or oversized historical files', asyn
   assert.match(patch, /catch \(Exception unreadableOrOversized\) \{ inspectable = false; \}/);
   assert.match(patch, /if \(!candidate\.inspectable\) continue;/);
 });
+
+
+test('automatic recovery skips unreadable backups and tries older valid recovery points', async () => {
+  const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  const start = patch.indexOf('private JSONObject readLatestBackupFromSelectedFolder');
+  const end = patch.indexOf('private static String sha256', start);
+  assert.ok(start >= 0 && end > start);
+  const method = patch.slice(start, end);
+  assert.match(method, /candidates\.sort\(\(a, b\) -> Long\.compare\(b\.modified, a\.modified\)\)/);
+  assert.match(method, /if \(!isStructurallyValidBackup\(bytes\)\) continue/);
+  assert.match(method, /catch \(Exception unreadableOrInvalid\)/);
+  assert.match(method, /Arrays\.fill\(bytes, \(byte\) 0\)/);
+});
