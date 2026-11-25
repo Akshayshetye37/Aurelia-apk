@@ -26,16 +26,16 @@ test('native APK workflows use Node 22 and assert lifecycle locking', async () =
 
 test('generated Android build uses SQLCipher-compatible API 36 and AGP 8.9.1', async () => {
   const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
-  assert.match(patch, /com\\.android\\.tools\\.build:gradle:8\\.9\\.1/);
-  assert.match(patch, /compileSdkVersion\\s*=\\s*36/);
-  assert.match(patch, /gradle-8\\.11\\.1-/);
-  assert.match(patch, /SQLCipher 4\\.20\\.0 declares minCompileSdk 36/);
+  assert.match(patch, /com\.android\.tools\.build:gradle:8\.9\.1/);
+  assert.match(patch, /compileSdkVersion\s*=\s*36/);
+  assert.match(patch, /gradle-8\.11\.1-/);
+  assert.match(patch, /SQLCipher 4\.20\.0 declares minCompileSdk 36/);
 });
 
 test('all APK workflows provision Android API 36 before compiling SQLCipher', async () => {
   for (const path of ['../.github/workflows/android-apk.yml', '../.github/workflows/build-apk.yml']) {
     const workflow = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.match(workflow, /platforms;android-36/, path);
-    assert.match(workflow, /build-tools;35\\.0\\.0/, path);
+    assert.match(workflow, /build-tools;35\.0\.0/, path);
   }
 });
