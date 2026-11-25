@@ -289,3 +289,13 @@ test('Android background and destroy lifecycle serialize repository close before
   assert.match(patch, /@Override public void onStop\(\)[\s\S]*?CapacitorPmsStoragePlugin\.lockForLifecycle\(\);[\s\S]*?super\.onStop\(\);/);
   assert.doesNotMatch(patch, /@Override public void onPause\(\)/);
 });
+
+
+test('storage outbox reads expose retry_at_ms in the ISO-8601 boundary format', () => {
+  const start = repository.indexOf('private static JSONObject storageOutboxRow');
+  const end = repository.indexOf('synchronized JSONObject storageIntegrityCheck', start);
+  assert.ok(start >= 0 && end > start);
+  const mapper = repository.slice(start, end);
+  assert.match(mapper, /row\.put\("retryAt",c\.isNull\(13\)\?JSONObject\.NULL:isoTimestamp\(c\.getLong\(13\)\)\)/);
+  assert.doesNotMatch(mapper, /retryAt",c\.isNull\(13\)\?JSONObject\.NULL:c\.getString\(13\)/);
+});
