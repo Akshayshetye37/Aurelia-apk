@@ -140,7 +140,7 @@ export function createAureliaUPIRepository({ plugin = nativePlugin() } = {}) {
       if (!isNative || typeof plugin.updateUpiEvidence !== "function") {
         throw new Error("Native Aurelia UPI notification evidence is unavailable.");
       }
-      return plugin.updateUpiEvidence({ evidenceId: id, status, reviewNote: note });
+      return plugin.updateUpiEvidence({ evidenceId: id, status, reviewNote: note, manualVerified: status === "CONFIRMED" });
     }
   });
 }
