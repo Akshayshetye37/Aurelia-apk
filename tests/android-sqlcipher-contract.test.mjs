@@ -117,7 +117,7 @@ test('SQLCipher dependencies are inserted idempotently and native plugin is regi
 });
 
 test('native repository opens lazily so an unavailable key does not crash app startup', () => {
-  assert.match(plugin, /load\(\) \{ super\.load\(\); \}/);
+  assert.match(plugin, /load\(\) \{\s*super\.load\(\);\s*activePlugin = this;\s*\}/);
   assert.match(plugin, /private synchronized LocalPmsRepository repository\(\)/);
   assert.match(plugin, /if \(repository == null\) repository = new LocalPmsRepository\(getContext\(\)\)/);
 });
