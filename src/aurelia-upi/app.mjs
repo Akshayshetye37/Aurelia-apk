@@ -101,6 +101,7 @@ async function refreshData() {
         amountPaise: Number(item.amountPaise),
         currency: "INR",
         utr: item.utr || null,
+        senderVpa: item.senderVpa || null,
         receivedAt: typeof item.receivedAt === "number" ? new Date(item.receivedAt).toISOString() : (item.receivedAt || new Date().toISOString()),
         rawText: item.rawText || "",
         status: item.status || "UNMATCHED",
@@ -271,7 +272,7 @@ function renderReviewCard(evidence) {
   const candidateLabel = session ? (session.guestName || session.reference) + " · " + session.reference : "No unique session selected";
   return '<article class="au-evidence-card"><div class="au-row-title"><strong>' + esc(formatPaise(Number(evidence.amountPaise || 0))) + '</strong>' + badge(decision) + '</div>' +
     '<div class="au-row-meta">' + esc(evidence.source || "MANUAL_IMPORT") + (evidence.sourcePackage ? " · " + esc(evidence.sourcePackage) : "") + ' · ' + esc(iso(evidence.receivedAt)) + '</div>' +
-    '<div class="au-evidence-grid"><div><small>UTR / RRN</small><strong>' + esc(evidence.utr || "Not detected") + '</strong></div><div><small>Suggested session</small><strong>' + esc(candidateLabel) + '</strong></div></div>' +
+    '<div class="au-evidence-grid"><div><small>UTR / RRN</small><strong>' + esc(evidence.utr || "Not detected") + '</strong></div><div><small>Sender VPA</small><strong>' + esc(evidence.senderVpa || "Not detected") + '</strong></div><div><small>Suggested session</small><strong>' + esc(candidateLabel) + '</strong></div></div>' +
     (evidence.matchReason ? '<p class="au-hint">Match result: ' + esc(evidence.matchReason) + '. Matching is a suggestion only.</p>' : '') +
     (canReview ? '<label class="au-review-check"><input type="checkbox" id="au-verify-' + esc(evidence.id) + '"><span>I checked the credit in the receiving bank account and verified this transaction.</span></label>' +
       '<label class="au-review-utr"><span>Verified UTR / bank reference</span><input id="au-utr-' + esc(evidence.id) + '" value="' + esc(evidence.utr || "") + '" maxlength="30" placeholder="Enter UTR if available"></label>' +
