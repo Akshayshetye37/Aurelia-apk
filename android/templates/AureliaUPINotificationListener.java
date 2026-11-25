@@ -68,7 +68,7 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
   private static final Pattern AMOUNT = Pattern.compile("(?:₹|INR\\s*|Rs\\.?\\s*)([0-9,]+(?:\\.[0-9]{1,2})?)|([0-9,]+(?:\\.[0-9]{1,2})?)\\s*(?:INR|Rs\\.?)", Pattern.CASE_INSENSITIVE);
   private static final Pattern UTR = Pattern.compile("\\b(?:UTR|UPI\\s*(?:Ref(?:erence)?|ID|Txn)|RRN|Ref(?:erence)?\\s*(?:No\\.?|Number)?)\\s*[:#-]?\\s*([A-Z0-9_-]{6,35})\\b", Pattern.CASE_INSENSITIVE);
   private static final Pattern VPA = Pattern.compile("([A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64})");
-  private static final String[] CREDIT = {"credited", "received", "received from", "paid you", "money received", "payment successful"};
+  private static final String[] CREDIT = {"credited", "received", "received from", "paid you", "money received", "payment received", "payment successful", "deposit", "transferred to your", "added to account"};
   private static final String[] EXCLUDE = {"debited", "you paid", "sent to", "money sent", "payment failed", "declined", "reversed", "refund", "otp"};
   private final ExecutorService worker = Executors.newSingleThreadExecutor();
   private volatile boolean connected;
@@ -137,7 +137,8 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
     Matcher amountMatcher = AMOUNT.matcher(text);
     if (!amountMatcher.find()) return null;
     try {
-      BigDecimal rupees = new BigDecimal(amountMatcher.group(1).replace(",", ""));
+      String amountText = amountMatcher.group(1) != null ? amountMatcher.group(1) : amountMatcher.group(2);
+      BigDecimal rupees = new BigDecimal(amountText.replace(",", ""));
       long paise = rupees.movePointRight(2).longValueExact();
       if (paise <= 0L || paise > 100000000000L) return null;
       Matcher utrMatcher = UTR.matcher(text);
