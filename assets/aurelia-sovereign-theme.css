@@ -122,3 +122,17 @@ body[data-theme="light"] .hero{color:#edf5ee}
 body[data-theme="light"] .au-shell{--au-bg:#f2f6f1;--au-panel:#fff;--au-panel-2:#f6faf6;--au-line:rgba(35,72,48,.16);--au-gold:#8b6423;--au-ivory:#17271d;--au-muted:#5c7363;--au-green:#267d57}
 body[data-theme="light"] .au-form input,body[data-theme="light"] .au-form select,body[data-theme="light"] .au-panel input,body[data-theme="light"] .au-panel select,body[data-theme="light"] .au-panel textarea{background:#fff;color:#17271d}
 body[data-theme="light"] .au-panel,body[data-theme="light"] .au-metric{background:linear-gradient(145deg,#fff,#f3f8f3)}
+
+.aurelia-quick-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0 18px}
+.aurelia-quick-action{min-width:0;min-height:74px;display:flex;align-items:center;gap:11px;padding:12px;border:1px solid var(--ln);border-radius:18px;background:linear-gradient(145deg,rgba(20,41,31,.98),rgba(10,27,19,.98));color:var(--tx);text-align:left;box-shadow:0 10px 26px rgba(0,0,0,.12)}
+.aurelia-quick-action.primary{background:linear-gradient(135deg,#ffe5a4,#c89a4b 68%,#e7c779);border-color:rgba(255,235,185,.5);color:#1b170c}
+.aurelia-quick-action:active{transform:scale(.985)}
+.aurelia-quick-action span:last-child{min-width:0}
+.aurelia-quick-action b{display:block;font:600 13px/1.2 var(--sans)}
+.aurelia-quick-action small{display:block;margin-top:4px;color:var(--mu);font:500 10px/1.3 var(--sans)}
+.aurelia-quick-action.primary small{color:rgba(27,23,12,.72)}
+.aurelia-quick-icon{width:31px;height:31px;flex:0 0 31px;display:grid;place-items:center;border-radius:11px;background:rgba(247,211,135,.1);color:var(--gold);font-size:18px}
+.aurelia-quick-action.primary .aurelia-quick-icon{background:rgba(27,23,12,.12);color:#1b170c}
+body[data-theme="light"] .aurelia-quick-action{background:linear-gradient(145deg,#fff,#f1f7f1);color:#17271d}
+body[data-theme="light"] .aurelia-quick-action.primary{background:linear-gradient(135deg,#ffe5a4,#c89a4b 68%,#e7c779);color:#1b170c}
+@media(max-width:420px){.aurelia-quick-actions{grid-template-columns:1fr;gap:8px}.aurelia-quick-action{min-height:66px}}
