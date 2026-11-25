@@ -158,3 +158,21 @@ test('startup awaits durable IndexedDB state before enabling normal app interact
   assert.ok(html.includes('function loadAppStateFromIndexedDB'));
   assert.ok(html.includes('function flushAppStateWrites'));
 });
+
+
+test('localStorage quota failure does not block reading existing legacy app records', () => {
+  const start = html.indexOf('<script id="aurelia-safe-storage">');
+  const openEnd = html.indexOf('>', start);
+  const end = html.indexOf('</script>', openEnd);
+  const values = new Map([['aurelia_lodge_v2', '{"b":[{"id":7}]}']]);
+  const localStorage = {
+    setItem() { throw new Error('QuotaExceededError'); },
+    getItem(key) { return values.has(String(key)) ? values.get(String(key)) : null; },
+    removeItem(key) { values.delete(String(key)); }
+  };
+  const context = { window: { localStorage } };
+  vm.runInNewContext(html.slice(openEnd + 1, end), context);
+  assert.equal(context.window.__aureliaStorage.getItem('aurelia_lodge_v2'), '{"b":[{"id":7}]}');
+  assert.equal(context.window.__aureliaStorage.isAvailable(), false);
+  assert.equal(context.window.__aureliaStorage.memoryOnly, false);
+});
