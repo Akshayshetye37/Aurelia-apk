@@ -131,6 +131,12 @@ export function createAureliaUPIRepository({ plugin = nativePlugin() } = {}) {
         action: entry.action || "UNKNOWN"
       }),
     listAudit: () => list(ENTITY_TYPES.AUDIT),
+    getUpiObserverStatus: async () => {
+      if (!isNative || typeof plugin.getUpiObserverStatus !== "function") {
+        return { available: false, notificationAccessEnabled: false, listenerConnected: false, lastConnectedAt: 0 };
+      }
+      return plugin.getUpiObserverStatus();
+    },
     listNativeNotificationEvidence: async () => {
       if (!isNative || typeof plugin.listUpiEvidence !== "function") return [];
       const result = await plugin.listUpiEvidence();
