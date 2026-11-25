@@ -266,6 +266,18 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     if(empty(device)||empty(event)||empty(code)){call.reject("Invalid outbox conflict request","PMS_INVALID_OUTBOX_CONFLICT");return;}
     io.execute(() -> {try{repository().markOutboxConflict(device,event,code);JSObject r=new JSObject();r.put("success",true);call.resolve(r);}catch(Exception e){call.reject("Outbox conflict update failed",storageErrorCode(e,"PMS_OUTBOX_CONFLICT_FAILED"),e);}});
   }
+  @PluginMethod public void listUpiEvidence(PluginCall call) {
+    io.execute(() -> {try{JSObject out=new JSObject();out.put("evidence",repository().listUpiEvidence());call.resolve(out);}
+      catch(Exception e){call.reject("Aurelia UPI evidence read failed",storageErrorCode(e,"AURELIA_UPI_EVIDENCE_READ_FAILED"),e);}});
+  }
+  @PluginMethod public void updateUpiEvidence(PluginCall call) {
+    String id=call.getString("evidenceId"),status=call.getString("status"),note=call.getString("reviewNote");
+    Boolean manual=call.getBoolean("manualVerified");
+    if(empty(id)||!("CONFIRMED".equals(status)||"REJECTED".equals(status))){call.reject("Invalid Aurelia UPI evidence review packet","AURELIA_UPI_INVALID_REVIEW");return;}
+    io.execute(() -> {try{JSONObject result=repository().updateUpiEvidence(id,status,note,Boolean.TRUE.equals(manual));call.resolve(new JSObject(result.toString()));}
+      catch(Exception e){call.reject("Aurelia UPI evidence review rejected",storageErrorCode(e,"AURELIA_UPI_EVIDENCE_REVIEW_FAILED"),e);}});
+  }
+
   @PluginMethod public void storageGet(PluginCall call) { String store=call.getString("store"),key=call.getString("key");if(empty(store)||empty(key)){call.reject("Storage store and key are required","PMS_STORAGE_INVALID_KEY");return;}io.execute(()->{try{JSONObject value=repository().storageGet(store,key);JSObject out=new JSObject();out.put("value",value==null?JSONObject.NULL:value);call.resolve(out);}catch(Exception e){call.reject("Storage read failed",storageErrorCode(e,"PMS_STORAGE_READ_FAILED"),e);}}); }
   @PluginMethod public void storagePut(PluginCall call) { String store=call.getString("store"),key=call.getString("key");JSObject value=call.getObject("value");if(empty(store)||empty(key)||value==null){call.reject("Storage put requires store, key and object value","PMS_STORAGE_INVALID_PUT");return;}io.execute(()->{try{JSONArray ops=new JSONArray();JSONObject op=new JSONObject();op.put("type","put");op.put("store",store);op.put("key",key);op.put("value",new JSONObject(value.toString()));ops.put(op);repository().storageTransaction(ops);JSObject out=new JSObject();out.put("success",true);call.resolve(out);}catch(Exception e){call.reject("Storage put failed",storageErrorCode(e,"PMS_STORAGE_PUT_FAILED"),e);}}); }
   @PluginMethod public void storageList(PluginCall call) { String store=call.getString("store");if(empty(store)){call.reject("Storage store is required","PMS_STORAGE_INVALID_STORE");return;}io.execute(()->{try{JSObject out=new JSObject();out.put("rows",repository().storageList(store));call.resolve(out);}catch(Exception e){call.reject("Storage list failed",storageErrorCode(e,"PMS_STORAGE_LIST_FAILED"),e);}}); }
