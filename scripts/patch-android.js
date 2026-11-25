@@ -21,8 +21,9 @@ fs.writeFileSync(manifestPath, manifest);
 // SQLCipher 4.20.0 declares minCompileSdk 36. Keep the Capacitor 7 toolchain,
 // but move the generated Android project to the minimum supported AGP/API pairing.
 const rootGradlePath = path.join(androidDir, 'build.gradle');
+const variablesGradlePath = path.join(androidDir, 'variables.gradle');
 const wrapperPropertiesPath = path.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties');
-if (!fs.existsSync(rootGradlePath) || !fs.existsSync(wrapperPropertiesPath)) {
+if (!fs.existsSync(rootGradlePath) || !fs.existsSync(variablesGradlePath) || !fs.existsSync(wrapperPropertiesPath)) {
   throw new Error('Generated Android root Gradle configuration is incomplete.');
 }
 let rootGradle = fs.readFileSync(rootGradlePath, 'utf8');
@@ -31,15 +32,22 @@ if (agpVersions.length !== 1 || !['8.7.2', '8.9.1'].includes(agpVersions[0][1]))
   throw new Error('Unexpected Android Gradle Plugin version; review the generated Capacitor template before upgrading.');
 }
 rootGradle = rootGradle.replace(/com\.android\.tools\.build:gradle:8\.7\.2/g, 'com.android.tools.build:gradle:8.9.1');
-const compileSdkVersions = [...rootGradle.matchAll(/\bcompileSdkVersion\s*=\s*(\d+)/g)];
+if (!rootGradle.includes('com.android.tools.build:gradle:8.9.1')) {
+  throw new Error('Could not configure Android Gradle Plugin 8.9.1.');
+}
+fs.writeFileSync(rootGradlePath, rootGradle);
+
+let variablesGradle = fs.readFileSync(variablesGradlePath, 'utf8');
+const compileSdkVersions = [...variablesGradle.matchAll(/\bcompileSdkVersion\s*=\s*(\d+)/g)];
 if (compileSdkVersions.length !== 1 || !['35', '36'].includes(compileSdkVersions[0][1])) {
   throw new Error('Unexpected generated compileSdkVersion; refusing an unreviewed Android SDK change.');
 }
-rootGradle = rootGradle.replace(/(\bcompileSdkVersion\s*=\s*)35\b/g, (_match, prefix) => prefix + '36');
-if (!rootGradle.includes('com.android.tools.build:gradle:8.9.1') || !/\bcompileSdkVersion\s*=\s*36\b/.test(rootGradle)) {
-  throw new Error('Could not configure Android Gradle Plugin 8.9.1 with compileSdk 36.');
+variablesGradle = variablesGradle.replace(/(\bcompileSdkVersion\s*=\s*)35\b/g, (_match, prefix) => prefix + '36');
+if (!/\bcompileSdkVersion\s*=\s*36\b/.test(variablesGradle)) {
+  throw new Error('Could not configure compileSdkVersion 36 in variables.gradle.');
 }
-fs.writeFileSync(rootGradlePath, rootGradle);
+fs.writeFileSync(variablesGradlePath, variablesGradle);
+
 const wrapperProperties = fs.readFileSync(wrapperPropertiesPath, 'utf8');
 if (!/gradle-8\.11\.1-(?:all|bin)\.zip/.test(wrapperProperties)) {
   throw new Error('Generated Gradle wrapper must be 8.11.1 for Android Gradle Plugin 8.9.1.');
