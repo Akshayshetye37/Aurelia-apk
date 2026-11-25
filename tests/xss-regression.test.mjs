@@ -22,3 +22,10 @@ test('the shared HTML escaper encodes hostile guest-controlled markup', () => {
   const hostile = `"><img src=x onerror=alert(1)>&'`;
   assert.equal(escapeHtml(hostile), '&quot;&gt;&lt;img src=x onerror=alert(1)&gt;&amp;\'');
 });
+
+test('secret scanning checks the complete reachable Git history', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/secret-scan.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /fetch-depth:\s*0/);
+  assert.match(workflow, /gitleaks\/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e/);
+  assert.match(workflow, /persist-credentials:\s*false/);
+});
