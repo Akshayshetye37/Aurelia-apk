@@ -53,8 +53,8 @@ function buildStayExtension(booking, options = {}) {
   }
 
   const nightlyRate = Number(options.roomRate);
-  if (!Number.isFinite(nightlyRate) || nightlyRate < 0) {
-    throw new Error('The room nightly rate is invalid.');
+  if (!Number.isFinite(nightlyRate) || nightlyRate <= 0) {
+    throw new Error('The room nightly rate must be greater than zero.');
   }
 
   const nightsAdded = newOut - oldOut;
