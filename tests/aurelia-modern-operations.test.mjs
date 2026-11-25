@@ -13,7 +13,7 @@ test('all application sections are reachable from one accessible dropdown', () =
 
 test('thermal receipts have independent 80 mm and 58 mm paper profiles', () => {
   assert.match(html, /aureliaPrintThermalReceipt/);
-  assert.match(html, /size:'\\+width\\+'mm 200mm/i);
+  assert.match(html, /size:'\+width\+'mm 200mm/i);
   assert.match(html, /value=["']80["']/);
   assert.match(html, /value=["']58["']/);
   assert.match(html, /thermal-receipt/);
