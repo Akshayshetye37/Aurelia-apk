@@ -11,6 +11,7 @@ import {
   parseIncomingUpiNotification,
   matchEvidenceToSessions,
   createRefundRecord,
+  completeRefundRecord,
   markCustomerPaid
 } from "./domain.mjs";
 import { createAureliaUPIRepository } from "./repository.mjs";
@@ -295,9 +296,11 @@ function renderReview() {
 }
 
 function renderRefunds() {
-  return '<section class="au-page-heading"><div><span class="au-kicker">REFUND REGISTER</span><h3>Refund requests</h3><p>Aurelia records refunds; the actual transfer must be completed in your bank or UPI app.</p></div></section>' +
+  return '<section class="au-page-heading"><div><span class="au-kicker">REFUND REGISTER</span><h3>Refund requests</h3><p>Aurelia records refunds; complete the transfer in your bank or UPI app, then record its UTR here.</p></div></section>' +
     '<section class="au-panel"><div class="au-list">' +
-    (state.refunds.length ? state.refunds.map(row => '<article class="au-row"><div class="au-row-main"><strong>' + esc(row.paymentId) + '</strong><div class="au-row-meta">' + esc(row.reason || "Refund") + ' · ' + esc(row.status) + '</div></div><strong>' + esc(formatPaise(row.amountPaise)) + '</strong></article>').join("") : '<div class="au-empty"><strong>No refund records</strong><p>Refund requests can be created from confirmed Aurelia UPI payments.</p></div>') +
+    (state.refunds.length ? state.refunds.map(row => '<article class="au-evidence-card"><div class="au-row-title"><strong>' + esc(formatPaise(row.amountPaise)) + '</strong>' + badge(row.status) + '</div><div class="au-row-meta">' + esc(row.paymentId) + ' · ' + esc(row.reason || "Refund") + '</div>' +
+      (row.status === "MANUAL_TRANSFER_REQUIRED" ? '<label><span>Completed bank transfer UTR / reference</span><input id="au-refund-utr-' + esc(row.id) + '" maxlength="30" placeholder="Enter refund transfer UTR"></label><label class="au-review-check"><input type="checkbox" id="au-refund-verify-' + esc(row.id) + '"><span>I completed this refund transfer and verified it in the bank account.</span></label><button class="au-secondary au-wide" type="button" data-upi-action="complete-refund" data-id="' + esc(row.id) + '">Record completed refund</button>' : '<div class="au-row-meta">' + esc(row.transferReference || "Transfer reference not available") + '</div>') +
+      '</article>').join("") : '<div class="au-empty"><strong>No refund records</strong><p>Refund requests can be created from confirmed Aurelia UPI payments.</p></div>') +
     '</div></section>';
 }
 
@@ -627,6 +630,19 @@ async function cancelSession(id) {
   rerender();
 }
 
+async function completeRefund(id) {
+  const refund = state.refunds.find(row => row.id === id);
+  if (!refund) throw new Error("Refund record was not found.");
+  const verified = document.getElementById("au-refund-verify-" + id)?.checked === true;
+  const transferReference = String(document.getElementById("au-refund-utr-" + id)?.value || "").trim().toUpperCase();
+  const completed = completeRefundRecord(refund, { transferReference, manualVerified: verified });
+  await repository.saveRefund(completed, "AURELIA_UPI_REFUND_TRANSFER_RECORDED");
+  state.refunds = state.refunds.map(row => row.id === id ? completed : row);
+  audit("Refund transfer recorded", refund.paymentId + " · " + transferReference);
+  notify("Refund transfer recorded with its bank reference. Aurelia did not initiate the transfer.");
+  rerender();
+}
+
 async function createRefund(id) {
   const payment = state.payments.find(row => row.id === id && ["CONFIRMED", "APPLIED_TO_PMS"].includes(row.status));
   if (!payment) throw new Error("Only a confirmed Aurelia UPI payment can be refunded.");
@@ -747,6 +763,7 @@ function onActionClick(event) {
       await createRefund(paymentId);
       return;
     }
+    if (action === "complete-refund") { await completeRefund(id); return; }
   };
   run().catch(error => notify(error?.message || "Aurelia UPI action failed."));
 }
