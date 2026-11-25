@@ -26,12 +26,11 @@ async function main() {
   // qrcode@1.5.4 no longer ships its precompiled build/ browser bundle in npm.
   // Bundle its browser entry locally; no CDN or runtime network access is used.
   await esbuild.build({
-    entryPoints: [require.resolve('qrcode')],
+    entryPoints: [path.join(root, 'scripts', 'qr-browser-entry.cjs')],
     bundle: true,
     platform: 'browser',
     format: 'iife',
     globalName: 'QRCode',
-    mainFields: ['browser', 'module', 'main'],
     target: ['es2020'],
     minify: true,
     legalComments: 'eof',
