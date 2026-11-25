@@ -224,7 +224,7 @@ public class MainActivity extends BridgeActivity {
     super.onStop();
   }
 
-  @Override protected void onDestroy() {
+  @Override public void onDestroy() {
     if (pendingBytes != null) Arrays.fill(pendingBytes, (byte) 0);
     pendingBytes = new byte[0];
     backupExecutor.shutdown();
