@@ -50,8 +50,14 @@ test('web packaging includes the pinned local QR engine and all Aurelia UPI modu
   const pkg = JSON.parse(await read('package.json'));
   const build = await read('scripts/prepare-web.js');
   assert.equal(pkg.dependencies.qrcode, '1.5.4');
+  assert.equal(pkg.devDependencies.esbuild, '0.28.1');
   assert.equal(pkg.engines.node, '>=22.0.0');
-  assert.match(build, /['"]qrcode['"],\s*['"]build['"],\s*['"]qrcode\.min\.js['"]/);
+  assert.match(build, /require\('esbuild'\)/);
+  assert.match(build, /entryPoints:\s*\[require\.resolve\('qrcode'\)\]/);
+  assert.match(build, /platform:\s*'browser'/);
+  assert.match(build, /globalName:\s*'QRCode'/);
+  assert.match(build, /QRCode\.toString/);
+  assert.match(build, /smokeSvg/);
   assert.match(build, /src.*aurelia-upi/);
   assert.match(build, /qrcode\.min\.js/);
 });
