@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://api.qrserver.com; connect-src 'self' https:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#05110d"><meta name="mobile-web-app-capable" content="yes"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Aurelia PMS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
@@ -220,7 +220,8 @@ input[type=date]{max-width:100%;min-width:0}
  .avail input[type=date]::-webkit-calendar-picker-indicator{margin:0;padding:0;width:14px;height:14px}
  .avail>.btn{grid-column:1/-1;min-width:0;width:100%;min-height:46px;padding:8px 12px;white-space:normal;line-height:1.15}
 }
-</style></head><body>
+</style><link rel="stylesheet" href="./assets/aurelia-upi.css">
+</head><body>
 
 <script id="guest-contact-actions-early">
 /* Define guest contact markup before the first Stays render can run. */
@@ -489,8 +490,8 @@ try{render()}catch(bootErr){
 /* ===== Full module set ===== */
 IC.more='M5 12h.01M12 12h.01M19 12h.01';TABS.push(['more','More']);
 const bk=i=>S.b.find(x=>x.id===i),aud=(a,d)=>S.aud.unshift({a,d,at:new Date()}),tt=b=>nts(b)*(rm(b.room)||{r:0}).r+b.ch.reduce((a,x)=>a+x[1],0)-(b.dc||0),dueB=b=>tt(b)-(b.p||0),on=k=>S.fe[k]!==false,tmf=d=>d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-const M=['Dashboard','Reservations','Bookings','Guests','Rooms','Folio','Invoices','Housekeeping','POS','Expenses','Reports','Audit','Import/Export','WhatsApp actions','Payment QR','Payment verification','Offline mode'],G={Payments:['GPay notification reader','Payer-name matching','Automatic reconciliation','Manual confirmation','Duplicate-payment detection','Payment retry and recovery','Payment announcement'],Restaurant:['Restaurant billing','Staying-guest billing','Walk-in billing','Add and remove food','Add to room folio','Bill PDF','WhatsApp sharing','Restaurant audit'],Inventory:['Purchase and add stock','Stock deduction on sale','Low-stock alerts','Inventory audit'],'Backup and recovery':['Automatic local backup','Recovery queue']};
-Object.assign(S,{sub:null,co:0,aud:[],fe:{},led:[],terms:'Check-in from 14:00 and check-out by 11:00. A valid ID is required for every adult guest. Quiet hours run from 22:00 to 06:00. Damage to property is billed to the room folio.',set:{name:'Hari Om Retreat',phone:'+91 98765 43210',addr:'Hari Om Retreat, India',tax:'',upi:'hariom@upi',cur:'₹'},exp:[{id:1,t:'Fresh produce',c:'Kitchen',a:1850,v:0,demo:1},{id:2,t:'Generator diesel',c:'Utilities',a:3200,v:0,demo:1}],inv:[{n:'Mosi lager',q:48,ro:24,u:45},{n:'Seared Kafue bream',q:9,ro:12,u:120},{n:'Cooking oil (5L)',q:6,ro:4,u:210},{n:'Bed linen sets',q:30,ro:20,u:0}]});
+const M=['Dashboard','Reservations','Bookings','Guests','Rooms','Folio','Invoices','Housekeeping','POS','Expenses','Reports','Audit','Import/Export','WhatsApp actions','Aurelia UPI collection','Aurelia UPI reconciliation','Offline mode'],G={'Aurelia UPI':['Direct UPI collection sessions','Incoming payment notification observer','Payer and UTR matching','Manual bank verification','Duplicate and conflict detection','FIFO request queue','Payment audit and announcements'],Restaurant:['Restaurant billing','Staying-guest billing','Walk-in billing','Add and remove food','Add to room folio','Bill PDF','WhatsApp sharing','Restaurant audit'],Inventory:['Purchase and add stock','Stock deduction on sale','Low-stock alerts','Inventory audit'],'Backup and recovery':['Automatic local backup','Recovery queue']};
+Object.assign(S,{sub:null,co:0,aud:[],fe:{},led:[],terms:'Check-in from 14:00 and check-out by 11:00. A valid ID is required for every adult guest. Quiet hours run from 22:00 to 06:00. Damage to property is billed to the room folio.',set:{name:'Hari Om Retreat',phone:'+91 98765 43210',addr:'Hari Om Retreat, India',tax:'',upi:'',cur:'₹'},exp:[{id:1,t:'Fresh produce',c:'Kitchen',a:1850,v:0,demo:1},{id:2,t:'Generator diesel',c:'Utilities',a:3200,v:0,demo:1}],inv:[{n:'Mosi lager',q:48,ro:24,u:45},{n:'Seared Kafue bream',q:9,ro:12,u:120},{n:'Cooking oil (5L)',q:6,ro:4,u:210},{n:'Bed linen sets',q:30,ro:20,u:0}]});
 [...M,...Object.keys(G),...Object.values(G).flat()].forEach(k=>S.fe[k]=true);
 S.g=[...new Set(S.b.map(b=>b.g))].map((n,i)=>({n,ph:'+26097'+(7000000+i*91733),em:'',idt:'NRC',idn:'',occ:[],veh:[]}));S.b[1].p=1000;
 const hd=t=>`<div class="chips"><button class="chip" onclick="S.sub=null;render()">‹ More</button></div><h2 style="font-size:36px;margin:4px 0 12px">${t}</h2>`;
@@ -536,7 +537,7 @@ exp:()=>hd('Expenses')+`<button class="btn sm" onclick="expNew()">Add expense</b
 rep:()=>{const v=[...S.hist,S.today],W=v.reduce((a,b)=>a+b,0),rv=S.b.filter(b=>b.st!=='res').reduce((a,b)=>a+tt(b),0),pd=S.b.reduce((a,b)=>a+(b.p||0),0),os=S.b.filter(b=>b.st==='in').reduce((a,b)=>a+Math.max(0,dueB(b)),0),ex=S.exp.filter(e=>!e.v).reduce((a,e)=>a+e.a,0),mx=Math.max(...v);return hd('Reports')+`<div class="grid g4" style="margin-top:0">${kpi('Week takings',W,'K','','Last seven days')}${kpi('Stay revenue',rv,'K','','Rooms and charges')}${kpi('Payments recorded',pd,'K','','Against folios')}${kpi('Outstanding',os,'K','','In-house balances')}</div><div class="grid g2"><div class="card"><h2>Daily takings</h2>${v.map((x,i)=>`<div class="row lab" style="margin-top:8px"><span>${['Mon','Tue','Wed','Thu','Fri','Sat','Today'][i]}</span><span>${K(x)}</span></div><div class="bar"><i style="width:${x/mx*100}%"></i></div>`).join('')}</div><div class="card"><h2>Net position</h2><div class="lab">Week takings less active expenses</div><div class="tot" style="margin:10px 0">${K(W-ex)}</div><div class="lab">Expenses ${K(ex)}. Reconcile with your ledger before filing.</div></div></div>`},
 aud:()=>hd('Audit')+`<div class="card"><div class="list">${S.aud.map(a=>`<div class="item"><div class="f"><b>${esc(a.a)}</b><small>${esc(a.d)}</small></div><small class="lab">${tmf(a.at)}</small></div>`).join('')||'<div class="empty">Actions you take will be recorded here.</div>'}</div></div>`,
 io:()=>hd('Import and export')+`<div class="grid">${[['Copy full backup (JSON)','json'],['Copy guests (CSV)','guests'],['Copy bookings (CSV)','bookings']].map(([l,k])=>`<div class="card row"><span>${l}</span><button class="btn sm" onclick="cp('${k}')">Copy</button></div>`).join('')}</div><p class="lab" style="margin-top:14px">Encrypted backup and restore, spreadsheet import and saving files to your device run in the Android app. This page copies data to your clipboard instead.</p>`,
-set:()=>{const s=S.set,sw=(k,d)=>`<div class="row" style="padding:10px 0;border-bottom:1px dotted var(--ln);${d?'opacity:.4':''}"><span>${k}</span><button class="sw ${S.fe[k]?'on':''}" aria-label="${k}" onclick="tg('${k}')"></button></div>`;return hd('Settings')+`<div class="card"><h2>Hotel identity</h2>${[['name','Business name'],['phone','Phone'],['addr','Address'],['tax','GST or TPIN'],['upi','UPI or mobile money ID'],['cur','Currency']].map(([k,l])=>`<label class="fld"><span>${l}</span><input data-s="${k}" value="${esc(s[k]||'')}"></label>`).join('')}<label class="fld"><span>Hotel logo</span><input type="file" accept="image/*" onchange="pv(this,'lg')"></label><img id="lg" alt="" style="max-height:70px;display:none;border-radius:12px"><label class="fld"><span>Payment QR</span><input type="file" accept="image/*" onchange="pv(this,'qr')"></label><img id="qr" alt="" style="max-height:120px;display:none;border-radius:12px"><button class="btn" style="margin-top:12px" onclick="sv()">Save identity</button></div><div class="card" style="margin-top:14px"><h2>Feature controls</h2>${M.map(k=>sw(k)).join('')}</div>${Object.entries(G).map(([g,c])=>`<div class="card" style="margin-top:14px"><h2>${g}</h2>${sw(g)}${c.map(k=>sw(k,!S.fe[g])).join('')}</div>`).join('')}<div class="card" style="margin-top:14px"><h2>Guest terms</h2><label class="fld"><textarea id="tm">${esc(S.terms)}</textarea></label><div class="row"><button class="btn sm" onclick="S.terms=$('#tm').value;toast('Terms saved')">Save terms</button><button class="btn sm ghost" onclick="navigator.clipboard.writeText(S.terms).then(()=>toast('Terms copied'),()=>toast('Copy was blocked'))">Copy</button></div></div><div class="card" style="margin-top:14px"><h2>Data care</h2><div class="row"><button class="btn sm" onclick="hc()">Run health check</button><button class="btn sm ghost" onclick="demoRm()">Remove demo entries</button><button class="btn sm ghost" onclick="resetAll()">Reset all data</button></div></div>`}};
+set:()=>{const s=S.set,sw=(k,d)=>`<div class="row" style="padding:10px 0;border-bottom:1px dotted var(--ln);${d?'opacity:.4':''}"><span>${k}</span><button class="sw ${S.fe[k]?'on':''}" aria-label="${k}" onclick="tg('${k}')"></button></div>`;return hd('Settings')+`<div class="card"><h2>Hotel identity</h2>${[['name','Business name'],['phone','Phone'],['addr','Address'],['tax','GST or TPIN'],['upi','Aurelia UPI ID (VPA)'],['cur','Currency']].map(([k,l])=>`<label class="fld"><span>${l}</span><input data-s="${k}" value="${esc(s[k]||'')}"></label>`).join('')}<label class="fld"><span>Hotel logo</span><input type="file" accept="image/*" onchange="pv(this,'lg')"></label><img id="lg" alt="" style="max-height:70px;display:none;border-radius:12px"><label class="fld"><span>Payment QR</span><input type="file" accept="image/*" onchange="pv(this,'qr')"></label><img id="qr" alt="" style="max-height:120px;display:none;border-radius:12px"><button class="btn" style="margin-top:12px" onclick="sv()">Save identity</button></div><div class="card" style="margin-top:14px"><h2>Feature controls</h2>${M.map(k=>sw(k)).join('')}</div>${Object.entries(G).map(([g,c])=>`<div class="card" style="margin-top:14px"><h2>${g}</h2>${sw(g)}${c.map(k=>sw(k,!S.fe[g])).join('')}</div>`).join('')}<div class="card" style="margin-top:14px"><h2>Guest terms</h2><label class="fld"><textarea id="tm">${esc(S.terms)}</textarea></label><div class="row"><button class="btn sm" onclick="S.terms=$('#tm').value;toast('Terms saved')">Save terms</button><button class="btn sm ghost" onclick="navigator.clipboard.writeText(S.terms).then(()=>toast('Terms copied'),()=>toast('Copy was blocked'))">Copy</button></div></div><div class="card" style="margin-top:14px"><h2>Data care</h2><div class="row"><button class="btn sm" onclick="hc()">Run health check</button><button class="btn sm ghost" onclick="demoRm()">Remove demo entries</button><button class="btn sm ghost" onclick="resetAll()">Reset all data</button></div></div>`}};
 V.more=()=>(SUB[S.sub]||SUB.menu)();
 const _r=render;render=function(){if(S.tab!=='more')S.sub=null;_r()};
 function rs(n,s){rm(n).s=s;aud('Room '+n,s==='ready'?'Released to available':s==='clean'?'Marked for cleaning':s);render();toast('Room '+n+' updated')}
@@ -1418,14 +1419,14 @@ async function downloadBillPng(elementId,fileName){
 }
 /* Dynamic UPI intent QR; amount is generated from the current balance/restaurant bill. */
 function upiIntentUri(amount,guest,reference){
- const receiver=String(S.set?.upi||S.restaurant?.upi||'').trim();if(!receiver||!receiver.includes('@'))return '';
- const params=new URLSearchParams({pa:receiver,pn:String(S.set?.name||S.restaurant?.name||'Aurelia PMS'),am:(Math.max(0,Number(amount)||0)).toFixed(2),cu:'INR',tn:'Aurelia PMS invoice payment',tr:String(reference||('AUR'+Date.now()))});
+ const receiver=String(S.set?.upi||'').trim();if(!receiver||!receiver.includes('@'))return '';
+ const value=Math.round(Math.max(0,Number(amount)||0)*100)/100;if(!(value>0))return '';
+ const params=new URLSearchParams({pa:receiver,pn:String(S.set?.name||'Aurelia'),am:value.toFixed(2),cu:'INR',tn:'Aurelia UPI payment',tr:String(reference||('AUR'+Date.now()))});
  return 'upi://pay?'+params.toString();
 }
 function dynamicUpiQr(amount,guest,reference){
- const uri=upiIntentUri(amount,guest,reference);if(!uri)return '<div style="padding:12px;color:#7a6a45">Set a valid UPI ID in Settings to generate an amount-specific QR.</div>';
- const qr='https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data='+encodeURIComponent(uri);
- return '<img alt="UPI QR for exact amount" src="'+qr+'" style="display:block;width:min(240px,100%);height:auto;margin:12px auto;border:8px solid #fff;background:#fff;border-radius:6px"><div style="font:12px Arial;color:#7a6a45;overflow-wrap:anywhere">UPI ID: '+esc(String(S.set?.upi||S.restaurant?.upi||''))+'</div>';
+ const uri=upiIntentUri(amount,guest,reference);if(!uri)return '<div style="padding:12px;color:#7a6a45">Configure the Aurelia UPI ID in Settings to generate an amount-specific QR.</div>';
+ return '<img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="'+esc(uri)+'" style="display:block;width:min(240px,100%);height:auto;margin:12px auto;border:8px solid #fff;background:#fff;border-radius:6px"><div style="font:12px Arial;color:#7a6a45;overflow-wrap:anywhere">Aurelia UPI ID: '+esc(String(S.set?.upi||''))+'</div>';
 }
 const _invBeforeDynamicUpi=inv;
 inv=function(i){
@@ -2815,13 +2816,12 @@ function cleanGuestName(v){
  const s=String(v==null?'':v).trim();return s==='[object Object]'?'':s;
 }
 function restaurantUPI(){
- const r=String(S.restaurant&&S.restaurant.upi||'').trim(),h=String(S.set&&S.set.upi||'').trim();
- return r.includes('@')?r:h;
+ return String(S.set&&S.set.upi||'').trim();
 }
 function exactUPIBox(amount,guest,ref){
- const id=restaurantUPI();if(!id)return '<div class="lab">Set a valid UPI ID in Restaurant Settings to show an exact-amount QR.</div>';
- const uri='upi://pay?'+new URLSearchParams({pa:id,pn:String(S.restaurant&&S.restaurant.name||S.set&&S.set.name||'Restaurant'),am:(Math.max(0,Number(amount)||0)).toFixed(2),cu:'INR',tn:'Aurelia PMS payment',tr:String(ref||('AUR'+Date.now()))}).toString();
- return '<div class="exact-upi-card" style="margin-top:14px;padding:14px;border:1px solid var(--ln);border-radius:14px;text-align:center;background:#fffaf0;color:#213a2d"><b>Pay exact amount · '+esc(rk(amount))+'</b><img alt="Exact amount UPI QR" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data='+encodeURIComponent(uri)+'" style="display:block;width:min(250px,100%);height:auto;margin:12px auto;background:#fff;padding:6px"><div>UPI ID: '+esc(id)+'</div><small>Verify the recipient and amount in your UPI app before paying.</small></div>';
+ const id=restaurantUPI();if(!id)return '<div class="lab">Configure the Aurelia UPI ID in More → Settings to show an exact-amount QR.</div>';
+ const uri=upiIntentUri(amount,guest,ref);if(!uri)return '<div class="lab">Enter a valid positive amount to generate the Aurelia UPI QR.</div>';
+ return '<div class="exact-upi-card" style="margin-top:14px;padding:14px;border:1px solid var(--ln);border-radius:14px;text-align:center;background:#fffaf0;color:#213a2d"><b>Pay exact amount · '+esc(rk(amount))+'</b><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="'+esc(uri)+'" style="display:block;width:min(250px,100%);height:auto;margin:12px auto;background:#fff;padding:6px"><div>Aurelia UPI ID: '+esc(id)+'</div><small>Verify the recipient and amount in your UPI app before paying.</small></div>';
 }
 function guestPhoneFor(name,source){
  const direct=String(source&&source.phone||source&&source.ph||'').trim();if(direct)return direct;
@@ -3330,13 +3330,6 @@ window.printGuestPreview=function(){
 </script>
 
 <style id="aurelia-modern-operations">
-/* Compact section selector: all primary and operational views stay one tap away. */
-.aurelia-section-nav{display:flex;align-items:center;gap:7px;min-width:0;margin-left:auto}
-.aurelia-section-nav label{font:600 9px/1.2 var(--sans);letter-spacing:.13em;color:var(--mu);white-space:nowrap}
-#aurelia-section-menu{width:min(190px,38vw);min-width:112px;max-width:190px;padding:9px 30px 9px 11px;border:1px solid var(--ln);border-radius:13px;background:#10271d;color:var(--gold);font:500 12px var(--sans);outline:none}
-#aurelia-section-menu:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
-#aurelia-section-menu option{background:#10271d;color:#f7f2e7}
-@media(max-width:520px){.top{gap:8px;flex-wrap:wrap}.top>.pill{margin-left:auto}.aurelia-section-nav{order:3;width:100%;justify-content:flex-end}.aurelia-section-nav label{font-size:9px}#aurelia-section-menu{width:min(230px,68vw);max-width:none}}
 /* Receipt paper is independent from the A4 invoice/document layout. */
 .aurelia-thermal-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .aurelia-thermal-tools select{padding:9px 12px;border:1px solid var(--ln);border-radius:12px;background:#10271d;color:var(--gold)}
@@ -3367,44 +3360,6 @@ window.printGuestPreview=function(){
 <script id="aurelia-modern-operations">
 (function installAureliaModernOperations(){
  'use strict';
- const core=[['home','Overview'],['stays','Stays & reservations'],['rooms','Rooms & housekeeping'],['dining','Dining POS']];
- function installSectionMenu(){
-  const top=document.querySelector('.top'),pill=top&&top.querySelector('.pill');
-  if(!top||!pill)return;
-  let wrap=document.querySelector('.aurelia-section-nav');
-  if(!wrap){
-   wrap=document.createElement('div');wrap.className='aurelia-section-nav';
-   wrap.innerHTML='<label for="aurelia-section-menu">SECTIONS</label><select id="aurelia-section-menu" aria-label="Navigate to application section"></select>';
-   pill.insertAdjacentElement('afterend',wrap);
-  }
-  const select=wrap.querySelector('select');
-  let sectionEntries=core.slice();
-  try{
-   if(Array.isArray(TL))sectionEntries=sectionEntries.concat(TL.map(x=>[String(x[0]),String(x[1]||x[0])]));
-   if(typeof SUB==='object'&&SUB)sectionEntries=sectionEntries.concat(Object.keys(SUB).map(k=>[k,k==='rest'?'Restaurant business':k==='io'?'Import & export':k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase())]));
-  }catch(_){}
-  const seen=new Set();
-  const unique=sectionEntries.filter(([key])=>{if(!key||seen.has(key))return false;seen.add(key);return true});
-  select.innerHTML=unique.map(([key,label])=>'<option value="'+esc(key)+'">'+esc(label)+'</option>').join('');
-  const sync=()=>{if(typeof S==='undefined')return;const value=S.tab==='more'&&S.sub?S.sub:S.tab;if(unique.some(x=>x[0]===value))select.value=value};
-  if(!select.dataset.bound){
-   select.dataset.bound='1';
-   select.addEventListener('change',()=>{
-    const value=select.value;
-    if(core.some(x=>x[0]===value)){if(typeof go==='function')go(value);return}
-    if(typeof S==='undefined')return;
-    S.tab='more';S.sub=value;
-    if(typeof closeS==='function')closeS();
-    if(typeof render==='function')render();
-   });
-  }
-  sync();
-  if(typeof window.render==='function'&&!window.render.__aureliaMenuSync){
-   const original=window.render;
-   const wrapped=function(...args){const result=original.apply(this,args);sync();return result};
-   wrapped.__aureliaMenuSync=true;window.render=wrapped;
-  }
- }
  function safeText(value){return String(value==null?'':value)}
  function thermalReceiptMarkup(data){
   const items=(Array.isArray(data.items)?data.items:[]).map(item=>{
@@ -3488,9 +3443,134 @@ window.printGuestPreview=function(){
   guarded.__aureliaUpiGuard=true;window.out=guarded;
  }
  window.AureliaPaymentPolicy=Object.freeze({enabledMethods:Object.freeze(['UPI']),paymentRailLabel:'Aurelia UPI',providerGatewaysEnabled:false,manualConfirmationRequired:true,reactivationRequiresSourceChange:true});
- installSectionMenu();
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installSectionMenu,{once:true});
 })();
 </script>
+<script id="aurelia-upi-integration">
+(function installAureliaUPI(){
+ 'use strict';
+ if(!Array.isArray(TABS)||!IC||!V)return;
+ IC.upi='M3 5h18v14H3zM3 10h18M7 15h3M15 15h2';
+ if(!TABS.some(x=>x[0]==='upi')){
+  const index=TABS.findIndex(x=>x[0]==='more');
+  TABS.splice(index<0?TABS.length:index,0,['upi','Aurelia UPI']);
+ }
+ const moneyPaise=value=>Math.max(0,Math.round((Number(value)||0)*100));
+ const getBooking=id=>bk(Number(id));
+ const getTable=id=>(S.t||[]).find(x=>String(x.n)===String(id));
+ window.AureliaPmsContext={
+  getSettings:()=>({name:S.set&&S.set.name||'Aurelia',upi:S.set&&S.set.upi||''}),
+  getBookings:()=>(S.b||[]).filter(b=>Number(dueB(b))>0).map(b=>({id:b.id,guestName:b.g,room:b.room,balancePaise:moneyPaise(dueB(b))})),
+  getTables:()=>(S.t||[]).filter(t=>Array.isArray(t.o)&&t.o.length>0).map(t=>({id:String(t.n),amountPaise:moneyPaise(t.o.reduce((sum,x)=>sum+(Number(x[1])||0),0)),guestName:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].name)||'Dining guest',phone:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].phone)||''})),
+  toast:message=>toast(message),
+  render:()=>render(),
+  go:tab=>{S.tab=tab;S.sub=null;render()},
+  launchUpi:uri=>nat({type:'openUrl',url:uri}),
+  openNotificationSettings:()=>nat({type:'openNotificationAccessSettings'}),
+  applyFolioPayment:async(session,utr)=>{
+   const id=Number(session.bookingId),booking=getBooking(id),amount=Number(session.amountPaise)/100;
+   if(!booking)throw new Error('The linked guest folio no longer exists.');
+   if(!(amount>0)||amount>dueB(booking)+0.009)throw new Error('The linked folio balance changed. Reconcile the balance before posting.');
+   folio(id);
+   const panel=document.getElementById('pan');if(!panel)throw new Error('Guest folio panel is unavailable.');
+   let methods=panel.querySelector('#pm');
+   if(!methods){methods=document.createElement('div');methods.id='pm';panel.appendChild(methods)}
+   methods.innerHTML='<button class="chip on" type="button" data-method="UPI">Aurelia UPI</button>';
+   const previous=panel.querySelector('#aurelia-upi-hidden-pay-fields');if(previous)previous.remove();
+   const fields=document.createElement('div');fields.id='aurelia-upi-hidden-pay-fields';fields.hidden=true;
+   fields.innerHTML='<input id="pa" type="number" value="'+amount.toFixed(2)+'"><input id="pr" type="text" value="'+String(utr||'').replace(/[&<>"]/g,'')+'"><input id="pc" type="checkbox" checked>';
+   panel.appendChild(fields);
+   const before=Number(booking.p||0);
+   window.__aureliaUpiApplying=true;
+   try{if(typeof window.pay!=='function')throw new Error('Aurelia folio payment action is unavailable.');window.pay(id)}
+   finally{window.__aureliaUpiApplying=false}
+   if(Number(booking.p||0)<before+amount-0.009)throw new Error('The PMS folio did not accept the payment. The Aurelia UPI record remains pending PMS posting.');
+   if(typeof persist==='function')persist();
+   return true;
+  },
+  applyRestaurantPayment:async(session,utr)=>{
+   const table=getTable(session.tableId),amount=Number(session.amountPaise)/100;
+   if(!table||!Array.isArray(table.o)||!table.o.length)throw new Error('The linked dining table is no longer open.');
+   const current=table.o.reduce((sum,x)=>sum+(Number(x[1])||0),0);
+   if(Math.abs(current-amount)>0.009)throw new Error('The dining bill changed. Reconcile the table total before posting.');
+   S.tb=S.t.findIndex(x=>String(x.n)===String(session.tableId))+1;
+   window.__aureliaUpiApplying=true;
+   try{
+    if(typeof window.settle!=='function'||typeof window.selectRestPay!=='function'||typeof window.recordRestPay!=='function')throw new Error('Aurelia dining settlement actions are unavailable.');
+    window.settle();window.selectRestPay('UPI');
+    const confirm=document.getElementById('rest-pay-confirm');if(confirm)confirm.checked=true;
+    const name=document.getElementById('rest-pay-name');if(name)name.value=session.guestName||'Dining guest';
+    const ref=document.getElementById('rest-pay-phone');if(ref&&utr)ref.dataset.upiUtr=String(utr);
+    const before=(S.sales||[]).length;window.recordRestPay();
+    if((S.sales||[]).length!==before+1)throw new Error('The dining payment was not posted to the sales ledger.');
+   }finally{window.__aureliaUpiApplying=false}
+   if(typeof persist==='function')persist();
+   return true;
+  }
+ };
+ V.upi=()=>window.AureliaUPI?window.AureliaUPI.render(window.AureliaPmsContext):'<div class="card"><h2>Aurelia UPI</h2><p class="lab">Payment workspace is loading.</p></div>';
+ window.openAureliaUpiForFolio=function(id){
+  const booking=getBooking(id);if(!booking){toast('Guest folio not found');return}
+  const amount=moneyPaise(dueB(booking));if(!amount){toast('This folio has no outstanding balance');return}
+  if(!window.AureliaUPI){toast('Aurelia UPI is still loading');return}
+  window.AureliaUPI.openCollection({kind:'folio',bookingId:booking.id,guestName:booking.g,room:booking.room,amountPaise:amount,note:'Folio '+(booking.iv||booking.id)});
+ };
+ window.openAureliaUpiForDining=function(){
+  const table=(S.t||[])[Number(S.tb)-1];if(!table||!Array.isArray(table.o)||!table.o.length){toast('Add dining items before creating a collection');return}
+  const amount=moneyPaise(table.o.reduce((sum,x)=>sum+(Number(x[1])||0),0));
+  const guest=(S.tableGuests&&S.tableGuests[table.n]&&S.tableGuests[table.n].name)||'Dining guest';
+  if(!window.AureliaUPI){toast('Aurelia UPI is still loading');return}
+  window.AureliaUPI.openCollection({kind:'restaurant',tableId:String(table.n),guestName:guest,amountPaise:amount,note:'Dining table '+table.n});
+ };
+ const originalFolio=window.folio;
+ if(typeof originalFolio==='function'&&!originalFolio.__aureliaUpiFolio){
+  const wrappedFolio=function(id){
+   const result=originalFolio.apply(this,arguments),booking=getBooking(id),panel=document.getElementById('pan');
+   if(!booking||!panel)return result;
+   panel.querySelectorAll('#pa,#pr,#pc,#pm,#folio-upi-dynamic,.exact-upi-card,button[onclick^="pay("],button[onclick^="out("]').forEach(node=>node.remove());
+   const due=Math.max(0,Number(dueB(booking))||0),actions=document.createElement('div');
+   actions.className='au-folio-actions';
+   actions.innerHTML=due>0?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="openAureliaUpiForFolio('+Number(id)+')">Collect with Aurelia UPI · '+esc(K(due))+'</button><div class="lab" style="margin-top:8px">Payment must be verified in the Aurelia UPI review desk before the folio can be closed.</div>':(booking.st==='in'?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="outB('+Number(id)+')">Check out</button>':'<div class="lab">No outstanding balance.</div>');
+   panel.appendChild(actions);return result;
+  };
+  wrappedFolio.__aureliaUpiFolio=true;window.folio=wrappedFolio;
+ }
+ const originalPay=window.pay;
+ if(typeof originalPay==='function'&&!originalPay.__aureliaUpiOnly){
+  const guardedPay=function(){
+   if(!window.__aureliaUpiApplying){toast('Record payments through the Aurelia UPI review desk.');return false}
+   const result=originalPay.apply(this,arguments);if(typeof persist==='function')persist();return result;
+  };
+  guardedPay.__aureliaUpiOnly=true;window.pay=guardedPay;
+ }
+ window.out=function(id){
+  const booking=getBooking(id);if(!booking)return false;
+  if(Number(dueB(booking))>0){toast('Verify and post the Aurelia UPI payment before checkout.');return false}
+  if(typeof outB==='function'){outB(Number(id));return true}
+  return false;
+ };
+ const originalRestPay=window.recordRestPay;
+ if(typeof originalRestPay==='function'&&!originalRestPay.__aureliaUpiOnly){
+  const guardedRestPay=function(){
+   if(!window.__aureliaUpiApplying){toast('Post restaurant payments through the Aurelia UPI review desk.');return false}
+   return originalRestPay.apply(this,arguments);
+  };
+  guardedRestPay.__aureliaUpiOnly=true;window.recordRestPay=guardedRestPay;
+ }
+ window.AureliaPaymentPolicy=Object.freeze({
+  enabledMethods:Object.freeze(['AURELIA_UPI']),
+  paymentRailLabel:'Aurelia UPI',
+  providerGatewaysEnabled:false,
+  automaticSettlement:false,
+  manualConfirmationRequired:true,
+  notificationEvidenceCanSettle:false,
+  qrGeneration:'LOCAL',
+  currency:'INR'
+ });
+ if(typeof render==='function')render();
+})();
+</script>
+<script src="./assets/qrcode.min.js"></script>
+<script type="module" src="./src/aurelia-upi/app.mjs"></script>
+
 </body>
 </html>
