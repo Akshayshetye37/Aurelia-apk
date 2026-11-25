@@ -21,30 +21,7 @@ id = "generic-api-key"
   [[rules.allowlists]]
   description = "Documented placeholders in the checked-in environment example"
   condition = "AND"
-  regexTarget = "line"
-  paths = ['''^payment-backend/\.env\.example
-
-  [[rules.allowlists]]
-  description = "Security prose describing rollback conditions, not credential material"
-  condition = "AND"
-  regexTarget = "line"
-  paths = ['''^docs/RELEASE_CHECKLIST\.md$''']
-  regexes = ['''Roll back immediately on database integrity failure.*payment posting.*mismatch''']
-
-  [[rules.allowlists]]
-  description = "Architecture prose describing server-side signature verification"
-  condition = "AND"
-  regexTarget = "line"
-  paths = ['''^docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC\.md$''']
-  regexes = ['''Native Android code owns provider communication, credential access, signature/evidence verification''']
-
-  [[rules.allowlists]]
-  description = "Firebase MFA factor selection logic, not an API credential"
-  condition = "AND"
-  regexTarget = "line"
-  paths = ['''^index\.html$''']
-  regexes = ['''resolver\.hints\.map\(\(hint,index\)''']
-'']
+  paths = ['''^payment-backend/\.env\.example$''']
   stopwords = ["replace", "your"]
 
   [[rules.allowlists]]
