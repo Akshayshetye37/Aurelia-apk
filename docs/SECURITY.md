@@ -46,7 +46,8 @@ All results below are for source commit `922e8eb4fc3a5cb1f3511be212e70fc53866b81
 - **Repository tests:** 73 passed, 0 failed. This includes localStorage quota simulation, legacy-state read preservation, IndexedDB startup/fallback contracts, stay extension conflict/date/rate rules, reset/pagehide ordering, and inline JavaScript syntax parsing.
 - **Dependency audit:** `npm audit --audit-level=high` — 0 vulnerabilities.
 - **Secret scan:** Gitleaks 8.30.1 scanned fetched reachable refs/history with `--log-opts=--all`; no leaks found after the narrowly scoped fixture/example allowlists.
-- **Android build:** the latest `assembleDebug` run is still in progress: [GitHub Actions run 45708540318](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/45708540318). Do not treat it as successful until the workflow finishes and uploads an artifact.
+- **Android build:** `assembleDebug` — `BUILD SUCCESSFUL` in 2m 11s. The debug APK artifact is 27,718,933 bytes. Artifact SHA-256: `7daaf4d819fe9ffe19f8fec85d60030e175ab94d4864cea7048ea645aa1bd99c`.
+- **Workflow/artifact:** [GitHub Actions run 45708540318](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/45708540318) · [debug APK artifact 15065594243](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/45708540318/artifacts/15065594243).
 - **Not performed:** physical-device testing, biometric/Keystore runtime tests, release signing, backup encryption, live SQLCipher data cutover, migration/rollback testing or payment end-to-end tests.
 ## Release gate
 
