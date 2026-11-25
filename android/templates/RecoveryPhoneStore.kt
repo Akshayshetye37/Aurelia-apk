@@ -44,6 +44,11 @@ class RecoveryPhoneStore(context: Context) {
             return Record(State.UNSET, null, null, 0L, true)
         }
         try {
+            // Never create a replacement key for an already-encrypted record.
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (!keyStore.containsAlias(KEY_ALIAS)) {
+                throw SecurityException("Recovery phone encryption key is missing; refusing to replace it.")
+            }
             val packed = Base64.decode(blob, Base64.NO_WRAP)
             require(packed.size > NONCE_BYTES + TAG_BYTES) { "Invalid recovery phone record." }
             val nonce = packed.copyOfRange(0, NONCE_BYTES)
@@ -77,10 +82,12 @@ class RecoveryPhoneStore(context: Context) {
     fun markUnverified(typedE164: String) {
         require(E164.matches(typedE164)) { "Phone number must be canonical E.164." }
         val old = read()
+        require(old.state == State.UNSET || old.state == State.UNVERIFIED) {
+            "A verified recovery number can only be changed through the cooldown flow."
+        }
         // An edit to Hotel Identity never calls this method. This method is only
         // used by the explicit recovery-phone registration workflow.
-        write(Record(if (old.currentE164 == null) State.UNVERIFIED else old.state,
-            old.currentE164, old.pendingE164, old.effectiveAtEpochMs, old.otpRequired))
+        write(Record(State.UNVERIFIED, typedE164, null, 0L, old.otpRequired))
     }
 
     @Synchronized
@@ -101,7 +108,6 @@ class RecoveryPhoneStore(context: Context) {
             "A verified recovery number is required before requesting a change."
         }
         require(old.currentE164 != newE164) { "New recovery number is unchanged." }
-        require(old.state != State.CHANGE_PENDING) { "A recovery-number change is already pending." }
         write(Record(State.CHANGE_PENDING, old.currentE164, newE164,
             nowEpochMs + CHANGE_COOLDOWN_MS, old.otpRequired))
     }

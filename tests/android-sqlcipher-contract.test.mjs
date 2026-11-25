@@ -81,7 +81,7 @@ test('generic WebView writes cannot mutate domain, outbox, migration or reserved
 test('Android patch installs the SQLCipher dependency and registers the native plugin', () => {
   assert.match(patch, /net\.zetetic:sqlcipher-android:4\.20\.0@aar/);
   assert.match(patch, /androidx\.sqlite:sqlite:2\.7\.0/);
-  assert.match(patch, /androidx\.biometric:biometric:1\.2\.0/);
+  assert.match(patch, /androidx\.biometric:biometric:1\.1\.0/);
   assert.match(patch, /PmsUnlockManager\.java/);
   assert.match(patch, /PmsDatabaseKeyManager\.java/);
   assert.match(patch, /LocalPmsRepository\.java/);
@@ -117,7 +117,7 @@ test('SQLCipher dependencies are inserted idempotently and native plugin is regi
 });
 
 test('native repository opens lazily so an unavailable key does not crash app startup', () => {
-  assert.match(plugin, /load\(\) \{ super\.load\(\); \}/);
+  assert.match(plugin, /load\(\) \{\s*super\.load\(\);\s*activePlugin = this;\s*\}/);
   assert.match(plugin, /private synchronized LocalPmsRepository repository\(\)/);
   assert.match(plugin, /if \(repository == null\) repository = new LocalPmsRepository\(getContext\(\)\)/);
 });
@@ -156,10 +156,10 @@ test('native external URL actions reject dangerous URI schemes', () => {
 
 test('direct dependencies meet patched Capacitor and sharp security floors', () => {
   const manifest = JSON.parse(read('package.json'));
-  assert.match(manifest.dependencies['@capacitor/android'], /^\^7\.6\.9$/);
-  assert.match(manifest.dependencies['@capacitor/core'], /^\^7\.6\.9$/);
-  assert.match(manifest.devDependencies['@capacitor/cli'], /^\^7\.6\.9$/);
-  assert.match(manifest.devDependencies.sharp, /^\^0\.35\.5$/);
+  assert.equal(manifest.dependencies['@capacitor/android'], '7.6.10');
+  assert.equal(manifest.dependencies['@capacitor/core'], '7.6.10');
+  assert.equal(manifest.devDependencies['@capacitor/cli'], '7.6.10');
+  assert.equal(manifest.devDependencies.sharp, '0.35.5');
 });
 
 test('native guest photos are encrypted at rest with a per-install Keystore AES-GCM key', () => {
@@ -274,4 +274,43 @@ test('JSON handler encoder round-trips hostile strings without breaking inline J
     quot: '"', lt: '<', gt: '>', amp: '&'
   })[entity]);
   assert.equal(JSON.parse(decoded), input);
+});
+
+
+test('native repository lock clears the DEK even if closing SQLCipher throws', () => {
+  assert.match(plugin, /private void closeRepositoryAndLock\(\)[\s\S]*?finally\s*\{\s*PmsUnlockManager\.lock\(\);/);
+  assert.match(plugin, /finally\s*\{\s*repository = null;\s*\}/);
+});
+
+test('Android background and destroy lifecycle serialize repository close before DEK clearing', () => {
+  assert.match(plugin, /static void lockForLifecycle\(\)/);
+  assert.match(plugin, /plugin\.io\.execute\(plugin::closeRepositoryAndLock\)/);
+  assert.match(plugin, /handleOnDestroy\(\)[\s\S]*?io\.execute\(this::closeRepositoryAndLock\)/);
+  assert.match(patch, /@Override public void onStop\(\)[\s\S]*?CapacitorPmsStoragePlugin\.lockForLifecycle\(\);[\s\S]*?super\.onStop\(\);/);
+  assert.doesNotMatch(patch, /@Override public void onPause\(\)/);
+});
+
+
+test('storage outbox reads expose retry_at_ms in the ISO-8601 boundary format', () => {
+  const start = repository.indexOf('private static JSONObject storageOutboxRow');
+  const end = repository.indexOf('synchronized JSONObject storageIntegrityCheck', start);
+  assert.ok(start >= 0 && end > start);
+  const mapper = repository.slice(start, end);
+  assert.match(mapper, /row\.put\("retryAt",c\.isNull\(13\)\?JSONObject\.NULL:isoTimestamp\(c\.getLong\(13\)\)\)/);
+  assert.doesNotMatch(mapper, /retryAt",c\.isNull\(13\)\?JSONObject\.NULL:c\.getString\(13\)/);
+});
+
+
+test('encrypted local identity reads fail closed when the original Keystore key is missing', () => {
+  assert.match(plugin, /private SecretKey identityKey\(boolean create\)/);
+  assert.match(plugin, /if\(!create\) throw new SecurityException\("Keystore identity key is missing; refusing to replace it\."/);
+  assert.match(plugin, /Cipher\.ENCRYPT_MODE,identityKey\(true\)/);
+  assert.match(plugin, /Cipher\.DECRYPT_MODE,identityKey\(false\)/);
+});
+
+
+test('SQLCipher repository scalar queries use SQLCipher cursors, not Android SQLite DatabaseUtils', () => {
+  assert.doesNotMatch(repository, /android\.database\.DatabaseUtils/);
+  assert.match(repository, /private static long longForQuery\(SQLiteDatabase db,String sql,String\[\] args\)/);
+  assert.match(repository, /longForQuery\(db,"SELECT COUNT\(\*\) FROM pms_entities",null\)/);
 });

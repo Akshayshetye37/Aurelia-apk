@@ -8,6 +8,7 @@ on:
       - 'capacitor.config.json'
       - 'android/templates/**'
       - 'scripts/**'
+      - 'tests/**'
       - '.github/workflows/build-apk.yml'
 jobs:
   build:
@@ -17,18 +18,34 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/checkout@v7
         with:
-          node-version: 20
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android sdkmanager was not found under $ANDROID_HOME/cmdline-tools"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;35.0.0"
       - name: Install Node dependencies
         run: npm install --no-audit --no-fund
+      - name: Run repository contract tests
+        run: npm test
+
       - name: Prepare web app
         run: npm run build
       - name: Generate Android project and restore Aurelia native templates
@@ -60,13 +77,14 @@ jobs:
           test -f android/app/src/main/AndroidManifest.xml
           test -f android/app/src/main/java/com/aurelia/pms/MainActivity.java
           grep -q 'AureliaNative' android/app/src/main/java/com/aurelia/pms/MainActivity.java
+          grep -q 'CapacitorPmsStoragePlugin.lockForLifecycle' android/app/src/main/java/com/aurelia/pms/MainActivity.java
       - name: Build debug APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          timeout 25m ./gradlew --no-daemon --stacktrace --console=plain assembleDebug
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aurelia-pms-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk

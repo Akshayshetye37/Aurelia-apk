@@ -37,14 +37,57 @@ import javax.crypto.spec.GCMParameterSpec;
 public final class CapacitorPmsStoragePlugin extends Plugin {
   private final ExecutorService io = Executors.newSingleThreadExecutor();
   private volatile LocalPmsRepository repository;
+  private static volatile CapacitorPmsStoragePlugin activePlugin;
 
-  @Override public void load() { super.load(); }
+  @Override public void load() {
+    super.load();
+    activePlugin = this;
+  }
 
   private synchronized LocalPmsRepository repository() {
     if (repository == null) repository = new LocalPmsRepository(getContext());
     return repository;
   }
-  @Override protected void handleOnDestroy() { io.shutdown(); super.handleOnDestroy(); }
+
+  /** Close the native DB before clearing the only in-memory DEK copy. */
+  private void closeRepositoryAndLock() {
+    try {
+      synchronized (this) {
+        if (repository != null) {
+          try { repository.close(); }
+          finally { repository = null; }
+        }
+      }
+    } finally {
+      PmsUnlockManager.lock();
+    }
+  }
+
+  /** Called by MainActivity.onStop; serialize behind any in-flight repository operation. */
+  static void lockForLifecycle() {
+    CapacitorPmsStoragePlugin plugin = activePlugin;
+    if (plugin == null) {
+      PmsUnlockManager.lock();
+      return;
+    }
+    try {
+      plugin.io.execute(plugin::closeRepositoryAndLock);
+    } catch (java.util.concurrent.RejectedExecutionException destroyed) {
+      plugin.closeRepositoryAndLock();
+    }
+  }
+
+  @Override protected void handleOnDestroy() {
+    CapacitorPmsStoragePlugin current = activePlugin;
+    if (current == this) activePlugin = null;
+    try {
+      io.execute(this::closeRepositoryAndLock);
+    } catch (java.util.concurrent.RejectedExecutionException ignored) {
+      closeRepositoryAndLock();
+    }
+    io.shutdown();
+    super.handleOnDestroy();
+  }
 
   @PluginMethod public void getOrCreateLocalIdentity(PluginCall call) {
     io.execute(() -> { try {
@@ -64,22 +107,27 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     } catch(Exception e){call.reject("Keystore-backed local identity initialization failed",storageErrorCode(e,"PMS_LOCAL_IDENTITY_FAILED"),e);} });
   }
   private static final String IDENTITY_ALIAS="aurelia.pms.local.identity.v1";
-  private SecretKey identityKey() throws Exception {
+  private SecretKey identityKey(boolean create) throws Exception {
     KeyStore ks=KeyStore.getInstance("AndroidKeyStore"); ks.load(null);
-    if(ks.containsAlias(IDENTITY_ALIAS)) return ((KeyStore.SecretKeyEntry)ks.getEntry(IDENTITY_ALIAS,null)).getSecretKey();
+    if(ks.containsAlias(IDENTITY_ALIAS)) {
+      KeyStore.Entry entry=ks.getEntry(IDENTITY_ALIAS,null);
+      if(!(entry instanceof KeyStore.SecretKeyEntry)) throw new SecurityException("Keystore identity key type is invalid.");
+      return ((KeyStore.SecretKeyEntry)entry).getSecretKey();
+    }
+    if(!create) throw new SecurityException("Keystore identity key is missing; refusing to replace it.");
     KeyGenerator kg=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
     kg.init(new KeyGenParameterSpec.Builder(IDENTITY_ALIAS,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT)
       .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
       .setRandomizedEncryptionRequired(true).build()); return kg.generateKey();
   }
   private String encryptIdentity(String plain) throws Exception {
-    Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.ENCRYPT_MODE,identityKey());
+    Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.ENCRYPT_MODE,identityKey(true));
     return Base64.encodeToString(c.getIV(),Base64.NO_WRAP)+":"+Base64.encodeToString(c.doFinal(plain.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
   }
   private String decryptIdentity(String sealed) throws Exception {
     if(sealed==null)throw new IllegalStateException("Encrypted identity is missing"); String[] p=sealed.split(":",2);
     if(p.length!=2)throw new IllegalStateException("Encrypted identity format is invalid");
-    Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.DECRYPT_MODE,identityKey(),new GCMParameterSpec(128,Base64.decode(p[0],Base64.NO_WRAP)));
+    Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.DECRYPT_MODE,identityKey(false),new GCMParameterSpec(128,Base64.decode(p[0],Base64.NO_WRAP)));
     return new String(c.doFinal(Base64.decode(p[1],Base64.NO_WRAP)),StandardCharsets.UTF_8);
   }
 
@@ -200,10 +248,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
 
   @PluginMethod public void lockDatabase(PluginCall call) {
     io.execute(() -> { try {
-      synchronized(this) {
-        if(repository!=null) { repository.close(); repository=null; }
-      }
-      PmsUnlockManager.lock();
+      closeRepositoryAndLock();
       JSObject result=new JSObject(); result.put("locked",true); call.resolve(result);
     } catch(Exception e) { call.reject("PMS database lock failed", "PMS_LOCK_FAILED", e); } });
   }

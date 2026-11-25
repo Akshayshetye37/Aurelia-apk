@@ -18,6 +18,41 @@ manifest = disableManifestBackup(manifest);
 fs.writeFileSync(manifestPath, manifest);
 
 
+// SQLCipher 4.20.0 declares minCompileSdk 36. Keep the Capacitor 7 toolchain,
+// but move the generated Android project to the minimum supported AGP/API pairing.
+const rootGradlePath = path.join(androidDir, 'build.gradle');
+const variablesGradlePath = path.join(androidDir, 'variables.gradle');
+const wrapperPropertiesPath = path.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties');
+if (!fs.existsSync(rootGradlePath) || !fs.existsSync(variablesGradlePath) || !fs.existsSync(wrapperPropertiesPath)) {
+  throw new Error('Generated Android root Gradle configuration is incomplete.');
+}
+let rootGradle = fs.readFileSync(rootGradlePath, 'utf8');
+const agpVersions = [...rootGradle.matchAll(/com\.android\.tools\.build:gradle:([0-9.]+)/g)];
+if (agpVersions.length !== 1 || !['8.7.2', '8.9.1'].includes(agpVersions[0][1])) {
+  throw new Error('Unexpected Android Gradle Plugin version; review the generated Capacitor template before upgrading.');
+}
+rootGradle = rootGradle.replace(/com\.android\.tools\.build:gradle:8\.7\.2/g, 'com.android.tools.build:gradle:8.9.1');
+if (!rootGradle.includes('com.android.tools.build:gradle:8.9.1')) {
+  throw new Error('Could not configure Android Gradle Plugin 8.9.1.');
+}
+fs.writeFileSync(rootGradlePath, rootGradle);
+
+let variablesGradle = fs.readFileSync(variablesGradlePath, 'utf8');
+const compileSdkVersions = [...variablesGradle.matchAll(/\bcompileSdkVersion\s*=\s*(\d+)/g)];
+if (compileSdkVersions.length !== 1 || !['35', '36'].includes(compileSdkVersions[0][1])) {
+  throw new Error('Unexpected generated compileSdkVersion; refusing an unreviewed Android SDK change.');
+}
+variablesGradle = variablesGradle.replace(/(\bcompileSdkVersion\s*=\s*)35\b/g, (_match, prefix) => prefix + '36');
+if (!/\bcompileSdkVersion\s*=\s*36\b/.test(variablesGradle)) {
+  throw new Error('Could not configure compileSdkVersion 36 in variables.gradle.');
+}
+fs.writeFileSync(variablesGradlePath, variablesGradle);
+
+const wrapperProperties = fs.readFileSync(wrapperPropertiesPath, 'utf8');
+if (!/gradle-8\.11\.1-(?:all|bin)\.zip/.test(wrapperProperties)) {
+  throw new Error('Generated Gradle wrapper must be 8.11.1 for Android Gradle Plugin 8.9.1.');
+}
+
 const { execFileSync } = require('child_process');
 const iconSvg = path.join(__dirname, '..', 'assets', 'aurelia-icon.svg');
 const resDir = path.join(appDir, 'res');
@@ -70,11 +105,11 @@ if (fs.existsSync(appGradleGroovy)) {
   }
   if (!gradle.includes('androidx.biometric:biometric:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match =>
-      match + "\n    implementation 'androidx.biometric:biometric:1.2.0'");
+      match + "\n    implementation 'androidx.biometric:biometric:1.1.0'");
   }
   if (!gradle.includes('net.zetetic:sqlcipher-android:4.20.0@aar') ||
       !gradle.includes('androidx.sqlite:sqlite:2.7.0') ||
-      !gradle.includes('androidx.biometric:biometric:1.2.0')) {
+      !gradle.includes('androidx.biometric:biometric:1.1.0')) {
     throw new Error('Required SQLCipher and biometric Android dependencies could not be installed into the generated Gradle project.');
   }
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
@@ -125,9 +160,11 @@ const java = String.raw`
 package com.aurelia.pms;
 
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.provider.DocumentsContract;
 import android.database.Cursor;
 import android.util.Base64;
@@ -153,10 +190,12 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.Arrays;
 
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
+  private static final int MAX_DOCUMENT_BYTES = 64 * 1024 * 1024;
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
   private byte[] pendingBytes = new byte[0];
@@ -168,7 +207,7 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(CapacitorPmsStoragePlugin.class);
     registerPlugin(AureliaNativeActionsPlugin.class);
     super.onCreate(savedInstanceState);
-    if (!BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(false);
+    if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) WebView.setWebContentsDebuggingEnabled(false);
     if (bridge != null && bridge.getWebView() != null) {
       android.webkit.WebSettings appSettings = bridge.getWebView().getSettings();
       appSettings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -177,6 +216,19 @@ public class MainActivity extends BridgeActivity {
       if (Build.VERSION.SDK_INT >= 26) appSettings.setSafeBrowsingEnabled(true);
     }
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
+  }
+
+  @Override public void onStop() {
+    // Backgrounding closes SQLCipher before dropping the in-memory DEK.
+    CapacitorPmsStoragePlugin.lockForLifecycle();
+    super.onStop();
+  }
+
+  @Override public void onDestroy() {
+    if (pendingBytes != null) Arrays.fill(pendingBytes, (byte) 0);
+    pendingBytes = new byte[0];
+    backupExecutor.shutdown();
+    super.onDestroy();
   }
 
   private void js(String script) {
@@ -218,7 +270,7 @@ public class MainActivity extends BridgeActivity {
     Uri tree = Uri.parse(saved);
     Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
     String[] projection = { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_LAST_MODIFIED };
-    Uri latest = null; String latestName = null; long latestModified = Long.MIN_VALUE;
+    java.util.ArrayList<BackupCandidate> candidates = new java.util.ArrayList<>();
     try (Cursor cursor = getContentResolver().query(children, projection, null, null, null)) {
       if (cursor == null) throw new IllegalStateException("The selected backup folder cannot be read.");
       int idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
@@ -226,19 +278,29 @@ public class MainActivity extends BridgeActivity {
       int modifiedCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
       while (cursor.moveToNext()) {
         String name = cursor.getString(nameCol);
-        if (name == null || !name.startsWith("aurelia-backup-") || !name.endsWith(".json") || excluded.contains(name)) continue;
+        if (name == null || !isManagedBackupName(name) || excluded.contains(name)) continue;
         long modified = modifiedCol >= 0 && !cursor.isNull(modifiedCol) ? cursor.getLong(modifiedCol) : 0L;
-        if (latest == null || modified > latestModified) {
-          latestModified = modified; latestName = name;
-          latest = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(idCol));
-        }
+        Uri fileUri = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(idCol));
+        candidates.add(new BackupCandidate(fileUri, name, modified, false, false, true));
       }
     }
-    if (latest == null) throw new IllegalStateException("No additional Aurelia backup file was found in the selected folder.");
-    JSONObject result = new JSONObject();
-    result.put("name", latestName);
-    result.put("payload", new String(readDocument(latest), StandardCharsets.UTF_8));
-    return result;
+    candidates.sort((a, b) -> Long.compare(b.modified, a.modified));
+    for (BackupCandidate candidate : candidates) {
+      byte[] bytes = null;
+      try {
+        bytes = readDocument(candidate.uri);
+        if (!isStructurallyValidBackup(bytes)) continue;
+        JSONObject result = new JSONObject();
+        result.put("name", candidate.name);
+        result.put("payload", new String(bytes, StandardCharsets.UTF_8));
+        return result;
+      } catch (Exception unreadableOrInvalid) {
+        // Skip corrupt, inaccessible or oversized files and try the next recovery point.
+      } finally {
+        if (bytes != null) Arrays.fill(bytes, (byte) 0);
+      }
+    }
+    throw new IllegalStateException("No readable Aurelia backup file was found in the selected folder.");
   }
 
   private static String sha256(byte[] bytes) throws Exception {
@@ -251,12 +313,17 @@ public class MainActivity extends BridgeActivity {
     try (InputStream in = getContentResolver().openInputStream(uri);
          java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
       if (in == null) throw new IllegalStateException("Could not read saved backup for verification");
-      byte[] buffer = new byte[16384]; int count;
-      while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+      byte[] buffer = new byte[16384]; int count; long total = 0;
+      while ((count = in.read(buffer)) != -1) {
+        total += count;
+        if (total > MAX_DOCUMENT_BYTES) throw new IllegalArgumentException("Selected backup exceeds the 64 MiB document limit.");
+        out.write(buffer, 0, count);
+      }
       return out.toByteArray();
     }
   }
   private void writeDocument(Uri uri, byte[] bytes) throws Exception {
+    if (bytes == null || bytes.length > MAX_DOCUMENT_BYTES) throw new IllegalArgumentException("Backup exceeds the 64 MiB document limit.");
     try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
       if (out == null) throw new IllegalStateException("Could not open backup destination");
       out.write(bytes); out.flush();
@@ -264,11 +331,14 @@ public class MainActivity extends BridgeActivity {
   }
   private static final class BackupCandidate {
     final Uri uri;
+    final String name;
     final long modified;
     final boolean valid;
     final boolean protectedNew;
-    BackupCandidate(Uri uri, long modified, boolean valid, boolean protectedNew) {
-      this.uri = uri; this.modified = modified; this.valid = valid; this.protectedNew = protectedNew;
+    final boolean inspectable;
+    BackupCandidate(Uri uri, String name, long modified, boolean valid, boolean protectedNew, boolean inspectable) {
+      this.uri = uri; this.name = name; this.modified = modified; this.valid = valid;
+      this.protectedNew = protectedNew; this.inspectable = inspectable;
     }
   }
 
@@ -328,8 +398,10 @@ public class MainActivity extends BridgeActivity {
         Uri fileUri = DocumentsContract.buildDocumentUriUsingTree(root, cursor.getString(idCol));
         long modified = modifiedCol >= 0 && !cursor.isNull(modifiedCol) ? cursor.getLong(modifiedCol) : 0L;
         boolean protectedFile = fileUri.equals(protectedNew);
-        boolean valid = isStructurallyValidBackup(readDocument(fileUri));
-        candidates.add(new BackupCandidate(fileUri, modified, valid, protectedFile));
+        boolean valid = false, inspectable = true;
+        try { valid = isStructurallyValidBackup(readDocument(fileUri)); }
+        catch (Exception unreadableOrOversized) { inspectable = false; }
+        candidates.add(new BackupCandidate(fileUri, name, modified, valid, protectedFile, inspectable));
       }
     }
     candidates.sort((a, b) -> {
@@ -340,6 +412,8 @@ public class MainActivity extends BridgeActivity {
     int retainedValid = 0;
     Exception deletionFailure = null;
     for (BackupCandidate candidate : candidates) {
+      if (candidate.protectedNew) { if (candidate.valid) retainedValid++; continue; }
+      if (!candidate.inspectable) continue;
       boolean keep = candidate.valid && retainedValid < maximum;
       if (keep) { retainedValid++; continue; }
       try {
@@ -765,13 +839,21 @@ public class MainActivity extends BridgeActivity {
             String message = e.getMessage() == null ? "Could not save or verify the selected file." : e.getMessage();
             if (isBackup) backupResult(completedId, false, message);
             else js("window.aureliaNativeFileSaveResult && window.aureliaNativeFileSaveResult(" + q(completedId) + ",false," + q(message) + ")");
+          } finally {
+            Arrays.fill(expected, (byte) 0);
           }
         });
-      } else if (isBackup) backupResult(completedId, false, "Save cancelled");
-      else js("window.aureliaNativeFileSaveResult && window.aureliaNativeFileSaveResult(" + q(completedId) + ",false,'Save cancelled')");
+      } else {
+        Arrays.fill(expected, (byte) 0);
+        if (isBackup) backupResult(completedId, false, "Save cancelled");
+        else js("window.aureliaNativeFileSaveResult && window.aureliaNativeFileSaveResult(" + q(completedId) + ",false,'Save cancelled')");
+      }
     }
   }
 }
 `;
+if (!java.includes('CapacitorPmsStoragePlugin.lockForLifecycle();')) {
+  throw new Error('Generated MainActivity is missing the native SQLCipher background-lock hook.');
+}
 fs.writeFileSync(javaPath, java);
 console.log('Installed SAF folder picker, persistent folder access, backup writing, individual-file save picker, and manifest permissions.');
