@@ -14,6 +14,7 @@ This is a repository-backed engineering review, not an independent penetration t
 - Missing Android Keystore identity/recovery-phone keys fail closed; the code no longer silently creates replacement keys when encrypted records already exist.
 - Recovery-phone registration persists the submitted E.164 number and prevents changing a verified number outside the cooldown flow.
 - Generated \`MainActivity\` uses platform Build symbols correctly, disables WebView debugging in non-debuggable builds, bounds selected backup documents to 64 MiB, clears temporary byte arrays, and shuts down its backup executor on destruction.
+- PMS state is mirrored to IndexedDB (`appState`) and loaded before normal startup rendering. localStorage is retained for legacy compatibility and fast writes; quota/write failures fall back to IndexedDB rather than silently switching to volatile memory. Startup selects the newer valid snapshot, and the UI warns while an IndexedDB save is pending or if both durable stores fail. This remains browser-origin storage, not SQLCipher encryption.
 - Backup recovery skips corrupt, inaccessible or oversized candidates and tries older recovery points. Retention pruning preserves files it cannot safely inspect.
 - Checkout credentials are not persisted into repository Git configuration in the inspected workflows. Gradle execution has a 25-minute command timeout and plain-console diagnostics.
 - Full-history secret scanning is configured with Gitleaks \`8.30.1\`, full checkout history and \`--log-opts=--all\`. The allowlist is limited to reviewed synthetic test fixtures, environment-example placeholders and specific non-secret source/documentation lines.
@@ -21,7 +22,7 @@ This is a repository-backed engineering review, not an independent penetration t
 
 ## Findings and remaining risks
 
-1. **HIGH — active application data is not protected by the native unlock.** The HTML application still stores PMS state, guest records and identity metadata in browser storage. The native SQLCipher repository and \`PmsUnlockManager\` are not wired into live reads/writes or a pre-WebView startup gate. There is no PIN/biometric gate protecting the active browser store. Do not store real guest identity documents or process real payments until canonical storage migration, app-lock lifecycle and supported-device tests are complete.
+1. **HIGH — active application data is not protected by the native unlock.** The HTML application still uses browser-origin storage (localStorage with an IndexedDB durable fallback) for PMS state, guest records and identity metadata. The native SQLCipher repository and `PmsUnlockManager` are not wired into live reads/writes or a pre-WebView startup gate. There is no PIN/biometric gate protecting the active browser store, and IndexedDB data is not encrypted by SQLCipher. Do not store real guest identity documents or process real payments until canonical encrypted storage migration, app-lock lifecycle and supported-device tests are complete.
 
 2. **HIGH — exported backups remain plaintext.** Backup JSON contains guest contact/identity fields, bookings, payments and photo archives. SHA-256 detects accidental corruption but is not authentication. Add portable authenticated encryption, verify it before import, and avoid plaintext exports for production.
 
