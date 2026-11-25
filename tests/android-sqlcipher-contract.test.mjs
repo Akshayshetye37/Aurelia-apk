@@ -91,7 +91,8 @@ test('Android patch installs the SQLCipher dependency and registers the native p
 });
 
 test('outbox retry scheduling uses integer epoch milliseconds and migrates legacy ISO timestamps', () => {
-  assert.match(repository, /VERSION = 6/);
+  assert.match(repository, /VERSION = 8/);
+  assert.match(repository, /ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT/);
   assert.match(repository, /retry_at_ms INTEGER/);
   assert.match(repository, /retry_at_ms<=\?/);
   assert.match(repository, /legacy_outbox_retry_timestamp_invalid/);
