@@ -235,23 +235,23 @@ const DEBIT_WORDS = ["debited", "you paid", "sent to", "money sent", "payment fa
 export function parseIncomingUpiNotification(input = {}) {
   const text = String(input.text || "").trim().slice(0, 4096);
   if (!text) return { ok: false, reason: "empty_alert" };
-  const normalized = text.replace(/\\s+/g, " ");
+  const normalized = text.replace(/\s+/g, " ");
   const lower = normalized.toLowerCase();
-  const creditPattern = /\\b(?:credited|received|deposit(?:ed)?|payment\\s+received|money\\s+received|upi\\/cr|paid you|transferred\\s+to\\s+(?:your\\s+)?(?:a\\/c|account|wallet)|added\\s+to\\s+(?:your\\s+)?(?:account|wallet))\\b/i;
+  const creditPattern = /\b(?:credited|received|deposit(?:ed)?|payment\s+received|money\s+received|upi\/cr|paid you|transferred\s+to\s+(?:your\s+)?(?:a\/c|account|wallet)|added\s+to\s+(?:your\s+)?(?:account|wallet))\b/i;
   const creditMatch = creditPattern.exec(normalized);
   if (!creditMatch) return { ok: false, reason: "credit_language_missing" };
-  const debitMatch = /\\b(?:debited|withdrawn|deducted|spent|paid\\s+to|sent\\s+to|money\\s+sent)\\b/i.exec(normalized);
+  const debitMatch = /\b(?:debited|withdrawn|deducted|spent|paid\s+to|sent\s+to|money\s+sent)\b/i.exec(normalized);
   if (debitMatch && debitMatch.index < creditMatch.index) return { ok: false, reason: "debit_alert_rejected" };
 
   // Remove balance/limit clauses before amount extraction so an available balance is not mistaken for the credit.
-  const balancePattern = /(?:(?:avl|avail|available|tot|total|ledger|clear|curr|current)(?:\\s+(?:bal|balance|limit))?|bal|balance)\\b[\\s:=-]*(?:(?:rs\\.?|inr|₹)\\s*)?\\b\\d[\\d,]{0,15}(?:\\.\\d{1,2})?/gi;
+  const balancePattern = /(?:(?:avl|avail|available|tot|total|ledger|clear|curr|current)(?:\s+(?:bal|balance|limit))?|bal|balance)\b[\s:=-]*(?:(?:rs\.?|inr|₹)\s*)?\b\d[\d,]{0,15}(?:\.\d{1,2})?/gi;
   const sanitized = normalized.replace(balancePattern, " ").trim();
   const amountPatterns = [
-    /(?:credited\\s*(?:with|by|for)?|received|deposit(?:ed)?)\\s*[:=-]?\\s*(?:(?:rs\\b\\.?|inr\\b)|₹)?[\\s:=-]*([\\d,]+(?:\\.\\d{1,2})?)/i,
-    /(?:(?:rs\\b\\.?|inr\\b)|₹)[\\s:=-]*([\\d,]+(?:\\.\\d{1,2})?)/i,
-    /(?:^|[^\\w.])([\\d,]+(?:\\.\\d{1,2})?)[\\s:=-]*(?:(?:rs\\b\\.?|inr\\b)|₹)/i,
-    /(?:credited|received|deposit|cr)[\\s\\w:]*?([\\d,]+(?:\\.\\d{1,2})?)|([\\d,]+(?:\\.\\d{1,2})?)[\\s\\w:]*?(?:credited|received|deposit|cr)/i,
-    /\\b(\\d{1,6}\\.\\d{2})\\b/
+    /(?:credited\s*(?:with|by|for)?|received|deposit(?:ed)?)\s*[:=-]?\s*(?:(?:rs\b\.?|inr\b)|₹)?[\s:=-]*([\d,]+(?:\.\d{1,2})?)/i,
+    /(?:(?:rs\b\.?|inr\b)|₹)[\s:=-]*([\d,]+(?:\.\d{1,2})?)/i,
+    /(?:^|[^\w.])([\d,]+(?:\.\d{1,2})?)[\s:=-]*(?:(?:rs\b\.?|inr\b)|₹)/i,
+    /(?:credited|received|deposit|cr)[\s\w:]*?([\d,]+(?:\.\d{1,2})?)|([\d,]+(?:\.\d{1,2})?)[\s\w:]*?(?:credited|received|deposit|cr)/i,
+    /\b(\d{1,6}\.\d{2})\b/
   ];
   let amountText = null;
   for (const pattern of amountPatterns) {
@@ -267,16 +267,16 @@ export function parseIncomingUpiNotification(input = {}) {
   catch { return { ok: false, reason: "amount_invalid" }; }
 
   const utrPatterns = [
-    /(?:upi\\s*ref(?:erence)?\\s*(?:no\\.?|num)?|utr(?:\\s*no\\.?)?|rrn(?:\\s*no\\.?)?|txn\\s*(?:id|ref|#)?|transaction\\s*id|ref\\s*no\\.?)[\\s:=-]+([a-zA-Z0-9_-]{6,35})/i,
-    /(?:upi\\/(?:[0-9]+\\/|cr\\/)([a-zA-Z0-9_-]{6,35}))/i,
-    /\\b([0-9]{12})\\b/
+    /(?:upi\s*ref(?:erence)?\s*(?:no\.?|num)?|utr(?:\s*no\.?)?|rrn(?:\s*no\.?)?|txn\s*(?:id|ref|#)?|transaction\s*id|ref\s*no\.?)[\s:=-]+([a-zA-Z0-9_-]{6,35})/i,
+    /(?:upi\/(?:[0-9]+\/|cr\/)([a-zA-Z0-9_-]{6,35}))/i,
+    /\b([0-9]{12})\b/
   ];
   let utr = null;
   for (const pattern of utrPatterns) {
     const match = pattern.exec(normalized);
     if (match?.[1]) { utr = match[1].trim().toUpperCase(); break; }
   }
-  const vpaMatch = /(?:from|by|vpa|upi\\s*id)[\\s:]+(?:[a-zA-Z\\s]+[\\(\\[])?([a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9._-]{2,32})/i.exec(normalized);
+  const vpaMatch = /(?:from|by|vpa|upi\s*id)[\s:]+(?:[a-zA-Z\s]+[\(\[])?([a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9._-]{2,32})/i.exec(normalized);
   const parsedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
   return {
     ok: true,
