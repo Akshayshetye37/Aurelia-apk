@@ -1259,7 +1259,7 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
 .thermal-receipt .tr-footer{margin-top:12px;text-align:center;font-size:10px}
 @media print{
  body.aurelia-thermal-print #sh{position:static!important;display:block!important;inset:auto!important;background:#fff!important}
- body.aurelia-thermal-print #sh .scrim{display:none!important}
+ body.aurelia-thermal-print #sh .scrim,body.aurelia-thermal-print #sh .pan::before{display:none!important}
  body.aurelia-thermal-print #sh .pan{position:static!important;left:auto!important;bottom:auto!important;transform:none!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;padding:0!important;border:0!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;animation:none!important}
  body.aurelia-thermal-print .aurelia-thermal-tools{display:none!important}
  body.aurelia-thermal-print .thermal-receipt{margin:0 auto!important;padding:0 1mm!important;box-shadow:none!important;max-width:none!important;break-inside:avoid}
@@ -1289,13 +1289,13 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
   const seen=new Set();
   const unique=sectionEntries.filter(([key])=>{if(!key||seen.has(key))return false;seen.add(key);return true});
   select.innerHTML=unique.map(([key,label])=>'<option value="'+esc(key)+'">'+esc(label)+'</option>').join('');
-  const sync=()=>{if(!window.S)return;const value=S.tab==='more'&&S.sub?S.sub:S.tab;if(unique.some(x=>x[0]===value))select.value=value};
+  const sync=()=>{if(typeof S==='undefined')return;const value=S.tab==='more'&&S.sub?S.sub:S.tab;if(unique.some(x=>x[0]===value))select.value=value};
   if(!select.dataset.bound){
    select.dataset.bound='1';
    select.addEventListener('change',()=>{
     const value=select.value;
     if(core.some(x=>x[0]===value)){if(typeof go==='function')go(value);return}
-    if(!window.S)return;
+    if(typeof S==='undefined')return;
     S.tab='more';S.sub=value;
     if(typeof closeS==='function')closeS();
     if(typeof render==='function')render();
