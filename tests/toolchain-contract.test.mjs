@@ -35,7 +35,7 @@ test('generated Android build uses SQLCipher-compatible API 36 and AGP 8.9.1', a
 test('all APK workflows provision Android API 36 before compiling SQLCipher', async () => {
   for (const path of ['../.github/workflows/android-apk.yml', '../.github/workflows/build-apk.yml']) {
     const workflow = await readFile(new URL(path, import.meta.url), 'utf8');
-    assert.match(workflow, /platforms;android-36/, path);
-    assert.match(workflow, /build-tools;35\.0\.0/, path);
+    assert.ok(workflow.includes('platforms;android-36'), path);
+    assert.ok(workflow.includes('build-tools;35.0.0'), path);
   }
 });
