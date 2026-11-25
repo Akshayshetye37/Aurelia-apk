@@ -108,28 +108,28 @@ for (const file of agpFiles) {
   let source = fs.readFileSync(file, 'utf8');
   const before = source;
   source = source
-    .replace(/com\\.android\\.tools\\.build:gradle:[0-9.]+/g, 'com.android.tools.build:gradle:8.9.1')
-    .replace(/(id\\s+['"]com\\.android\\.(?:application|library)['"]\\s+version\\s+['"])[0-9.]+(['"])/g, '$18.9.1$1')
-    .replace(/(agp\\s*=\\s*['"])[0-9.]+(['"])/g, '$18.9.1$1');
+    .replace(/com\.android\.tools\.build:gradle:[0-9.]+/g, 'com.android.tools.build:gradle:8.9.1')
+    .replace(/(id\s+['"]com\.android\.(?:application|library)['"]\s+version\s+['"])[0-9.]+(['"])/g, (_match, prefix, suffix) => prefix + '8.9.1' + suffix)
+    .replace(/(agp\s*=\s*['"])[0-9.]+(['"])/g, (_match, prefix, suffix) => prefix + '8.9.1' + suffix);
   if (source !== before) fs.writeFileSync(file, source);
   if (source.includes('com.android.tools.build:gradle:8.9.1') ||
-      /com\\.android\\.(?:application|library)['"]\\s+version\\s+['"]8\\.9\\.1/.test(source) ||
-      /agp\\s*=\\s*['"]8\\.9\\.1/.test(source)) agpPinned = true;
+      /com\.android\.(?:application|library)['"]\s+version\s+['"]8\.9\.1/.test(source) ||
+      /agp\s*=\s*['"]8\.9\.1/.test(source)) agpPinned = true;
 }
 if (!agpPinned) throw new Error('Android Gradle Plugin 8.9.1 could not be pinned for API 36.');
 
 const variablesGradle = path.join(androidDir, 'variables.gradle');
 if (!fs.existsSync(variablesGradle)) throw new Error('Capacitor variables.gradle was not found.');
 let variablesSource = fs.readFileSync(variablesGradle, 'utf8');
-if (!/compileSdkVersion\\s*=\\s*\\d+/.test(variablesSource)) throw new Error('compileSdkVersion setting was not found in variables.gradle.');
-variablesSource = variablesSource.replace(/compileSdkVersion\\s*=\\s*\\d+/, 'compileSdkVersion = 36');
-if (!/compileSdkVersion\\s*=\\s*36/.test(variablesSource)) throw new Error('compileSdkVersion 36 could not be configured.');
+if (!/compileSdkVersion\s*=\s*\d+/.test(variablesSource)) throw new Error('compileSdkVersion setting was not found in variables.gradle.');
+variablesSource = variablesSource.replace(/compileSdkVersion\s*=\s*\d+/, 'compileSdkVersion = 36');
+if (!/compileSdkVersion\s*=\s*36/.test(variablesSource)) throw new Error('compileSdkVersion 36 could not be configured.');
 fs.writeFileSync(variablesGradle, variablesSource);
 
 const wrapperProperties = path.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties');
 if (!fs.existsSync(wrapperProperties)) throw new Error('Gradle wrapper properties were not found.');
 let wrapperSource = fs.readFileSync(wrapperProperties, 'utf8');
-wrapperSource = wrapperSource.replace(/gradle-[0-9.]+-(?:all|bin)\\.zip/, 'gradle-8.11.1-all.zip');
+wrapperSource = wrapperSource.replace(/gradle-[0-9.]+-(?:all|bin)\.zip/, 'gradle-8.11.1-all.zip');
 if (!wrapperSource.includes('gradle-8.11.1-all.zip')) throw new Error('Gradle 8.11.1 wrapper could not be configured.');
 fs.writeFileSync(wrapperProperties, wrapperSource);
 
