@@ -86,6 +86,7 @@ h2{font-size:26px;margin-bottom:12px}h3{font-size:21px}
 .all-sections-modules{display:grid;grid-template-columns:1fr;gap:6px}
 .all-sections-menu button{min-width:0;min-height:44px;padding:9px 11px;border:1px solid var(--ln);border-radius:12px;background:rgba(255,255,255,.035);text-align:left;color:var(--tx)}
 .all-sections-menu button:focus-visible,.all-nav-trigger:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.all-sections-menu button:disabled{opacity:.45;cursor:not-allowed}
 .all-sections-modules button{display:flex;flex-direction:column;gap:1px}
 .all-sections-modules small{color:var(--mu);font-size:11.5px}
 .dock .all-nav-trigger{font-weight:500}
@@ -412,7 +413,7 @@ function nav(){
  const active=S.tab==='more'?primary.length:Math.max(0,primary.findIndex(([key])=>key===S.tab));
  $('#dock').style.setProperty('--i',active);
  const primaryButtons=primary.map(([key,label])=>'<button type="button" class="'+(key===S.tab?'on':'')+'" aria-current="'+(key===S.tab?'page':'false')+'" onclick="goSection(\''+key+'\')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+IC[key]+'"/></svg><span>'+esc(label)+'</span></button>').join('');
- const moduleButtons=TL.filter(item=>!item[3]||on(item[3])).map(([key,label,description])=>'<button type="button" role="menuitem" onclick="goSection(\'more\',\''+key+'\')"><b>'+esc(label)+'</b><small>'+esc(description)+'</small></button>').join('');
+ const moduleButtons=TL.map(([key,label,description,flag])=>{const enabled=!flag||on(flag);return '<button type="button" role="menuitem" '+(enabled?'':'disabled aria-disabled="true"')+' '+(enabled?'onclick="goSection(\'more\',\''+key+'\')"':'')+'><b>'+esc(label)+(enabled?'':' · Disabled')+'</b><small>'+esc(description)+'</small></button>';}).join('');
  const mainMenu=primary.map(([key,label])=>'<button type="button" role="menuitem" onclick="goSection(\''+key+'\')">'+esc(label)+'</button>').join('');
  const modules=moduleButtons||'<div class="lab">No additional sections are enabled.</div>';
  $('#dock').innerHTML=primaryButtons+'<button type="button" class="all-nav-trigger '+(S.tab==='more'?'on':'')+'" aria-haspopup="menu" aria-controls="all-sections-menu" aria-expanded="'+(S.navOpen===true?'true':'false')+'" onclick="S.navOpen=!S.navOpen;render()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+IC.more+'"/></svg><span>All</span></button><div id="all-sections-menu" class="all-sections-menu '+(S.navOpen===true?'open':'')+'" role="menu" aria-label="All application sections"><div class="all-sections-heading">Main workspace</div><div class="all-sections-primary">'+mainMenu+'</div><div class="all-sections-heading">Operations &amp; administration</div><div class="all-sections-modules">'+modules+'</div></div>';
