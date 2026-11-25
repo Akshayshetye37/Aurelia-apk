@@ -15,6 +15,13 @@ if (!manifest.includes('android.permission.INTERNET')) {
 // Use Android Photo Picker and Storage Access Framework; remove broad permissions.
 manifest = stripForbiddenPermissions(manifest);
 manifest = disableManifestBackup(manifest);
+if (!manifest.includes('AureliaUPINotificationListener')) {
+  const observer = '    <service android:name="com.aurelia.pms.AureliaUPINotificationListener" ' +
+    'android:label="Aurelia UPI notification observer" android:exported="false" ' +
+    'android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">' +
+    '<intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>';
+  manifest = manifest.replace('</application>', observer + '\\n</application>');
+}
 fs.writeFileSync(manifestPath, manifest);
 
 
@@ -101,6 +108,7 @@ const proguardRules = [
   '-keep class com.aurelia.pms.PmsDatabaseKeyManager { *; }',
   '-keep class com.aurelia.pms.PmsUnlockManager { *; }',
   '-keep class com.aurelia.pms.AureliaNativeActionsPlugin { *; }',
+  '-keep class com.aurelia.pms.AureliaUPINotificationListener { *; }',
   '-keep class net.zetetic.database.** { *; }',
   ''
 ].join('\n');
@@ -112,7 +120,8 @@ const nativeTemplates = [
   'AureliaNativeActionsPlugin.java',
   'LocalPmsRepository.java',
   'CapacitorPmsStoragePlugin.java',
-  'StorageSerializationException.java'
+  'StorageSerializationException.java',
+  'AureliaUPINotificationListener.java'
 ];
 for (const templateName of nativeTemplates) {
   const source = path.join(androidDir, 'templates', templateName);
@@ -705,8 +714,24 @@ public class MainActivity extends BridgeActivity {
           String url = obj.optString("url", "");
           Uri target = Uri.parse(url);
           String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(java.util.Locale.ROOT);
-          if (!scheme.matches("https|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
+          if ("upi".equals(scheme)) {
+            String pa = target.getQueryParameter("pa"), amount = target.getQueryParameter("am"), currency = target.getQueryParameter("cu");
+            if (!"pay".equalsIgnoreCase(target.getHost()) || pa == null || !pa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}") ||
+                amount == null || !amount.matches("[0-9]{1,9}\\\\.[0-9]{2}") || !"INR".equals(currency) || url.length() > 2048)
+              throw new SecurityException("Invalid Aurelia UPI payment intent");
+          } else if (!scheme.matches("https|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
           runOnUiThread(() -> { try { Intent intent = new Intent(Intent.ACTION_VIEW, target); startActivity(intent); } catch (Exception e) { js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open link") + ")"); } });
+        } else if ("openNotificationAccessSettings".equals(type)) {
+          runOnUiThread(() -> {
+            try {
+              Intent intent = new Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+              intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              startActivity(intent);
+              js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",true," + q("Notification access settings opened") + ")");
+            } catch (Exception e) {
+              js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open notification access settings") + ")");
+            }
+          });
         } else if ("shareText".equals(type)) {
           String title = obj.optString("title", "Share");
           String text = obj.optString("text", "");
