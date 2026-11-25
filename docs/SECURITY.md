@@ -1,69 +1,54 @@
 # Security and privacy review
 
-This document records a preliminary static review of Aurelia PMS source. It is not a substitute for an independent security audit, penetration test, or release qualification.
+**Review date:** 26 November 2026  
+**Reviewed branch:** \`security/native-lock-lifecycle-hardening\`  
+**Code commit verified by CI:** \`e20937347d81cd05e7e77cbb43f3775aed59606e\`
 
-## Current application identity and integrity
+This is a repository-backed engineering review, not an independent penetration test or production security certification. The debug APK build and automated checks are evidence of build/test integrity only; they do not prove device security or production readiness.
 
-- The maintained application entry point is `index.html`.
-- The HTML document is complete and ends with closing `</body>` and `</html>` tags. The earlier truncation warning is obsolete.
-- The maintained payment policy on `main` exposes **Aurelia UPI only**. Other provider integrations from historical branches are not part of the enabled payment collection path.
-- Android native implementation is generated from Capacitor and the checked-in `android/templates`; the template directory must be preserved during generation.
+## Implemented and verified
 
-## Implemented source-level controls
+- Capacitor packages are pinned to exact \`7.6.10\`; Sharp is pinned to exact \`0.35.5\`; Node is constrained to \`>=22 <23\`.
+- The generated Android project uses Android Gradle Plugin \`8.9.1\`, Gradle wrapper \`8.11.1\`, and \`compileSdkVersion 36\` to satisfy SQLCipher Android \`4.20.0\`'s \`minCompileSdk 36\`. \`targetSdkVersion\` remains 35 pending separate target-SDK qualification.
+- The SQLCipher repository now uses SQLCipher-compatible cursor APIs for scalar queries. Outbox \`retryAt\` values are converted from epoch milliseconds to ISO-8601 at the JavaScript boundary.
+- Missing Android Keystore identity/recovery-phone keys fail closed; the code no longer silently creates replacement keys when encrypted records already exist.
+- Recovery-phone registration persists the submitted E.164 number and prevents changing a verified number outside the cooldown flow.
+- Generated \`MainActivity\` uses platform Build symbols correctly, disables WebView debugging in non-debuggable builds, bounds selected backup documents to 64 MiB, clears temporary byte arrays, and shuts down its backup executor on destruction.
+- Backup recovery skips corrupt, inaccessible or oversized candidates and tries older recovery points. Retention pruning preserves files it cannot safely inspect.
+- Checkout credentials are not persisted into repository Git configuration in the inspected workflows. Gradle execution has a 25-minute command timeout and plain-console diagnostics.
+- Full-history secret scanning is configured with Gitleaks \`8.30.1\`, full checkout history and \`--log-opts=--all\`. The allowlist is limited to reviewed synthetic test fixtures, environment-example placeholders and specific non-secret source/documentation lines.
+- XSS regression tests record the current inventory: at most 43 \`.innerHTML =\` assignments, 7 \`insertAdjacentHTML\` calls and 2 \`document.write\` calls; they also prohibit \`eval\`, \`new Function\`, string-based timers and \`javascript:\` URLs. This is a regression guard, not full XSS remediation.
 
-- The Android native patch strips camera and legacy shared-storage permission declarations and explicitly sets android:allowBackup to false.
-- Generated Groovy release builds are configured for R8 minification, resource shrinking, optimized default ProGuard rules and debuggable=false. JavaScript bridge entry points are retained by explicit ProGuard rules.
-- WebView debugging is disabled in non-debuggable builds.
-- Node contract tests cover permission filtering, backup policy, release hardening, idempotency and fail-closed behaviour.
+## Findings and remaining risks
 
-These are source-level changes only. No APK build or physical-device verification is claimed for the current commit. R8 does not minify or obfuscate index.html JavaScript.
+1. **HIGH — active application data is not protected by the native unlock.** The HTML application still stores PMS state, guest records and identity metadata in browser storage. The native SQLCipher repository and \`PmsUnlockManager\` are not wired into live reads/writes or a pre-WebView startup gate. There is no PIN/biometric gate protecting the active browser store. Do not store real guest identity documents or process real payments until canonical storage migration, app-lock lifecycle and supported-device tests are complete.
 
-## Security audit — 24 November 2026
+2. **HIGH — exported backups remain plaintext.** Backup JSON contains guest contact/identity fields, bookings, payments and photo archives. SHA-256 detects accidental corruption but is not authentication. Add portable authenticated encryption, verify it before import, and avoid plaintext exports for production.
 
-This source-level audit was performed against `main`. Findings are ranked by impact and exploitability. The Android source has not been compiled or penetration-tested on a device.
+3. **MEDIUM — QR image service receives payment metadata.** The QR URL sends the UPI intent, including payee and amount, to \`api.qrserver.com\`. Prefer local QR generation before production.
 
-### Findings
+4. **MEDIUM — booking API token remains client-configured.** \`bookingApiKey\` is read from browser settings and sent as a Bearer token. HTTPS URL validation and removal of government ID fields from booking payloads reduce exposure, but a browser-delivered app cannot keep a privileged shared secret confidential. Move privileged access behind an authenticated backend with short-lived, scoped tokens.
 
-1. **HIGH — WebView native bridge exposed to every frame.** The previous `addJavascriptInterface` bridge could read/restore guest photos and backups, write files, launch intents and print content. Android confirms the interface is visible to all frames and the caller frame's origin cannot be reliably identified. Replaced it with a registered Capacitor `AureliaNativeActions` plugin, removed the JavaScript interface, added a 32 MiB message limit and operation allowlist, and blocked iframe/object content through CSP. The main WebView rejects mixed content and file-origin universal access and enables Safe Browsing where supported. The print-only WebView disables JavaScript, file/content access and network loads.
-2. **HIGH — active application data is not protected by the native unlock.** The HTML application still stores PMS state, guest records and ID metadata in browser storage. `CapacitorPmsStoragePlugin`/SQLCipher and `PmsUnlockManager` are not wired into the live app's reads/writes or startup flow. There is no app-start PIN/biometric gate or background auto-lock for the active browser store. The new PIN/biometric/recovery envelopes therefore do not currently protect the data the app is using. This remains a production blocker; do not store real guest identity documents or process real payments until the storage cutover, app lock lifecycle and device tests are complete.
-3. **REMEDIATED IN SOURCE — native photo archive was plaintext at rest.** New full-resolution photo archive writes now use AES-256-GCM with an Android Keystore key, per-photo AAD, atomic file writes, bounded PNG/JPEG/WebP validation and lazy migration of legacy plaintext photos on read. The small thumbnail copy is still stored in the active browser state. If encrypted photos exist but the Keystore key is missing, the code fails closed rather than creating a replacement. Backup exports still contain decrypted photo data by design and remain plaintext files in the user-selected backup location; protect exported backups accordingly. Device-level verification remains open.
-4. **HIGH — exported backups are plaintext and their digest is not authentication.** Backup JSON contains guest contact/identity fields, bookings, payments and photo archives and is written to a user-selected folder without encryption. The SHA-256 digest detects accidental corruption but is unkeyed and can be recomputed after malicious modification. Add portable authenticated encryption (for example, a recovery-key/passphrase-derived AEAD envelope), verify it before import, and avoid plaintext exports for production.
-5. **MEDIUM — QR image service receives payment metadata.** The QR URL sends the UPI intent, including payee and amount, to `api.qrserver.com`. Guest names have been removed from the transaction note, but payee/amount metadata still leaves the device. Prefer local QR generation before production.
-6. **MEDIUM — client-configured booking API token is stored in browser state.** `bookingApiKey` is read from settings and sent as a Bearer token. The configured endpoint is now restricted to HTTPS and rejects URL credentials, query strings and fragments. Booking API payloads no longer include government ID numbers, ID types or ID photos; the preview escapes booking values. A browser-delivered app still cannot keep a privileged shared secret confidential. Move privileged access behind an authenticated backend and use short-lived, narrowly scoped tokens.
-7. **HIGH — vulnerable dependency floors were declared.** The manifest's `sharp` range (`^0.34.3`) was below the fixed release for GHSA-wq5f-xc86-pv6w (fixed in 0.35.5). The Capacitor 7 range started at 7.4.3, below the 7.6.9 fix for CVE-2026-103922. Updated all Capacitor packages to the exact `7.6.10` patch and sharp to exact `0.35.5`. There is still no committed `package-lock.json`, so exact resolved transitive versions are not reproducible and a full lockfile-based `npm audit` remains outstanding. Dependabot weekly npm and GitHub Actions updates are enabled.
-8. **MEDIUM — dynamic HTML and inline event handlers remain an XSS attack surface.** Added JSON-string encoding for dynamic inline-handler arguments in guest contact, reservation, room and menu-category flows; escaped room, guest, menu, logo and booking preview values; and escaped confirmation dialog text while constraining callback names/arguments. The codebase still contains many `innerHTML` renderers and permits inline scripts in CSP; this is a partial mitigation, not a complete XSS audit. Continue migrating renderers to DOM APIs and test backup-imported strings.
-9. **NOT FOUND IN REVIEWED QUERIES — SQL injection and committed static secrets.** Reviewed SQL queries use bound parameters for dynamic values; schema `execSQL` statements are static. No common hard-coded key/token patterns were found in the inspected app and native source. This is not a complete repository-history secret scan.
+5. **MEDIUM — dynamic HTML remains an XSS attack surface.** Existing escaping and JSON argument encoding are partial mitigations. The current sink inventory is guarded against growth, but the app still has dozens of HTML renderers and inline scripts. Continue migrating renderers to DOM APIs and test backup-imported strings.
 
-## Verification performed
+6. **HIGH — dependency graph is not fully reproducible.** \`npm audit --audit-level=high\` passed with zero vulnerabilities for the resolved graph, but there is no committed \`package-lock.json\`. Build and audit dependency resolution can therefore change over time. Generate, review and commit a lockfile, then use \`npm ci\`.
 
-- Executed the source contract test cases through a repository-backed JavaScript harness: **27 passed, 0 failed**.
-- Executed manifest/release-helper behavior checks: **7 passed, 0 failed**.
-- Parsed the Android patch script and manifest helper JavaScript successfully.
-- Parsed all **18** inline JavaScript blocks in `index.html` successfully.
-- Exercized the HTTPS booking-URL validator and hostile inline-handler argument round-trip cases.
-- Confirmed the current `main` head has no reported combined-status checks. The GitHub connector returned no workflow-run records for this commit.
+7. **INCOMPLETE — Kotlin recovery grant prototype is not integrated.** \`RecoveryGrantClient.kt\` and \`security/RecoveryGate.kt\` reference \`RecoveryGrantVerifier\`, \`RecoveryGrantReplayStore\`, \`RecoveryDeviceIdentity\` and \`RecoveryGate.arm\` functionality that is not present in the tracked source. These Kotlin files are not copied into the generated Android project and were not compiled by the APK workflow. \`RecoveryPhoneStore.kt\` was source-corrected and has Node source-contract tests, but is likewise not part of the built APK. Do not treat phone OTP/recovery-grant integration as implemented.
 
-**Not verified:** the actual `npm test` command, lockfile-based `npm audit`, Java/Gradle compilation, merged Android manifest, APK build, physical-device biometric/Keystore behavior, backup encryption, or a full Git-history secret scan. No APK was built during this audit.
+8. **UNVERIFIED — main-branch protection.** The connected GitHub API returned HTTP 403 for the branch-protection endpoint and exposes no branch-protection mutation action. No protection rule was changed or verified in this pass. Keep PR #74 unmerged until repository administrators verify required checks and protection settings.
 
-## Address before production
+## Verification evidence
 
-1. **UPI QR generation uses a third-party endpoint.** The QR image URL includes an encoded UPI payment URI. That URI can contain the payee, amount, guest-related text, and transaction reference. Prefer generating QR images locally or in a trusted backend, and avoid sending guest/payment details to third-party URL services.
-2. **Booking API credentials are handled in client-side settings.** A browser-delivered HTML app cannot keep a shared API secret confidential. Do not store production bearer tokens in local storage or expose privileged API credentials in frontend code. Use a backend proxy with appropriate authentication and authorization.
-3. **Guest information is sensitive.** Guest names, contact details, ID-document data, occupancy details, invoices, and balances need access controls, retention rules, backups, and secure transport/storage appropriate to the deployment.
-4. **External dependencies require network access.** The app references CDN-hosted libraries and remote services. Pin and review dependencies, consider self-hosting critical libraries, and establish a dependency-update process.
-5. **SQLCipher foundation exists but is not yet canonical.** Generated Android projects use SQLCipher 4.20.0. The repository requires a successful user unlock before obtaining its one random 256-bit DEK. An 8–12 digit PIN and high-entropy recovery key independently wrap that same DEK with PBKDF2-HMAC-SHA256 (600,000 iterations) and AES-256-GCM; optional strong-biometric unlock uses an authentication-per-use Android Keystore key. PIN/recovery entry and one-time recovery-key display use native dialogs, not WebView arguments. Failed PIN/recovery attempts receive a persistent exponential delay. Missing/corrupt required PIN or recovery envelopes, or a database without configured unlock envelopes, fails closed; a missing/invalidated optional biometric key disables only biometric unlock, leaving PIN and recovery available. OTP/SMS cannot derive, replace, wrap or regenerate the DEK. Initialization verifies `cipher_status`, `integrity_check` and `cipher_integrity_check`. Native SQLCipher lifecycle hardening now requests a serialized repository close and DEK zeroization when the Android Activity enters stopped/background state; plugin destruction also queues close and zeroization. Explicit lock clears the DEK in a finally block even if repository close fails. These remain source-level controls pending Java/Gradle and device verification; they do not lock browser-backed PMS data. The native plugin is not yet connected to live business reads/writes; current HTML state still relies on browser storage. Transactional migration, rollback, restore, a true pre-WebView authentication gate, supported-device testing and a deliberate authority cutover remain release blockers. Do not copy the unencrypted SQLite candidate from historical branches.
-6. **Android native integration requires compilation and device qualification.** Verify the generated merged manifest, SQLCipher AAR, AndroidX SQLite and Biometric dependencies, native plugin registration, R8 output, PIN/recovery wrong-secret and lockout cases, biometric enrollment/invalidation, cipher-status/HMAC checks, app process lifecycle and data recovery on supported physical devices. This session intentionally did not run an APK build.
-7. **Defaults and sample data need review.** Confirm property name, phone, UPI ID, currency, room rates, restaurant menu, and all sample records before operational use.
-8. **Dependency audit remains open.** The 24 November 2026 main-branch APK workflow install reported one high-severity npm advisory. Resolve it with a reviewed dependency update and a fresh audit; do not use an unreviewed forced upgrade.
+All results below are for code commit \`e20937347d81cd05e7e77cbb43f3775aed59606e\`; subsequent changes to this document are documentation-only.
 
-## Validation status
-
-- The source HTML structure is complete.
-- HTML and inline JavaScript syntax checks do not establish browser runtime behavior, Android WebView integration, payment correctness, authorization, or backend connectivity.
-- The Android source patch has not been built or exercised on a physical device at the exact current `main` commit. Do not infer build success from helper tests.
-- Six direct checks of the manifest/release helper behaviour passed: forbidden-permission filtering, preservation of INTERNET, backup disabling, R8/resource-shrink configuration, release debuggability and idempotent/fail-closed behaviour. The complete `npm test` suite and SQLCipher source-contract tests were not run in a Node checkout. None of these checks validates Java compilation, Gradle dependency resolution, R8 output, native runtime behaviour or storage security.
-- CI evidence applies only to the exact SHA tested. Failed or in-progress runs must not be represented as passing evidence.
+- **Repository tests:** 58 passed, 0 failed.
+- **Dependency audit:** \`npm audit --audit-level=high\` — 0 vulnerabilities.
+- **Secret scan:** Gitleaks 8.30.1 scanned the latest commit and all fetched reachable refs/history with \`--log-opts=--all\`; no leaks found after the narrowly scoped fixture/example allowlists.
+- **Android build:** \`assembleDebug\` — \`BUILD SUCCESSFUL\`; build step completed in 1m 43s. The debug APK artifact is 27,711,787 bytes. Artifact SHA-256 digest: \`4fc72465307f9c0ebc656edd5efc94a032beec6f96c28f6c34d9f3b90a7af76f\`.
+- **Workflow run:** [GitHub Actions run 45701175559](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/45701175559). The pull-request build, Node contract tests, dependency audit and full-history secret scan also passed for the same code commit.
+- **JavaScript syntax:** all 18 inline JavaScript blocks and the inspected Node scripts parsed successfully.
+- **Not performed:** physical-device testing, biometric/Keystore runtime tests, release signing, backup encryption, live SQLCipher data cutover, migration/rollback testing or payment end-to-end tests.
 
 ## Release gate
 
-Do not process real guest data or payments until client-side secrets have been removed, third-party data flows have been reviewed, dependency advisories have been resolved, Android permission and native bridge boundaries have been verified, and browser plus Android end-to-end tests have passed.
+Do not process real guest data or payments until canonical encrypted storage and a true pre-WebView unlock gate are implemented, backup exports are authenticated/encrypted, the booking credential is moved server-side, QR generation no longer discloses payment metadata to an untrusted third party, Kotlin recovery prototypes are either completed and integrated or removed, and supported-device end-to-end tests pass. A debug APK build is not release qualification.
