@@ -8,13 +8,16 @@ export const AURELIA_UPI_POLICY = Object.freeze({
   enabledRails: Object.freeze(["AURELIA_UPI"]),
   externalPaymentGateways: false,
   automaticSettlement: false,
-  notificationEvidenceCanSettle: false
+  notificationEvidenceCanSettle: false,
+  paymentWindowMs: 5 * 60 * 1000,
+  verificationWindowMs: 30 * 1000
 });
 
 export const SESSION_STATUS = Object.freeze({
   CREATED: "CREATED",
   QUEUED: "QUEUED",
   ACTIVE: "ACTIVE",
+  PROCESSING: "PROCESSING",
   OBSERVED: "OBSERVED",
   REVIEW_REQUIRED: "REVIEW_REQUIRED",
   CONFIRMED: "CONFIRMED",
@@ -26,9 +29,10 @@ export const SESSION_STATUS = Object.freeze({
 const TRANSITIONS = Object.freeze({
   CREATED: new Set(["QUEUED", "ACTIVE", "CANCELLED"]),
   QUEUED: new Set(["ACTIVE", "EXPIRED", "CANCELLED"]),
-  ACTIVE: new Set(["OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED"]),
+  ACTIVE: new Set(["PROCESSING", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED"]),
+  PROCESSING: new Set(["REVIEW_REQUIRED", "EXPIRED", "CANCELLED"]),
   OBSERVED: new Set(["REVIEW_REQUIRED", "CONFIRMED", "REJECTED"]),
-  REVIEW_REQUIRED: new Set(["CONFIRMED", "REJECTED"]),
+  REVIEW_REQUIRED: new Set(["CONFIRMED", "REJECTED", "CANCELLED"]),
   EXPIRED: new Set(["REVIEW_REQUIRED"]),
   CANCELLED: new Set(["REVIEW_REQUIRED"]),
   CONFIRMED: new Set(),
@@ -126,6 +130,8 @@ export function createPaymentSession(input = {}, nowMs = Date.now()) {
     status: SESSION_STATUS.CREATED,
     createdAt: new Date(nowMs).toISOString(),
     expiresAt: null,
+    verificationExpiresAt: null,
+    customerMarkedPaidAt: null,
     observedEvidenceId: null,
     confirmedAt: null,
     confirmedBy: null,
@@ -168,13 +174,23 @@ export function transitionSession(session, nextStatus, patch = {}, nowMs = Date.
   };
 }
 
+export function markCustomerPaid(session, nowMs = Date.now(), verificationWindowMs = DEFAULT_PROCESSING_GRACE_MS) {
+  if (!session || session.status !== SESSION_STATUS.ACTIVE) {
+    throw new TypeError("Only the active Aurelia UPI request can be marked as customer-reported paid.");
+  }
+  return transitionSession(session, SESSION_STATUS.PROCESSING, {
+    customerMarkedPaidAt: new Date(nowMs).toISOString(),
+    verificationExpiresAt: new Date(nowMs + verificationWindowMs).toISOString()
+  }, nowMs);
+}
+
 export function enqueueSession(sessions, session, {
   nowMs = Date.now(), activeWindowMs = DEFAULT_ACTIVE_WINDOW_MS
 } = {}) {
   const rows = (Array.isArray(sessions) ? sessions : []).map(row => ({ ...row }));
   const hasOwner = rows.some(row =>
     row.vpa.toLowerCase() === session.vpa.toLowerCase() &&
-    ["ACTIVE", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status)
+    ["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status)
   );
   if (hasOwner) {
     return rows.concat(transitionSession(session, "QUEUED", {
@@ -192,7 +208,7 @@ export function promoteNextSession(sessions, vpa, {
 } = {}) {
   const rows = (Array.isArray(sessions) ? sessions : []).map(row => ({ ...row }));
   const key = String(vpa || "").toLowerCase();
-  if (rows.some(row => row.vpa.toLowerCase() === key && ["ACTIVE", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status))) {
+  if (rows.some(row => row.vpa.toLowerCase() === key && ["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status))) {
     return { sessions: rows, promoted: null };
   }
   const next = rows
@@ -265,10 +281,11 @@ export function matchEvidenceToSessions(evidence, sessions, {
     if (session.currency !== "INR" || session.rail !== "AURELIA_UPI" ||
         session.amountPaise !== evidence.amountPaise) return false;
     const createdAt = Date.parse(session.createdAt);
-    const expiresAt = session.expiresAt ? Date.parse(session.expiresAt) : createdAt + matchWindowMs;
+    const expiryValues = [session.expiresAt, session.verificationExpiresAt].filter(Boolean).map(Date.parse).filter(Number.isFinite);
+    const expiresAt = expiryValues.length ? Math.max(...expiryValues) : createdAt + matchWindowMs;
     if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt)) return false;
     if (receivedAt < createdAt - 60_000 || receivedAt > expiresAt + processingGraceMs) return false;
-    return ["ACTIVE", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED"].includes(session.status);
+    return ["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED"].includes(session.status);
   });
   if (candidates.length > 1) {
     return { decision: "AMBIGUOUS", reason: "multiple_exact_amount_time_candidates", candidates };
