@@ -64,6 +64,9 @@ test('Sovereign shell uses the supplied mobile navigation and a local-only asset
   assert.match(html, /INR · AURELIA UPI ONLY/);
   assert.match(html, /aurelia-theme-switch/);
   assert.match(html, /aurelia-profile-button/);
+  assert.match(html, /aurelia-quick-action primary/);
+  assert.match(html, /onclick="go\\('upi'\\)"/);
+  assert.match(html, /Aurelia UPI<\\/b>/);
   assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['more','Vault'\],\['upi','Aurelia UPI'\]\]/);
   assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net/);
 });
