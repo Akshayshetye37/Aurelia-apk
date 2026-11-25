@@ -6,7 +6,7 @@ Aurelia UPI is the only payment rail exposed by the PMS payment UI. The implemen
 
 The supplied sovereign PMS HTML is used as the visual reference, while the existing Aurelia PMS business logic and data model remain the source of truth. The primary navigation is now **Overview → Chambers → Stays → Dining → Vault → Aurelia UPI**. The Vault opens the existing settings, guest, housekeeping, inventory, report and backup sections as a tile-based workspace rather than a dropdown.
 
-The responsive header carries the property identity, fixed INR currency, language indicator, theme toggle, profile/settings shortcut and local-node status. The overview exposes a direct **Aurelia UPI** collection shortcut. The shell styling is packaged in `assets/aurelia-sovereign-theme.css`; it does not load Tailwind, Google Fonts, icon fonts or other presentation assets from a CDN. The theme switch persists locally.
+The responsive header carries the property identity, fixed INR currency, language indicator, theme toggle, profile/settings shortcut and local-node status. The overview exposes a direct **Aurelia UPI** collection shortcut. The shell styling is packaged in `assets/aurelia-sovereign-theme.css`; it does not load Tailwind, Google Fonts or icon fonts from a CDN. Existing invoice and spreadsheet export utilities remain version-pinned and are loaded only when those export actions are requested. The theme switch persists locally.
 
 ## Payment policy
 
