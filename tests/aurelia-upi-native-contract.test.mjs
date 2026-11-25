@@ -31,6 +31,7 @@ test('native plugin exposes evidence review and the notification settings bridge
   const patcher = await read('scripts/patch-android.js');
   assert.match(plugin, /listUpiEvidence/);
   assert.match(plugin, /updateUpiEvidence/);
+  assert.match(plugin, /getUpiObserverStatus/);
   assert.match(plugin, /manualVerified/);
   assert.match(actions, /openNotificationAccessSettings/);
   assert.match(patcher, /AureliaUPINotificationListener/);
@@ -58,5 +59,6 @@ test('Aurelia UPI domain includes customer-claim and manual refund transitions',
   assert.match(domain, /completeRefundRecord/);
   assert.match(app, /markCustomerReportedPaid/);
   assert.match(app, /completeRefund/);
+  assert.match(app, /notificationAccessEnabled/);
   assert.match(app, /manualVerified/);
 });
