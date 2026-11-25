@@ -116,6 +116,37 @@ test('FIFO queue remains blocked while a customer payment claim is being verifie
   assert.equal(promoteNextSession(queued, 'aurelia@okaxis', { nowMs: now + 40000 }).promoted, null);
 });
 
+test('bank alert parser extracts sender VPA and ignores available-balance amounts', () => {
+  const parsed = parseIncomingUpiNotification({
+    text: 'UPI payment received Rs 250.00 from guest@okaxis. Available balance Rs 12,500.00. UTR: 123456789012',
+    receivedAt: base.createdAt
+  });
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.evidence.amountPaise, 25000);
+  assert.equal(parsed.evidence.senderVpa, 'guest@okaxis');
+  assert.equal(parsed.evidence.utr, '123456789012');
+});
+
+test('credit alerts with debit language before the credit are rejected', () => {
+  const parsed = parseIncomingUpiNotification({
+    text: 'UPI debit Rs 200.00 sent to shop, then credited Rs 50.00. UTR: 123456789012',
+    receivedAt: base.createdAt
+  });
+  assert.equal(parsed.ok, false);
+});
+
+test('notification evidence can match a session in the 30-second processing window', () => {
+  const now = Date.parse(base.createdAt);
+  const active = enqueueSession([], createPaymentSession({ ...base, id: 'processing-match' }, now), { nowMs: now })[0];
+  const processing = markCustomerPaid(active, now + 1000, 30000);
+  const match = matchEvidenceToSessions({
+    amountPaise: processing.amountPaise,
+    receivedAt: new Date(now + 5000).toISOString()
+  }, [processing], { nowMs: now + 5000 });
+  assert.equal(match.decision, 'REVIEW_REQUIRED');
+  assert.equal(match.suggestedSessionId, processing.id);
+});
+
 test('incoming credit parser rejects debits, failed transactions and OTPs', () => {
   const incoming = parseIncomingUpiNotification({
     source: 'MANUAL_IMPORT',
