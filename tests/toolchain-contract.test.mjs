@@ -39,3 +39,12 @@ test('all APK workflows provision Android API 36 before compiling SQLCipher', as
     assert.ok(workflow.includes('build-tools;35.0.0'), path);
   }
 });
+
+
+test('generated MainActivity compiles without relying on disabled BuildConfig generation', async () => {
+  const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /import android\.content\.pm\.ApplicationInfo;/);
+  assert.match(patch, /import android\.os\.Build;/);
+  assert.match(patch, /ApplicationInfo\.FLAG_DEBUGGABLE/);
+  assert.doesNotMatch(patch, /BuildConfig\.DEBUG/);
+});
