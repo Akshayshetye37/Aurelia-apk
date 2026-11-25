@@ -99,10 +99,20 @@ test('web build copies the stay-extension rules and the app loads them', async (
 
 
 test('all inline application scripts parse after the persistence and stay-extension changes', () => {
-  const blocks = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
-    .filter(match => !match[1].includes('src='));
+  const blocks = [];
+  let cursor = 0;
+  while (true) {
+    const start = html.indexOf('<script', cursor);
+    if (start < 0) break;
+    const openEnd = html.indexOf('>', start);
+    const close = html.indexOf('</script>', openEnd);
+    assert.ok(openEnd > start && close > openEnd, 'script element is closed');
+    const attributes = html.slice(start + 7, openEnd);
+    if (!attributes.includes('src=')) blocks.push(html.slice(openEnd + 1, close));
+    cursor = close + 9;
+  }
   assert.ok(blocks.length >= 18, 'expected inline application scripts');
-  blocks.forEach((match, index) => {
-    new vm.Script(match[2], { filename: 'index.html:inline-script-' + index });
+  blocks.forEach((source, index) => {
+    new vm.Script(source, { filename: 'index.html:inline-script-' + index });
   });
 });
