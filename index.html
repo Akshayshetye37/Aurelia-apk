@@ -3467,6 +3467,7 @@ window.printGuestPreview=function(){
  'use strict';
  if(!Array.isArray(TABS)||!IC||!V)return;
  IC.upi='M3 5h18v14H3zM3 10h18M7 15h3M15 15h2';
+ if(S.set&&S.set.upi==='hariom'+'@'+'upi'){S.set.upi='';if(typeof persist==='function')persist();}
  if(!TABS.some(x=>x[0]==='upi')){
   const index=TABS.findIndex(x=>x[0]==='more');
   TABS.splice(index<0?TABS.length:index,0,['upi','Aurelia UPI']);
