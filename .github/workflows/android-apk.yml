@@ -1,28 +1,8 @@
 name: Build Aurelia PMS APK
 # P0 backup recovery branch build
 
+# APK builds are manual-only; dispatch requires explicit owner approval.
 on:
-  push:
-    branches:
-      - safe-fixes/backup-accounting-android
-      - fix/p0-backup-recovery
-    paths:
-      - 'index.html'
-      - 'package.json'
-      - 'capacitor.config.json'
-      - 'scripts/**'
-      - 'assets/**'
-      - '.github/workflows/android-apk.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'index.html'
-      - 'package.json'
-      - 'capacitor.config.json'
-      - 'scripts/**'
-      - 'assets/**'
-      - '.github/workflows/android-apk.yml'
   workflow_dispatch:
 
 permissions:
@@ -39,7 +19,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Set up Java
         uses: actions/setup-java@v4
