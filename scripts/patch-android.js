@@ -26,22 +26,22 @@ if (!fs.existsSync(rootGradlePath) || !fs.existsSync(wrapperPropertiesPath)) {
   throw new Error('Generated Android root Gradle configuration is incomplete.');
 }
 let rootGradle = fs.readFileSync(rootGradlePath, 'utf8');
-const agpVersions = [...rootGradle.matchAll(/com\\.android\\.tools\\.build:gradle:([0-9.]+)/g)];
+const agpVersions = [...rootGradle.matchAll(/com\.android\.tools\.build:gradle:([0-9.]+)/g)];
 if (agpVersions.length !== 1 || !['8.7.2', '8.9.1'].includes(agpVersions[0][1])) {
   throw new Error('Unexpected Android Gradle Plugin version; review the generated Capacitor template before upgrading.');
 }
-rootGradle = rootGradle.replace(/com\\.android\\.tools\\.build:gradle:8\\.7\\.2/g, 'com.android.tools.build:gradle:8.9.1');
-const compileSdkVersions = [...rootGradle.matchAll(/\\bcompileSdkVersion\\s*=\\s*(\\d+)/g)];
+rootGradle = rootGradle.replace(/com\.android\.tools\.build:gradle:8\.7\.2/g, 'com.android.tools.build:gradle:8.9.1');
+const compileSdkVersions = [...rootGradle.matchAll(/\bcompileSdkVersion\s*=\s*(\d+)/g)];
 if (compileSdkVersions.length !== 1 || !['35', '36'].includes(compileSdkVersions[0][1])) {
   throw new Error('Unexpected generated compileSdkVersion; refusing an unreviewed Android SDK change.');
 }
-rootGradle = rootGradle.replace(/(\\bcompileSdkVersion\\s*=\\s*)35\\b/g, '$136');
-if (!rootGradle.includes('com.android.tools.build:gradle:8.9.1') || !/\\bcompileSdkVersion\\s*=\\s*36\\b/.test(rootGradle)) {
+rootGradle = rootGradle.replace(/(\bcompileSdkVersion\s*=\s*)35\b/g, (_match, prefix) => prefix + '36');
+if (!rootGradle.includes('com.android.tools.build:gradle:8.9.1') || !/\bcompileSdkVersion\s*=\s*36\b/.test(rootGradle)) {
   throw new Error('Could not configure Android Gradle Plugin 8.9.1 with compileSdk 36.');
 }
 fs.writeFileSync(rootGradlePath, rootGradle);
 const wrapperProperties = fs.readFileSync(wrapperPropertiesPath, 'utf8');
-if (!/gradle-8\\.11\\.1-(?:all|bin)\\.zip/.test(wrapperProperties)) {
+if (!/gradle-8\.11\.1-(?:all|bin)\.zip/.test(wrapperProperties)) {
   throw new Error('Generated Gradle wrapper must be 8.11.1 for Android Gradle Plugin 8.9.1.');
 }
 
