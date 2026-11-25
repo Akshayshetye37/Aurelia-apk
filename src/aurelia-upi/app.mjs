@@ -204,7 +204,7 @@ function renderOverview() {
 
 function renderActiveSession(session) {
   const expires = dateMs(session.expiresAt);
-  const remaining = expires ? Math.max(0, Math.ceil((expires - Date.now()) / 1000)) : 0;
+  const remaining = session.status === SESSION_STATUS.ACTIVE && expires ? Math.max(0, Math.ceil((expires - Date.now()) / 1000)) : 0;
   return '<div class="au-active"><div class="au-active-top"><div><span class="au-kicker">REQUEST ' + esc(session.reference) + '</span><h4>' + esc(formatPaise(session.amountPaise)) + '</h4><p>' + esc(session.guestName || "Guest payment") + '</p></div>' +
     badge(session.status) + '</div>' +
     '<div class="au-active-bottom"><div><small>Receiving UPI ID</small><strong>' + esc(session.vpa) + '</strong></div>' +
@@ -733,7 +733,7 @@ function startTicker() {
   ticker = globalThis.setInterval(async () => {
     const active = activeSession();
     const countdown = document.getElementById("au-countdown");
-    if (!active || !active.expiresAt) return;
+    if (!active || active.status !== SESSION_STATUS.ACTIVE || !active.expiresAt) return;
     const remaining = Math.max(0, Math.ceil((dateMs(active.expiresAt) - Date.now()) / 1000));
     if (countdown) countdown.textContent = Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0");
     if (remaining > 0) return;
