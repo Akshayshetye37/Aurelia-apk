@@ -31,6 +31,7 @@ test('native plugin exposes evidence review and the notification settings bridge
   const patcher = await read('scripts/patch-android.js');
   const apkWorkflow = await read('.github/workflows/android-apk.yml');
   const buildWorkflow = await read('.github/workflows/build-apk.yml');
+  const nativeCompileWorkflow = await read('.github/workflows/android-native-compile.yml');
   assert.match(plugin, /listUpiEvidence/);
   assert.match(plugin, /updateUpiEvidence/);
   assert.match(plugin, /getUpiObserverStatus/);
@@ -44,6 +45,8 @@ test('native plugin exposes evidence review and the notification settings bridge
   assert.doesNotMatch(apkWorkflow, /pull_request:|push:/);
   assert.match(buildWorkflow, /workflow_dispatch:/);
   assert.doesNotMatch(buildWorkflow, /pull_request:|push:/);
+  assert.match(nativeCompileWorkflow, /compileDebugJavaWithJavac/);
+  assert.doesNotMatch(nativeCompileWorkflow, /assembleDebug|upload-artifact/);
 });
 
 test('web packaging includes the pinned local QR engine and all Aurelia UPI modules', async () => {
