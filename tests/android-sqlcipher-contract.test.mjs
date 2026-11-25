@@ -275,3 +275,17 @@ test('JSON handler encoder round-trips hostile strings without breaking inline J
   })[entity]);
   assert.equal(JSON.parse(decoded), input);
 });
+
+
+test('native repository lock clears the DEK even if closing SQLCipher throws', () => {
+  assert.match(plugin, /private void closeRepositoryAndLock\(\)[\s\S]*?finally\s*\{\s*PmsUnlockManager\.lock\(\);/);
+  assert.match(plugin, /finally\s*\{\s*repository = null;\s*\}/);
+});
+
+test('Android background and destroy lifecycle serialize repository close before DEK clearing', () => {
+  assert.match(plugin, /static void lockForLifecycle\(\)/);
+  assert.match(plugin, /plugin\.io\.execute\(plugin::closeRepositoryAndLock\)/);
+  assert.match(plugin, /handleOnDestroy\(\)[\s\S]*?io\.execute\(this::closeRepositoryAndLock\)/);
+  assert.match(patch, /@Override public void onStop\(\)[\s\S]*?CapacitorPmsStoragePlugin\.lockForLifecycle\(\);[\s\S]*?super\.onStop\(\);/);
+  assert.doesNotMatch(patch, /@Override public void onPause\(\)/);
+});
