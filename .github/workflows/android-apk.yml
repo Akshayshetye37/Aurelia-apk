@@ -1,25 +1,23 @@
 name: Build Aurelia PMS APK
-# P0 backup recovery branch build
 
 on:
   push:
-    branches:
-      - safe-fixes/backup-accounting-android
-      - fix/p0-backup-recovery
+    branches: [main]
     paths:
       - 'index.html'
       - 'package.json'
       - 'capacitor.config.json'
+      - 'android/templates/**'
       - 'scripts/**'
       - 'assets/**'
       - '.github/workflows/android-apk.yml'
   pull_request:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'index.html'
       - 'package.json'
       - 'capacitor.config.json'
+      - 'android/templates/**'
       - 'scripts/**'
       - 'assets/**'
       - '.github/workflows/android-apk.yml'
@@ -39,7 +37,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -50,6 +48,7 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
+          set -euo pipefail
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           if [ -z "$SDKMANAGER" ]; then
             echo "Android sdkmanager was not found under $ANDROID_HOME/cmdline-tools"
@@ -64,18 +63,43 @@ jobs:
       - name: Prepare web app
         run: npm run build
 
-      - name: Generate Android project
-        run: npx cap add android
+      - name: Generate Android project and restore Aurelia native templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          mkdir -p "$template_dir"
+          if [[ -d android/templates ]]; then
+            cp -a android/templates/. "$template_dir/"
+          fi
+          # The repository intentionally stores templates only, not a generated Android project.
+          rm -rf android
+          npx cap add android
+          mkdir -p android/templates
+          cp -a "$template_dir/." android/templates/
+          test -f android/gradlew
+          test -f android/app/build.gradle
 
-      - name: Sync Capacitor
+      - name: Apply Aurelia native Android configuration
+        run: node scripts/patch-android.js
+
+      - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Install native backup and file bridge
-        run: node scripts/patch-android.js
+      - name: Verify generated native project
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f android/app/src/main/AndroidManifest.xml
+          test -f android/app/src/main/java/com/aurelia/pms/MainActivity.java
+          grep -q 'AureliaNative' android/app/src/main/java/com/aurelia/pms/MainActivity.java
+          grep -q 'CapacitorPmsStoragePlugin.lockForLifecycle' android/app/src/main/java/com/aurelia/pms/MainActivity.java
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
