@@ -48,3 +48,13 @@ test('generated MainActivity compiles without relying on disabled BuildConfig ge
   assert.match(patch, /ApplicationInfo\.FLAG_DEBUGGABLE/);
   assert.doesNotMatch(patch, /BuildConfig\.DEBUG/);
 });
+
+
+test('generated backup bridge bounds document reads and clears retained byte buffers', async () => {
+  const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /MAX_DOCUMENT_BYTES = 64 \* 1024 \* 1024/);
+  assert.match(patch, /total > MAX_DOCUMENT_BYTES/);
+  assert.match(patch, /Arrays\.fill\(expected, \(byte\) 0\)/);
+  assert.match(patch, /backupExecutor\.shutdown\(\)/);
+  assert.match(patch, /Arrays\.fill\(pendingBytes, \(byte\) 0\)/);
+});
