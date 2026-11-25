@@ -1,14 +1,7 @@
 name: Build Aurelia PMS APK
+# APK builds are manual-only. Do not build or package Android artifacts without explicit owner approval.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'index.html'
-      - 'package.json'
-      - 'capacitor.config.json'
-      - 'android/templates/**'
-      - 'scripts/**'
-      - '.github/workflows/build-apk.yml'
 jobs:
   build:
     runs-on: ubuntu-latest
