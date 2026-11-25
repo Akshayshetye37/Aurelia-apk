@@ -684,8 +684,11 @@ function renderQrNodes(root = document) {
     const payload = node.dataset.upiPayload || "";
     if (!payload) return;
     node.dataset.qrRendered = "1";
-    QRCode.toDataURL(payload, { width: 256, margin: 1, errorCorrectionLevel: "M" })
-      .then(url => { if (node.isConnected) node.src = url; })
+    QRCode.toString(payload, {
+      type: "svg", width: 256, margin: 1, errorCorrectionLevel: "M",
+      color: { dark: "#0d2a1d", light: "#ffffff" }
+    })
+      .then(svg => { if (node.isConnected) node.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); })
       .catch(() => { node.dataset.qrRendered = "0"; node.alt = "QR generation failed. Use the UPI app link."; });
   });
 }
