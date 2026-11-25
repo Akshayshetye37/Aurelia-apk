@@ -385,7 +385,9 @@ public class MainActivity extends BridgeActivity {
         Uri fileUri = DocumentsContract.buildDocumentUriUsingTree(root, cursor.getString(idCol));
         long modified = modifiedCol >= 0 && !cursor.isNull(modifiedCol) ? cursor.getLong(modifiedCol) : 0L;
         boolean protectedFile = fileUri.equals(protectedNew);
-        boolean valid = isStructurallyValidBackup(readDocument(fileUri));
+        boolean valid = false;
+        try { valid = isStructurallyValidBackup(readDocument(fileUri)); }
+        catch (Exception invalidOrOversized) { valid = false; }
         candidates.add(new BackupCandidate(fileUri, modified, valid, protectedFile));
       }
     }
