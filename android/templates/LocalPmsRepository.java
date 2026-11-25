@@ -327,7 +327,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     String cleanUtr=utr==null||utr.trim().isEmpty()?null:utr.trim().toUpperCase(java.util.Locale.ROOT);
     if(cleanUtr!=null&&!cleanUtr.matches("[A-Z0-9]{8,30}"))cleanUtr=null;
     String cleanSenderVpa=senderVpa==null||senderVpa.trim().isEmpty()?null:senderVpa.trim();
-    if(cleanSenderVpa!=null&&!cleanSenderVpa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9-]{2,64}(?:\\\\.[A-Za-z0-9-]{2,64})*"))cleanSenderVpa=null;
+    if(cleanSenderVpa!=null&&!cleanSenderVpa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9-]{2,64}(?:[.][A-Za-z0-9-]{2,64})*"))cleanSenderVpa=null;
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {
       String status="OBSERVED";
