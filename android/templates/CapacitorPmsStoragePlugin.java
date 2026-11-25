@@ -273,7 +273,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   @PluginMethod public void updateUpiEvidence(PluginCall call) {
     String id=call.getString("evidenceId"),status=call.getString("status"),note=call.getString("reviewNote");
     Boolean manual=call.getBoolean("manualVerified");
-    if(empty(id)||!("CONFIRMED".equals(status)||"REJECTED".equals(status))){call.reject("Invalid Aurelia UPI evidence review packet","AURELIA_UPI_INVALID_REVIEW");return;}
+    if(empty(id)||!("CONFIRMED".equals(status)||"REJECTED".equals(status)||"DUPLICATE".equals(status)||"CONFLICT".equals(status))){call.reject("Invalid Aurelia UPI evidence review packet","AURELIA_UPI_INVALID_REVIEW");return;}
     io.execute(() -> {try{JSONObject result=repository().updateUpiEvidence(id,status,note,Boolean.TRUE.equals(manual));call.resolve(new JSObject(result.toString()));}
       catch(Exception e){call.reject("Aurelia UPI evidence review rejected",storageErrorCode(e,"AURELIA_UPI_EVIDENCE_REVIEW_FAILED"),e);}});
   }
