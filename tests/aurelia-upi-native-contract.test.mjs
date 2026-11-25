@@ -19,6 +19,8 @@ test('notification observer is opt-in, allowlisted, credit-filtered and has no S
   assert.match(source, /extends NotificationListenerService/);
   assert.match(source, /ALLOWED_PACKAGES/);
   assert.match(source, /new BigDecimal/);
+  assert.match(source, /Pattern BALANCE/);
+  assert.match(source, /BALANCE\.matcher\(text\)\.replaceAll/);
   assert.match(source, /parsed\.senderVpa/);
   assert.match(source, /PMS may be locked/);
   assert.doesNotMatch(source, /READ_SMS|SmsManager|HttpURLConnection|OkHttpClient/);
