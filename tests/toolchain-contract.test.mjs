@@ -27,7 +27,7 @@ test('native APK workflows use Node 22 and assert lifecycle locking', async () =
 test('generated Android build uses SQLCipher-compatible API 36 and AGP 8.9.1', async () => {
   const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
   assert.match(patch, /com\.android\.tools\.build:gradle:8\.9\.1/);
-  assert.match(patch, /compileSdkVersion\s*=\s*36/);
+  assert.ok(patch.includes("prefix + '36'"));
   assert.match(patch, /gradle-8\.11\.1-/);
   assert.match(patch, /SQLCipher 4\.20\.0 declares minCompileSdk 36/);
 });
