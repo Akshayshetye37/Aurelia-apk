@@ -3512,7 +3512,7 @@ window.printGuestPreview=function(){
     }
     const room=rm(booking.room);
     if(!room){toast('The booked room could not be found.');return}
-    const nextDate=ymd(Number(booking.out)+1);
+    const nextDate=ymd(Math.max(Number(booking.out)+1,0));
     const title=booking.st==='in'?'Extend stay':'Change departure before check-in';
     openS(`<h2 class="foil">${title}</h2>
       <div class="lab">${esc(booking.g)} · Room ${esc(String(booking.room))}<br>
@@ -3535,7 +3535,7 @@ window.printGuestPreview=function(){
     if(confirm)confirm.disabled=true;
     if(!date.value){reject('Select the new checkout date.');return}
     const newOut=offOf(date.value),nights=newOut-Number(booking.out),room=rm(booking.room);
-    if(!Number.isInteger(newOut)||nights<1){reject('Choose a checkout date later than '+ymd(booking.out)+'.');return}
+    if(!Number.isInteger(newOut)||nights<1||newOut<0){reject('Choose a checkout date later than '+ymd(booking.out)+' and not in the past.');return}
     const conflict=AureliaStayExtension.findStayExtensionConflict(booking,newOut,S.b);
     if(conflict){reject('Unavailable: room '+booking.room+' is already booked for '+conflict.g+' from '+fd(conflict.in)+' to '+fd(conflict.out)+'.');return}
     const rate=Number(room&&room.r)||0;
