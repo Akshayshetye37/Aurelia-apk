@@ -23,6 +23,16 @@ test('the shared HTML escaper encodes hostile guest-controlled markup', () => {
   assert.equal(escapeHtml(hostile), '&quot;&gt;&lt;img src=x onerror=alert(1)&gt;&amp;\'');
 });
 
+test('Gitleaks allowlists are scoped to reviewed synthetic fixture lines', async () => {
+  const config = await readFile(new URL('../.gitleaks.toml', import.meta.url), 'utf8');
+  assert.match(config, /useDefault = true/);
+  assert.match(config, /condition = "AND"/);
+  assert.match(config, /regexTarget = "line"/);
+  assert.match(config, /payment-backend\\/test/);
+  assert.match(config, /GATEWAY_MASTER_KEY/);
+  assert.doesNotMatch(config, /paths = \[.*\*\*.*\]/s);
+});
+
 test('secret scanning checks the complete reachable Git history', async () => {
   const workflow = await readFile(new URL('../.github/workflows/secret-scan.yml', import.meta.url), 'utf8');
   assert.match(workflow, /fetch-depth:\s*0/);
