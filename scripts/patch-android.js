@@ -779,5 +779,8 @@ public class MainActivity extends BridgeActivity {
   }
 }
 `;
+if (!java.includes('CapacitorPmsStoragePlugin.lockForLifecycle();')) {
+  throw new Error('Generated MainActivity is missing the native SQLCipher background-lock hook.');
+}
 fs.writeFileSync(javaPath, java);
 console.log('Installed SAF folder picker, persistent folder access, backup writing, individual-file save picker, and manifest permissions.');
