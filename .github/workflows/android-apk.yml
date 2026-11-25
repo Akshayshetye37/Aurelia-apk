@@ -11,16 +11,9 @@ on:
       - 'scripts/**'
       - 'assets/**'
       - '.github/workflows/android-apk.yml'
+  # Run on every PR so this check can safely be required by main branch rules.
   pull_request:
     branches: [main]
-    paths:
-      - 'index.html'
-      - 'package.json'
-      - 'capacitor.config.json'
-      - 'android/templates/**'
-      - 'scripts/**'
-      - 'assets/**'
-      - '.github/workflows/android-apk.yml'
   workflow_dispatch:
 
 permissions:
