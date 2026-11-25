@@ -49,7 +49,7 @@ Do not import multi-provider payment adapters, gateway SDKs, provider onboarding
 
 The workflow at `.github/workflows/build-apk.yml` is configured to run for changes to the application entry point, package/Capacitor configuration, Android templates, build scripts, or the workflow itself. A README-only update does not match its path filters and does not start an APK build.
 
-The workflow preserves `android/templates` while generating the Capacitor Android project, applies the native patch, verifies generated bridge files, and then runs the debug APK build. A successful run on an earlier commit is not proof that later native-patch changes build successfully. Treat build evidence as valid only for the exact commit SHA reported by GitHub Actions. No APK build is being requested or represented as verified by this documentation update.
+The workflow preserves `android/templates` while generating the Capacitor Android project, applies the native patch, verifies generated bridge files, and then runs the debug APK build. The CI build for code commit `e20937347d81cd05e7e77cbb43f3775aed59606e` completed `assembleDebug` successfully and uploaded the [debug APK artifact](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/45701175559). The verified toolchain is Node 22, JDK 21, Android Gradle Plugin 8.9.1, Gradle 8.11.1, `compileSdkVersion 36` and `targetSdkVersion 35`. This is a debug build, not a release-signed or physical-device-qualified APK. See [the security review](docs/SECURITY.md) for test evidence and remaining production blockers.
 
 ### Branding
 
