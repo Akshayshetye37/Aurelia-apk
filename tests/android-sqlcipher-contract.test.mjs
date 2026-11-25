@@ -156,10 +156,10 @@ test('native external URL actions reject dangerous URI schemes', () => {
 
 test('direct dependencies meet patched Capacitor and sharp security floors', () => {
   const manifest = JSON.parse(read('package.json'));
-  assert.match(manifest.dependencies['@capacitor/android'], /^\^7\.6\.9$/);
-  assert.match(manifest.dependencies['@capacitor/core'], /^\^7\.6\.9$/);
-  assert.match(manifest.devDependencies['@capacitor/cli'], /^\^7\.6\.9$/);
-  assert.match(manifest.devDependencies.sharp, /^\^0\.35\.5$/);
+  assert.equal(manifest.dependencies['@capacitor/android'], '7.6.10');
+  assert.equal(manifest.dependencies['@capacitor/core'], '7.6.10');
+  assert.equal(manifest.devDependencies['@capacitor/cli'], '7.6.10');
+  assert.equal(manifest.devDependencies.sharp, '0.35.5');
 });
 
 test('native guest photos are encrypted at rest with a per-install Keystore AES-GCM key', () => {
