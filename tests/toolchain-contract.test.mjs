@@ -58,3 +58,10 @@ test('generated backup bridge bounds document reads and clears retained byte buf
   assert.match(patch, /backupExecutor\.shutdown\(\)/);
   assert.match(patch, /Arrays\.fill\(pendingBytes, \(byte\) 0\)/);
 });
+
+
+test('generated MainActivity matches Capacitor BridgeActivity public lifecycle visibility', async () => {
+  const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /@Override public void onDestroy\(\)/);
+  assert.doesNotMatch(patch, /@Override protected void onDestroy\(\)/);
+});
