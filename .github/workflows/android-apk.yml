@@ -53,6 +53,9 @@ jobs:
       - name: Install Node dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Run repository contract tests
+        run: npm test
+
       - name: Prepare web app
         run: npm run build
 
