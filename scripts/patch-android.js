@@ -270,7 +270,7 @@ public class MainActivity extends BridgeActivity {
     Uri tree = Uri.parse(saved);
     Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
     String[] projection = { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_LAST_MODIFIED };
-    Uri latest = null; String latestName = null; long latestModified = Long.MIN_VALUE;
+    java.util.ArrayList<BackupCandidate> candidates = new java.util.ArrayList<>();
     try (Cursor cursor = getContentResolver().query(children, projection, null, null, null)) {
       if (cursor == null) throw new IllegalStateException("The selected backup folder cannot be read.");
       int idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
@@ -278,19 +278,29 @@ public class MainActivity extends BridgeActivity {
       int modifiedCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
       while (cursor.moveToNext()) {
         String name = cursor.getString(nameCol);
-        if (name == null || !name.startsWith("aurelia-backup-") || !name.endsWith(".json") || excluded.contains(name)) continue;
+        if (name == null || !isManagedBackupName(name) || excluded.contains(name)) continue;
         long modified = modifiedCol >= 0 && !cursor.isNull(modifiedCol) ? cursor.getLong(modifiedCol) : 0L;
-        if (latest == null || modified > latestModified) {
-          latestModified = modified; latestName = name;
-          latest = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(idCol));
-        }
+        Uri fileUri = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(idCol));
+        candidates.add(new BackupCandidate(fileUri, name, modified, false, false, true));
       }
     }
-    if (latest == null) throw new IllegalStateException("No additional Aurelia backup file was found in the selected folder.");
-    JSONObject result = new JSONObject();
-    result.put("name", latestName);
-    result.put("payload", new String(readDocument(latest), StandardCharsets.UTF_8));
-    return result;
+    candidates.sort((a, b) -> Long.compare(b.modified, a.modified));
+    for (BackupCandidate candidate : candidates) {
+      byte[] bytes = null;
+      try {
+        bytes = readDocument(candidate.uri);
+        if (!isStructurallyValidBackup(bytes)) continue;
+        JSONObject result = new JSONObject();
+        result.put("name", candidate.name);
+        result.put("payload", new String(bytes, StandardCharsets.UTF_8));
+        return result;
+      } catch (Exception unreadableOrInvalid) {
+        // Skip corrupt, inaccessible or oversized files and try the next recovery point.
+      } finally {
+        if (bytes != null) Arrays.fill(bytes, (byte) 0);
+      }
+    }
+    throw new IllegalStateException("No readable Aurelia backup file was found in the selected folder.");
   }
 
   private static String sha256(byte[] bytes) throws Exception {
@@ -321,12 +331,13 @@ public class MainActivity extends BridgeActivity {
   }
   private static final class BackupCandidate {
     final Uri uri;
+    final String name;
     final long modified;
     final boolean valid;
     final boolean protectedNew;
     final boolean inspectable;
-    BackupCandidate(Uri uri, long modified, boolean valid, boolean protectedNew, boolean inspectable) {
-      this.uri = uri; this.modified = modified; this.valid = valid;
+    BackupCandidate(Uri uri, String name, long modified, boolean valid, boolean protectedNew, boolean inspectable) {
+      this.uri = uri; this.name = name; this.modified = modified; this.valid = valid;
       this.protectedNew = protectedNew; this.inspectable = inspectable;
     }
   }
@@ -390,7 +401,7 @@ public class MainActivity extends BridgeActivity {
         boolean valid = false, inspectable = true;
         try { valid = isStructurallyValidBackup(readDocument(fileUri)); }
         catch (Exception unreadableOrOversized) { inspectable = false; }
-        candidates.add(new BackupCandidate(fileUri, modified, valid, protectedFile, inspectable));
+        candidates.add(new BackupCandidate(fileUri, name, modified, valid, protectedFile, inspectable));
       }
     }
     candidates.sort((a, b) -> {
