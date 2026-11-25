@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 import java.util.concurrent.Executor;
 import android.database.sqlite.SQLiteFullException;
+import android.provider.Settings;
 import android.app.AlertDialog;
 import android.text.InputType;
 import android.widget.EditText;
@@ -266,6 +267,25 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     if(empty(device)||empty(event)||empty(code)){call.reject("Invalid outbox conflict request","PMS_INVALID_OUTBOX_CONFLICT");return;}
     io.execute(() -> {try{repository().markOutboxConflict(device,event,code);JSObject r=new JSObject();r.put("success",true);call.resolve(r);}catch(Exception e){call.reject("Outbox conflict update failed",storageErrorCode(e,"PMS_OUTBOX_CONFLICT_FAILED"),e);}});
   }
+  @PluginMethod public void getUpiObserverStatus(PluginCall call) {
+    io.execute(() -> {
+      try {
+        String enabledListeners = Settings.Secure.getString(getContext().getContentResolver(), "enabled_notification_listeners");
+        String component = getContext().getPackageName() + "/" + AureliaUPINotificationListener.class.getName();
+        boolean accessEnabled = enabledListeners != null && enabledListeners.contains(component);
+        SharedPreferences prefs = getContext().getSharedPreferences("aurelia_upi_observer", 0);
+        JSObject out = new JSObject();
+        out.put("available", true);
+        out.put("notificationAccessEnabled", accessEnabled);
+        out.put("listenerConnected", accessEnabled && prefs.getBoolean("connected", false));
+        out.put("lastConnectedAt", prefs.getLong("last_connected_at", 0L));
+        call.resolve(out);
+      } catch (Exception e) {
+        call.reject("Could not read Aurelia UPI observer status", "AURELIA_UPI_OBSERVER_STATUS_FAILED", e);
+      }
+    });
+  }
+
   @PluginMethod public void listUpiEvidence(PluginCall call) {
     io.execute(() -> {try{JSObject out=new JSObject();out.put("evidence",repository().listUpiEvidence());call.resolve(out);}
       catch(Exception e){call.reject("Aurelia UPI evidence read failed",storageErrorCode(e,"AURELIA_UPI_EVIDENCE_READ_FAILED"),e);}});
