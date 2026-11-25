@@ -85,3 +85,19 @@ test('automatic recovery skips unreadable backups and tries older valid recovery
   assert.match(method, /catch \(Exception unreadableOrInvalid\)/);
   assert.match(method, /Arrays\.fill\(bytes, \(byte\) 0\)/);
 });
+
+
+test('GitHub workflows do not persist checkout tokens into repositories used by scripts', async () => {
+  const paths = [
+    '../.github/workflows/android-apk.yml',
+    '../.github/workflows/build-apk.yml',
+    '../.github/workflows/dependency-security-audit.yml',
+    '../.github/workflows/node-contract-tests.yml',
+    '../.github/workflows/gate-3-real-sms-staging.yml',
+    '../.github/workflows/secret-scan.yml'
+  ];
+  for (const path of paths) {
+    const workflow = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.match(workflow, /uses: actions\\/checkout@[\\w.]+[\\s\\S]{0,100}persist-credentials:\\s*false/, path);
+  }
+});
