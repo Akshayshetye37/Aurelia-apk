@@ -39,6 +39,8 @@ test('native plugin exposes evidence review and the notification settings bridge
   assert.match(actions, /openNotificationAccessSettings/);
   assert.match(patcher, /AureliaUPINotificationListener/);
   assert.match(patcher, /BIND_NOTIFICATION_LISTENER_SERVICE/);
+  assert.match(patcher, /androidx\.biometric:biometric:1\.1\.0/);
+  assert.doesNotMatch(patcher, /androidx\.biometric:biometric:1\.2\.0/);
   assert.match(patcher, /ACTION_NOTIFICATION_LISTENER_SETTINGS/);
   assert.match(patcher, /Invalid Aurelia UPI payment intent/);
   assert.match(apkWorkflow, /workflow_dispatch:/);
