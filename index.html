@@ -233,16 +233,20 @@ function guestContactActions(name,phone){
 </script>
 <script id="aurelia-safe-storage">
 (function(){
-  function canLS(){
+  function canReadLS(){
+    try{window.localStorage.getItem("__aurelia_ls_test__");return true}
+    catch(e){return false}
+  }
+  function canWriteLS(){
+    var k="__aurelia_ls_test__";
     try{
-      var k="__aurelia_ls_test__";
       window.localStorage.setItem(k,"1");
       var verified=window.localStorage.getItem(k)==="1";
       window.localStorage.removeItem(k);
       return verified;
-    }catch(e){return false}
+    }catch(e){try{window.localStorage.removeItem(k)}catch(_){}return false}
   }
-  var ok = canLS();
+  var readable=canReadLS(),writable=canWriteLS();
   function unavailable(cause){
     var error=new Error("Persistent device storage is unavailable. This change cannot survive closing the app.");
     error.code="AURELIA_PERSISTENCE_UNAVAILABLE";
@@ -251,12 +255,12 @@ function guestContactActions(name,phone){
   }
   window.__aureliaStorage = {
     getItem: function(k){
-      if(!ok)throw unavailable();
+      if(!readable)throw unavailable();
       try{return window.localStorage.getItem(k)}
       catch(e){throw unavailable(e)}
     },
     setItem: function(k,v){
-      if(!ok)throw unavailable();
+      if(!writable)throw unavailable();
       var value=String(v);
       try{
         window.localStorage.setItem(k,value);
@@ -264,12 +268,12 @@ function guestContactActions(name,phone){
       }catch(e){throw unavailable(e)}
     },
     removeItem: function(k){
-      if(!ok)throw unavailable();
+      if(!readable)throw unavailable();
       try{window.localStorage.removeItem(k)}
       catch(e){throw unavailable(e)}
     },
-    memoryOnly: !ok,
-    isAvailable: function(){return ok}
+    memoryOnly: !readable&&!writable,
+    isAvailable: function(){return writable}
   };
 })();
 </script>
