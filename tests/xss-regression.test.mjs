@@ -29,7 +29,7 @@ test('Gitleaks allowlists are scoped to reviewed synthetic fixture lines', async
   assert.match(config, /condition = "AND"/);
   assert.match(config, /regexTarget = "line"/);
   assert.match(config, /payment-backend\/test/);
-  assert.match(config, /payment-backend\\/\\.env\\.example/);
+  assert.ok(config.includes('payment-backend/\\.env\\.example'));
   assert.match(config, /stopwords = \[\"replace\", \"your\"\]/);
   assert.doesNotMatch(config, /paths = \[.*\*\*.*\]/s);
 });
