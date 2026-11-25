@@ -2,7 +2,7 @@
 
 **Review date:** 26 November 2026  
 **Reviewed branch:** \`security/native-lock-lifecycle-hardening\`  
-**Code commit verified by CI:** \`e20937347d81cd05e7e77cbb43f3775aed59606e\`
+**Latest source commit:** `922e8eb4fc3a5cb1f3511be212e70fc53866b81c`
 
 This is a repository-backed engineering review, not an independent penetration test or production security certification. The debug APK build and automated checks are evidence of build/test integrity only; they do not prove device security or production readiness.
 
@@ -15,6 +15,7 @@ This is a repository-backed engineering review, not an independent penetration t
 - Recovery-phone registration persists the submitted E.164 number and prevents changing a verified number outside the cooldown flow.
 - Generated \`MainActivity\` uses platform Build symbols correctly, disables WebView debugging in non-debuggable builds, bounds selected backup documents to 64 MiB, clears temporary byte arrays, and shuts down its backup executor on destruction.
 - PMS state is mirrored to IndexedDB (`appState`) and loaded before normal startup rendering. localStorage is retained for legacy compatibility and fast writes; quota/write failures fall back to IndexedDB rather than silently switching to volatile memory. Startup selects the newer valid snapshot, and the UI warns while an IndexedDB save is pending or if both durable stores fail. This remains browser-origin storage, not SQLCipher encryption.
+- Arriving and in-house bookings can extend their checkout date in place. The app blocks overlapping room reservations, recalculates the folio, records the previous/new checkout details and added amount, and rolls back the extension if no durable save can be confirmed.
 - Backup recovery skips corrupt, inaccessible or oversized candidates and tries older recovery points. Retention pruning preserves files it cannot safely inspect.
 - Checkout credentials are not persisted into repository Git configuration in the inspected workflows. Gradle execution has a 25-minute command timeout and plain-console diagnostics.
 - Full-history secret scanning is configured with Gitleaks \`8.30.1\`, full checkout history and \`--log-opts=--all\`. The allowlist is limited to reviewed synthetic test fixtures, environment-example placeholders and specific non-secret source/documentation lines.
@@ -40,16 +41,13 @@ This is a repository-backed engineering review, not an independent penetration t
 
 ## Verification evidence
 
-All results below are for code commit \`e20937347d81cd05e7e77cbb43f3775aed59606e\`; subsequent changes to this document are documentation-only.
+All results below are for source commit `922e8eb4fc3a5cb1f3511be212e70fc53866b81c`.
 
-- **Repository tests:** 58 passed, 0 failed.
-- **Dependency audit:** \`npm audit --audit-level=high\` — 0 vulnerabilities.
-- **Secret scan:** Gitleaks 8.30.1 scanned the latest commit and all fetched reachable refs/history with \`--log-opts=--all\`; no leaks found after the narrowly scoped fixture/example allowlists.
-- **Android build:** \`assembleDebug\` — \`BUILD SUCCESSFUL\`; build step completed in 1m 43s. The debug APK artifact is 27,711,787 bytes. Artifact SHA-256 digest: \`4fc72465307f9c0ebc656edd5efc94a032beec6f96c28f6c34d9f3b90a7af76f\`.
-- **Workflow run:** [GitHub Actions run 45701175559](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/45701175559). The pull-request build, Node contract tests, dependency audit and full-history secret scan also passed for the same code commit.
-- **JavaScript syntax:** all 18 inline JavaScript blocks and the inspected Node scripts parsed successfully.
+- **Repository tests:** 73 passed, 0 failed. This includes localStorage quota simulation, legacy-state read preservation, IndexedDB startup/fallback contracts, stay extension conflict/date/rate rules, reset/pagehide ordering, and inline JavaScript syntax parsing.
+- **Dependency audit:** `npm audit --audit-level=high` — 0 vulnerabilities.
+- **Secret scan:** Gitleaks 8.30.1 scanned fetched reachable refs/history with `--log-opts=--all`; no leaks found after the narrowly scoped fixture/example allowlists.
+- **Android build:** the latest `assembleDebug` run is still in progress: [GitHub Actions run 45708540318](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/45708540318). Do not treat it as successful until the workflow finishes and uploads an artifact.
 - **Not performed:** physical-device testing, biometric/Keystore runtime tests, release signing, backup encryption, live SQLCipher data cutover, migration/rollback testing or payment end-to-end tests.
-
 ## Release gate
 
 Do not process real guest data or payments until canonical encrypted storage and a true pre-WebView unlock gate are implemented, backup exports are authenticated/encrypted, the booking credential is moved server-side, QR generation no longer discloses payment metadata to an untrusted third party, Kotlin recovery prototypes are either completed and integrated or removed, and supported-device end-to-end tests pass. A debug APK build is not release qualification.
