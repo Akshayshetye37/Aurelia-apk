@@ -3640,7 +3640,7 @@ window.printGuestPreview=function(){
     if(property)property.textContent=name.toUpperCase();
     const currency=$id('aurelia-currency-value');
     if(currency)currency.textContent=(S.set?.cur||'₹')+' INR';
-    const initials=name.split(/\\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'A';
+    const initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'A';
     const profile=$id('aurelia-profile-initials');
     if(profile)profile.textContent=initials;
     const theme=S.set?.theme==='light'?'light':'dark';
