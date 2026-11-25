@@ -8,11 +8,13 @@ const { findStayExtensionConflict, buildStayExtension } = require('../scripts/st
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
 test('persistent application storage never silently accepts an in-memory-only write', () => {
-  const match = html.match(/<script id="aurelia-safe-storage">([\\s\\S]*?)<\\/script>/);
-  assert.ok(match, 'safe storage adapter exists');
-  assert.match(match[1], /throw new Error/);
-  assert.match(match[1], /localStorage\\.getItem\\(k\\)\\s*!==\\s*value/);
-  assert.doesNotMatch(match[1], /mem\\[k\\]\\s*=\\s*String\\(v\\)/);
+  const start = html.indexOf('<script id="aurelia-safe-storage">');
+  const end = html.indexOf('</script>', start);
+  assert.ok(start >= 0 && end > start);
+  const adapter = html.slice(start, end);
+  assert.ok(adapter.includes('throw new Error'));
+  assert.ok(adapter.includes('localStorage.getItem(k)!==value'));
+  assert.ok(!adapter.includes('mem[k]=String(v)'));
 });
 
 test('persist verifies read-back and reports failed writes instead of claiming success', () => {
@@ -20,10 +22,10 @@ test('persist verifies read-back and reports failed writes instead of claiming s
   const end = html.indexOf('let LOCAL_STATE_STATUS', start);
   assert.ok(start >= 0 && end > start);
   const persist = html.slice(start, end);
-  assert.match(persist, /storage\\.setItem\\(SK,serialized\\)/);
-  assert.match(persist, /storage\\.getItem\\(SK\\)!==serialized/);
-  assert.match(persist, /LOCAL_STATE_STATUS='write-failed'/);
-  assert.match(persist, /return false/);
+  assert.ok(persist.includes('storage.setItem(SK,serialized)'));
+  assert.ok(persist.includes('storage.getItem(SK)!==serialized'));
+  assert.ok(persist.includes("LOCAL_STATE_STATUS='write-failed'"));
+  assert.ok(persist.includes('return false'));
 });
 
 test('stay extension rejects a room occupied by an overlapping reservation', () => {
@@ -73,23 +75,23 @@ test('stay extension refuses completed bookings, shortening and conflicting date
   assert.throws(() => buildStayExtension(completed, {
     newOut: 4, newCheckoutDate: '2026-11-27', newCheckoutTime: '11:00',
     roomRate: 1000, bookings: [completed]
-  }), /active or arriving/);
+  }), error => error.message.includes('active or arriving'));
   const active = { id: 2, room: '101', in: 0, out: 3, st: 'in' };
   assert.throws(() => buildStayExtension(active, {
     newOut: 3, newCheckoutDate: '2026-11-26', newCheckoutTime: '11:00',
     roomRate: 1000, bookings: [active]
-  }), /later checkout date/);
+  }), error => error.message.includes('later checkout date'));
   const next = { id: 3, room: '101', in: 3, out: 5, st: 'res' };
   assert.throws(() => buildStayExtension(active, {
     newOut: 4, newCheckoutDate: '2026-11-27', newCheckoutTime: '11:00',
     roomRate: 1000, bookings: [active, next]
-  }), /already has a booking/);
+  }), error => error.code === 'ROOM_EXTENSION_CONFLICT');
 });
 
 test('web build copies the stay-extension rules and the app loads them', async () => {
   const prepare = await readFile(new URL('../scripts/prepare-web.js', import.meta.url), 'utf8');
-  assert.match(prepare, /stay-extension\\.js/);
-  assert.match(html, /scripts\\/stay-extension\\.js/);
-  assert.match(html, /Extend stay/);
-  assert.match(html, /Change departure/);
+  assert.ok(prepare.includes('stay-extension.js'));
+  assert.ok(html.includes('scripts/stay-extension.js'));
+  assert.ok(html.includes('Extend stay'));
+  assert.ok(html.includes('Change departure'));
 });
