@@ -2863,10 +2863,11 @@ function recordRestPay(){
  if(Math.abs(amount-p.amount)>.009){toast('Bill changed. Reopen settlement to refresh total.');return}
  if(p.method==='UPI'&&!document.getElementById('rest-pay-confirm')?.checked){toast('Confirm receipt of the UPI payment first');return}
  const guest=cleanGuestName(document.getElementById('rest-pay-name')?.value)||'Walk-in customer',phone=String(document.getElementById('rest-pay-phone')?.value||'').trim(),now=new Date().toISOString();
- const sale={id:'RS-'+Date.now(),entity:'restaurant',t:p.table,guest,phone,items:t.o.map(x=>[String(x[0]),Math.max(0,Number(x[1])||0)]),a:amount,m:p.method,at:now,status:'paid',paidAt:now,paymentConfirmed:true,postedToHotel:false};
+ const paymentLabel=p.method==='UPI'?'Aurelia UPI':p.method;
+ const sale={id:'RS-'+Date.now(),entity:'restaurant',t:p.table,guest,phone,items:t.o.map(x=>[String(x[0]),Math.max(0,Number(x[1])||0)]),a:amount,m:paymentLabel,paymentRail:p.method==='UPI'?'AURELIA_UPI':p.method,paymentReference:p.transactionReference||null,aureliaUpiSessionId:p.aureliaUpiSessionId||null,at:now,status:'paid',paidAt:now,paymentConfirmed:true,postedToHotel:false};
  S.sales=Array.isArray(S.sales)?S.sales:[];S.sales.push(sale);S.today=(Number(S.today)||0)+amount;
  S.tableGuests=S.tableGuests||{};S.tableGuests[p.table]={name:guest,phone};t.o=[];t.demo=0;
- aud('Restaurant payment recorded',guest+' · '+rk(amount)+' · '+p.method+' · Table '+p.table);
+ aud('Restaurant payment recorded',guest+' · '+rk(amount)+' · '+paymentLabel+' · Table '+p.table+(p.transactionReference?' · ref '+p.transactionReference:''));
  window.__restPay=null;persist();closeS();render();openRestaurantReceipt(sale);toast('Payment recorded · '+rk(amount));
 }
 /* Paid restaurant receipts never show a balance-due QR. */
@@ -3477,8 +3478,11 @@ window.printGuestPreview=function(){
    methods.innerHTML='<button class="chip on" type="button" data-method="UPI">Aurelia UPI</button>';
    const previous=panel.querySelector('#aurelia-upi-hidden-pay-fields');if(previous)previous.remove();
    const fields=document.createElement('div');fields.id='aurelia-upi-hidden-pay-fields';fields.hidden=true;
-   fields.innerHTML='<input id="pa" type="number" value="'+amount.toFixed(2)+'"><input id="pr" type="text" value="'+String(utr||'').replace(/[&<>"]/g,'')+'"><input id="pc" type="checkbox" checked>';
+   fields.innerHTML='<input id="pa" type="number" value="'+amount.toFixed(2)+'"><input id="pr" type="text" value="'+paymentRef.replace(/[&<>"]/g,'')+'"><input id="pc" type="checkbox" checked>';
    panel.appendChild(fields);
+   const paymentRef=(utr?String(utr).trim()+' / ':'')+String(session.reference||session.id);
+   const alreadyPosted=(S.aud||[]).some(row=>row.a==='Payment'&&String(row.d||'').includes(String(session.reference||session.id)));
+   if(alreadyPosted)return true;
    const before=Number(booking.p||0);
    window.__aureliaUpiApplying=true;
    try{if(typeof window.pay!=='function')throw new Error('Aurelia folio payment action is unavailable.');window.pay(id)}
@@ -3488,6 +3492,8 @@ window.printGuestPreview=function(){
    return true;
   },
   applyRestaurantPayment:async(session,utr)=>{
+   const existingSale=(S.sales||[]).find(row=>row.aureliaUpiSessionId===session.id);
+   if(existingSale)return true;
    const table=getTable(session.tableId),amount=Number(session.amountPaise)/100;
    if(!table||!Array.isArray(table.o)||!table.o.length)throw new Error('The linked dining table is no longer open.');
    const current=table.o.reduce((sum,x)=>sum+(Number(x[1])||0),0);
@@ -3497,11 +3503,13 @@ window.printGuestPreview=function(){
    try{
     if(typeof window.settle!=='function'||typeof window.selectRestPay!=='function'||typeof window.recordRestPay!=='function')throw new Error('Aurelia dining settlement actions are unavailable.');
     window.settle();window.selectRestPay('UPI');
+    if(window.__restPay){window.__restPay.aureliaUpiSessionId=session.id;window.__restPay.transactionReference=String(utr||session.reference||'');}
     const confirm=document.getElementById('rest-pay-confirm');if(confirm)confirm.checked=true;
     const name=document.getElementById('rest-pay-name');if(name)name.value=session.guestName||'Dining guest';
     const ref=document.getElementById('rest-pay-phone');if(ref&&utr)ref.dataset.upiUtr=String(utr);
     const before=(S.sales||[]).length;window.recordRestPay();
     if((S.sales||[]).length!==before+1)throw new Error('The dining payment was not posted to the sales ledger.');
+    const sale=S.sales[S.sales.length-1];if(sale){sale.m='Aurelia UPI';sale.paymentRail='AURELIA_UPI';sale.paymentReference=String(utr||session.reference||'');sale.aureliaUpiSessionId=session.id;}
    }finally{window.__aureliaUpiApplying=false}
    if(typeof persist==='function')persist();
    return true;
