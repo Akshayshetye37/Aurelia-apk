@@ -91,6 +91,14 @@ async function refreshData() {
       repository.getUpiObserverStatus().catch(() => ({ available: false, notificationAccessEnabled: false, listenerConnected: false, lastConnectedAt: 0 }))
     ]);
     state.sessions = sessions.map(row => row.data || row);
+    // Recover FIFO ownership after process death or an interrupted previous promotion.
+    for (const receivingVpa of new Set(state.sessions.map(row => String(row.vpa || "").toLowerCase()).filter(Boolean))) {
+      const promoted = promoteNextSession(state.sessions, receivingVpa);
+      if (promoted.promoted) {
+        await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_RECOVERED");
+        state.sessions = promoted.sessions;
+      }
+    }
     state.evidence = evidence.map(row => row.data || row);
     state.payments = payments.map(row => row.data || row);
     state.refunds = refunds.map(row => row.data || row);
@@ -368,10 +376,11 @@ async function createCollection(form) {
   const after = enqueueSession(before, session, { nowMs: now });
   await persistSessionChanges(before, after, "AURELIA_UPI_SESSION_QUEUED");
   state.sessions = after;
-  audit("Collection created", session.reference + " · " + formatPaise(amountPaise) + " · " + session.status);
+  const committedSession = after.find(row => row.id === session.id) || session;
+  audit("Collection created", session.reference + " · " + formatPaise(amountPaise) + " · " + committedSession.status);
   state.draft = null;
   state.view = "overview";
-  notify(session.status === "ACTIVE" ? "Aurelia UPI request is active." : "Request added to the Aurelia UPI FIFO queue.");
+  notify(committedSession.status === "ACTIVE" ? "Aurelia UPI request is active." : "Request added to the Aurelia UPI FIFO queue.");
   rerender();
 }
 
