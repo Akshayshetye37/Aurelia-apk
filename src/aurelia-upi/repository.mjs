@@ -132,18 +132,18 @@ export function createAureliaUPIRepository({ plugin = nativePlugin() } = {}) {
         action: entry.action || "UNKNOWN"
       }),
     listAudit: () => list(ENTITY_TYPES.AUDIT),
-    claimReference: async (reference, referenceType, entityId, amountPaise) => {
+    claimReference: async (reference, referenceType, entityId, receivingVpa, amountPaise) => {
       if (!isNative || typeof plugin.claimUpiReference !== "function") {
         throw new Error("Encrypted native UTR uniqueness enforcement is unavailable.");
       }
       const cleanReference = String(reference || "").trim().toUpperCase();
       if (!/^[A-Z0-9]{8,30}$/.test(cleanReference) ||
           !["PAYMENT", "REFUND"].includes(referenceType) ||
-          !entityId || !Number.isSafeInteger(Number(amountPaise)) || Number(amountPaise) <= 0) {
+          !entityId || !/^[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}$/.test(String(receivingVpa || "")) || !Number.isSafeInteger(Number(amountPaise)) || Number(amountPaise) <= 0) {
         throw new TypeError("A valid UTR, reference type, entity ID and positive paise amount are required.");
       }
       return plugin.claimUpiReference({
-        reference: cleanReference, referenceType, entityId: String(entityId), amountPaise: Number(amountPaise)
+        reference: cleanReference, referenceType, entityId: String(entityId), receivingVpa: String(receivingVpa), amountPaise: Number(amountPaise)
       });
     },
     getUpiObserverStatus: async () => {
