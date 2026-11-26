@@ -368,7 +368,7 @@ window.AureliaAdsBridge = {
   <div class="aurelia-header-main">
     <div class="aurelia-brand">
       <div class="aurelia-brand-mark" id="crest" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8 19.2 6v5.4c0 4.6-3 8.2-7.2 9.8-4.2-1.6-7.2-5.2-7.2-9.8V6L12 2.8Z"/><path d="M8.1 14.8 12 8l3.9 6.8M9.5 12.5h5"/></svg></div>
-      <div class="aurelia-brand-copy"><strong>AURELIA</strong><small id="aurelia-property-name">SOVEREIGN HOSPITALITY</small></div>
+      <div class="aurelia-brand-copy"><strong>AURELIA PMS</strong><small id="aurelia-property-name">AURELIA PMS</small></div>
     </div>
     <div class="aurelia-header-actions">
       <button class="aurelia-header-action" id="aurelia-currency-button" type="button" aria-label="Currency"><span id="aurelia-currency-value">₹ INR</span></button>
@@ -3697,7 +3697,7 @@ window.printGuestPreview=function(){
 (function(){
   const $id = id => document.getElementById(id);
   function syncShell(){
-    const name=String(S.set?.name||'SOVEREIGN HOSPITALITY').trim();
+    const name=String(S.set?.name||'AURELIA PMS').trim();
     const property=$id('aurelia-property-name');
     if(property)property.textContent=name.toUpperCase();
     const currency=$id('aurelia-currency-value');
