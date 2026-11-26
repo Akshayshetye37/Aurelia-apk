@@ -1730,7 +1730,7 @@ SUB.io=function(){
   box-shadow:0 8px 24px rgba(0,0,0,.35);animation:fx-rise .45s .08s both;
 }
 body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!important}
-@media(max-width:380px){#hor-book span{display:none}#hor-book{width:50px;padding:0;justify-content:center}} #hor-book{bottom:calc(148px + env(safe-area-inset-bottom,0px))!important}
+@media(max-width:380px){#hor-book span{display:none}#hor-book{width:50px;padding:0;justify-content:center}} #hor-book{bottom:calc(var(--aurelia-booking-bottom,148px) + env(safe-area-inset-bottom,0px))!important}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
@@ -1754,8 +1754,31 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
       x.onclick=function(){if(typeof openGlobalSearch==='function')openGlobalSearch()};
       document.body.appendChild(x);
     }
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensure);else ensure();
+    function positionBookingAction(){
+      var dock=document.getElementById('dock');
+      if(!dock)return;
+      var rect=dock.getBoundingClientRect();
+      if(!rect.height)return;
+      var viewport=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||document.documentElement.clientHeight;
+      var clearance=Math.max(96,Math.ceil(viewport-rect.top+12));
+      document.documentElement.style.setProperty('--aurelia-booking-bottom',clearance+'px');
+    }
+    function watchDock(){
+      positionBookingAction();
+      var dock=document.getElementById('dock');
+      if(window.ResizeObserver&&dock){
+        var observer=new ResizeObserver(positionBookingAction);
+        observer.observe(dock);
+      }
+      window.addEventListener('resize',positionBookingAction,{passive:true});
+      window.addEventListener('orientationchange',positionBookingAction,{passive:true});
+      if(window.visualViewport)window.visualViewport.addEventListener('resize',positionBookingAction,{passive:true});
+      requestAnimationFrame(positionBookingAction);
+      setTimeout(positionBookingAction,120);
+      setTimeout(positionBookingAction,500);
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ensure();watchDock()});
+    else{ensure();watchDock()}
 })();
 </script>
 
