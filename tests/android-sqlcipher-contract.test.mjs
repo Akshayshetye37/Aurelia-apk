@@ -81,7 +81,7 @@ test('generic WebView writes cannot mutate domain, outbox, migration or reserved
 test('Android patch installs the SQLCipher dependency and registers the native plugin', () => {
   assert.match(patch, /net\.zetetic:sqlcipher-android:4\.20\.0@aar/);
   assert.match(patch, /androidx\.sqlite:sqlite:2\.7\.0/);
-  assert.match(patch, /androidx\.biometric:biometric:1\.2\.0/);
+  assert.match(patch, /androidx\\.biometric:biometric:1\\.1\\.0/);
   assert.match(patch, /PmsUnlockManager\.java/);
   assert.match(patch, /PmsDatabaseKeyManager\.java/);
   assert.match(patch, /LocalPmsRepository\.java/);
