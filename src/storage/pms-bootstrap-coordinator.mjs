@@ -221,6 +221,7 @@ export class PmsBootstrapCoordinator {
     if(snapshot&&typeof snapshot==="object"&&!Array.isArray(snapshot)){
       const serialized=JSON.stringify(snapshot);const parsed=parseLegacyPmsSnapshot(serialized);
       const legacyRows=await this.repository.listEntities("legacy");
+      let immutableMigrationSnapshot=null;
       if(freshMatch&&legacyRows.length)throw new Error("Fresh-install marker conflicts with migrated legacy entities; startup stopped");
       if(markerMatch){
         if(!legacyRows.length)throw new Error("Verified migration marker has no migrated legacy entities; startup stopped");
@@ -230,6 +231,7 @@ export class PmsBootstrapCoordinator {
         if(legacyRows.length!==expected.length)throw new Error("Verified migration source entity count no longer matches its immutable snapshot");
         const rows=new Map(legacyRows.map(row=>[row.id,row]));
         for(const [key,value] of expected){const row=rows.get(key);if(!row||row.version!==1||JSON.stringify(row.data)!==JSON.stringify(value))throw new Error("Verified migration source read-back mismatch for "+key)}
+        immutableMigrationSnapshot=source.parsed;
       }else if(!freshMatch&&legacyRows.length){
         throw new Error("Canonical legacy rows exist without a verified migration marker; startup stopped");
       }
@@ -240,7 +242,7 @@ export class PmsBootstrapCoordinator {
         this.storage.setItem(AURELIA_MIGRATION_STATUS_KEY,"READY_CANONICAL:"+migrationId);
         if(this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY)!=="READY_CANONICAL:"+migrationId)throw new Error("Fresh canonical installation marker failed exact read-back verification");
       }
-      return Object.freeze({restored:true,source:"canonical-audit-snapshot",migrationAlreadyVerified:true,freshInstallation,migrationId,version:canonical.version,snapshotSha256:canonical.data.snapshotSha256||null,migrationSnapshot:source.parsed,snapshot:parsed.parsed});
+      return Object.freeze({restored:true,source:"canonical-audit-snapshot",migrationAlreadyVerified:true,freshInstallation,migrationId,version:canonical.version,snapshotSha256:canonical.data.snapshotSha256||null,migrationSnapshot:immutableMigrationSnapshot,snapshot:parsed.parsed});
     }
     if(freshMatch)throw new Error("Fresh canonical installation marker has no committed full-state snapshot; startup stopped");
     if(markerMatch){
