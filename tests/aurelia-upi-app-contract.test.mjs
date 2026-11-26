@@ -31,3 +31,13 @@ test('reconciliation recovery is idempotent when a prior native review or PMS po
   assert.match(app, /Retry PMS posting/);
   assert.match(repository, /if\(status\.equals\(current\)\)/);
 });
+
+test('legacy invoice and dining settlement entry points cannot bypass Aurelia UPI collection sessions', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /A payment QR is created only after an Aurelia UPI collection slot is allocated/);
+  assert.match(html, /Create Aurelia UPI collection/);
+  assert.match(html, /if\(window\.__aureliaUpiApplying\)return originalDiningSettle\.apply/);
+  assert.match(html, /window\.openAureliaUpiForDining\(\);return false/);
+  assert.match(html, /Record payments through the Aurelia UPI review desk/);
+  assert.match(html, /Post restaurant payments through the Aurelia UPI review desk/);
+});

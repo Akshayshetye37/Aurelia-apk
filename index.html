@@ -3354,15 +3354,29 @@ window.printGuestPreview=function(){
   const aureliaInvoice=function(id){
    previousInvoice.apply(this,arguments);
    const root=document.getElementById('invd'),booking=bk(Number(id));
-   if(!root||!booking||!(Number(dueB(booking))>0))return;
-   root.querySelectorAll('.hotel-payment-qr,.invoice-due-upi').forEach(node=>node.remove());
-   const amount=Number(dueB(booking)),reference='AURINV-'+booking.id;
-   const box=document.createElement('div');box.className='invoice-due-upi';
-   box.innerHTML='<div style="margin-top:16px;padding:14px;border:1px solid #cdb27a;border-radius:14px;text-align:center;background:#fbf6e8;color:#2a2110"><b>Pay exact balance · '+esc(K(amount))+'</b>'+dynamicUpiQr(amount,booking.g,reference)+'</div>';
-   root.appendChild(box);
-   if(window.AureliaUPI)window.AureliaUPI.renderQrNodes(root);
+   if(!root||!booking)return;
+   root.querySelectorAll('.hotel-payment-qr,.invoice-due-upi,.exact-upi-card').forEach(node=>node.remove());
+   const amount=Math.max(0,Number(dueB(booking))||0);
+   if(amount<=0)return;
+   const box=document.createElement('div');box.className='invoice-due-upi noprint';
+   box.style.cssText='margin-top:16px;padding:14px;border:1px solid var(--ln);border-radius:14px;text-align:center';
+   const note=document.createElement('div');note.className='lab';
+   note.textContent='A payment QR is created only after an Aurelia UPI collection slot is allocated and the amount is locked.';
+   const button=document.createElement('button');button.type='button';button.className='btn';button.style.width='100%';
+   button.textContent='Create Aurelia UPI collection · '+K(amount);
+   button.addEventListener('click',()=>window.openAureliaUpiForFolio(Number(id)));
+   box.append(note,button);root.appendChild(box);
   };
   aureliaInvoice.__aureliaUpiInvoice=true;window.inv=aureliaInvoice;
+ }
+ const originalDiningSettle=window.settle;
+ if(typeof originalDiningSettle==='function'&&!originalDiningSettle.__aureliaUpiOnly){
+  const aureliaDiningSettle=function(...args){
+   if(window.__aureliaUpiApplying)return originalDiningSettle.apply(this,args);
+   if(typeof window.openAureliaUpiForDining!=='function'){toast('Aurelia UPI is still loading');return false}
+   window.openAureliaUpiForDining();return false;
+  };
+  aureliaDiningSettle.__aureliaUpiOnly=true;window.settle=aureliaDiningSettle;
  }
  const originalSettingsSave=window.sv;
  if(typeof originalSettingsSave==='function'&&!originalSettingsSave.__aureliaUpiVpaGuard){
