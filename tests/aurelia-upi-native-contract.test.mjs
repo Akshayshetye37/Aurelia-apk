@@ -18,7 +18,7 @@ test('native database enforces one-time UTR claims across payment and refund ref
   const repository = await read('android/templates/LocalPmsRepository.java');
   const plugin = await read('android/templates/CapacitorPmsStoragePlugin.java');
   assert.match(repository, /VERSION\s*=\s*9/);
-  assert.match(repository, /reference TEXT PRIMARY KEY NOT NULL/);
+  assert.match(repository, /receiving_vpa TEXT NOT NULL,reference TEXT NOT NULL/);
   assert.match(repository, /UNIQUE\(reference_type,entity_id\)/);
   assert.match(repository, /upi_reference_already_claimed/);
   assert.match(repository, /upi_entity_reference_already_claimed/);
