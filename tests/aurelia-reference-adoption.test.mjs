@@ -34,7 +34,7 @@ test('desktop and mobile navigation are responsive, accessible and keep the six-
   assert.match(css, /\.aurelia-design-sidebar/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
-  assert.match(runtime, /mobile-dock|dock/);
+  assert.match(html, /id="dock"/);
   assert.match(runtime, /aria-current/);
 });
 
