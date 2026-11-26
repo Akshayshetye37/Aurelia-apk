@@ -122,7 +122,7 @@ test('reference workspace design adds desktop sidebar navigation without replaci
   assert.match(html, /if\(typeof go==='function'\)go\(button\.dataset\.aureliaTab\)/);
   assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['upi','Aurelia UPI'\],\['more','More'\]\]/);
   assert.match(html, /id="aurelia-design-new"/);
-  assert.match(html, /const clock=app\.querySelector\('#aurelia-shell-clock'\),?actions=app\.querySelector\('\.aurelia-header-actions'\)/);
+  assert.match(html, /const clock=app\.querySelector\('#aurelia-shell-clock'\);if\(clock&&actions/);
   assert.match(html, /if\(typeof resv==='function'\)resv\(\)/);
 });
 
