@@ -3797,7 +3797,9 @@ window.printGuestPreview=function(){
   $id('aurelia-language-button')?.addEventListener('click',()=>{
     if(typeof toast==='function')toast('English interface is active.');
   });
-  syncShell();tickClock();window.setInterval(tickClock,15000);\n  document.addEventListener('visibilitychange',()=>{if(!document.hidden)tickClock()});\n  window.addEventListener('focus',tickClock);
+  syncShell();tickClock();window.setInterval(tickClock,15000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)tickClock()});
+  window.addEventListener('focus',tickClock);
 })();
 </script>
 <script src="scripts/stay-extension.js"></script>
