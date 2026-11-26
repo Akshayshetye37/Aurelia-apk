@@ -1,3 +1,5 @@
+import { secureRandomId } from "./security.mjs";
+
 const ENTITY_TYPES = Object.freeze({
   SESSION: "upi_session",
   EVIDENCE: "upi_evidence",
@@ -7,8 +9,7 @@ const ENTITY_TYPES = Object.freeze({
 });
 
 function randomId(prefix) {
-  const uuid = globalThis.crypto?.randomUUID?.();
-  return prefix + "_" + (uuid || Date.now().toString(36) + Math.random().toString(36).slice(2));
+  return secureRandomId(prefix);
 }
 
 function nativePlugin() {
@@ -131,6 +132,20 @@ export function createAureliaUPIRepository({ plugin = nativePlugin() } = {}) {
         action: entry.action || "UNKNOWN"
       }),
     listAudit: () => list(ENTITY_TYPES.AUDIT),
+    claimReference: async (reference, referenceType, entityId, amountPaise) => {
+      if (!isNative || typeof plugin.claimUpiReference !== "function") {
+        throw new Error("Encrypted native UTR uniqueness enforcement is unavailable.");
+      }
+      const cleanReference = String(reference || "").trim().toUpperCase();
+      if (!/^[A-Z0-9]{8,30}$/.test(cleanReference) ||
+          !["PAYMENT", "REFUND"].includes(referenceType) ||
+          !entityId || !Number.isSafeInteger(Number(amountPaise)) || Number(amountPaise) <= 0) {
+        throw new TypeError("A valid UTR, reference type, entity ID and positive paise amount are required.");
+      }
+      return plugin.claimUpiReference({
+        reference: cleanReference, referenceType, entityId: String(entityId), amountPaise: Number(amountPaise)
+      });
+    },
     getUpiObserverStatus: async () => {
       if (!isNative || typeof plugin.getUpiObserverStatus !== "function") {
         return { available: false, notificationAccessEnabled: false, listenerConnected: false, lastConnectedAt: 0 };
