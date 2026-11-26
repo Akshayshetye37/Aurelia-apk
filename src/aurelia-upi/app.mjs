@@ -631,7 +631,7 @@ async function confirmEvidence(id) {
 
   // The encrypted database enforces global UTR uniqueness across payment and refund records.
   // Repeating the same claim for the same payment is idempotent after a crash/retry.
-  await repository.claimReference(utr, "PAYMENT", "payment_" + session.id, session.amountPaise);
+  await repository.claimReference(utr, "PAYMENT", "payment_" + session.id, session.vpa, session.amountPaise);
 
   const existingPayment = state.payments.find(row => row.sessionId === session.id);
   const alreadyApplied = ["CONFIRMED", "APPLIED_TO_PMS"].includes(existingPayment?.status);
@@ -659,6 +659,7 @@ async function confirmEvidence(id) {
     amountPaise: session.amountPaise,
     currency: "INR",
     rail: "AURELIA_UPI",
+    vpa: session.vpa,
     status: alreadyApplied ? existingPayment.status : "CONFIRMED_PENDING_PMS",
     transactionReference: utr || existingPayment?.transactionReference || null,
     confirmedAt: existingPayment?.confirmedAt || now,
@@ -871,7 +872,10 @@ async function completeRefund(id) {
     throw new Error("This refund transfer UTR is already recorded against another refund.");
   }
   const completed = completeRefundRecord(refund, { transferReference, manualVerified: verified });
-  await repository.claimReference(transferReference, "REFUND", refund.id, refund.amountPaise);
+  const sourcePayment = state.payments.find(row => row.id === refund.paymentId);
+  const sourceSession = state.sessions.find(row => row.id === sourcePayment?.sessionId);
+  if (!sourceSession?.vpa) throw new Error("The original receiving VPA is unavailable; refund reference cannot be safely claimed.");
+  await repository.claimReference(transferReference, "REFUND", refund.id, sourceSession.vpa, refund.amountPaise);
   await repository.saveRefund(completed, "AURELIA_UPI_REFUND_TRANSFER_RECORDED");
   state.refunds = state.refunds.map(row => row.id === id ? completed : row);
   await audit("Refund transfer recorded", refund.paymentId + " · " + transferReference);
