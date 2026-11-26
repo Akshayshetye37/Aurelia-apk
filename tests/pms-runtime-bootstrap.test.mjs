@@ -22,3 +22,16 @@ test("render safety net persists any remaining legacy PMS mutation and skips unc
  assert.match(html,/if\(window\.__AURELIA_RUNTIME_READY&&typeof window\.persist==='function'\)window\.persist\(\)/);
  assert.match(html,/snapshotJson===LAST_PMS_COMMITTED_SNAPSHOT/);
 });
+
+test("photo persistence has no localStorage or volatile-memory fallback",()=>{
+ const start=html.indexOf("async function photoPut("),end=html.indexOf("function openOriginalPhoto(",start);
+ assert.ok(start>=0&&end>start);
+ const block=html.slice(start,end);
+ assert.match(block,/AureliaPhotoArchive\.put/);
+ assert.match(block,/AureliaPhotoArchive\.get/);
+ assert.doesNotMatch(block,/localStorage|PHOTO_FALLBACK_PREFIX|PHOTO_MEMORY_FALLBACK/);
+ assert.match(html,/await window\.AureliaPhotoArchive\.migrateLegacyPhotos\(\)/);
+ const safe=html.slice(html.indexOf('id="aurelia-safe-storage"'),html.indexOf("</script>",html.indexOf('id="aurelia-safe-storage"')));
+ assert.match(safe,/preferences\.setItem/);
+ assert.doesNotMatch(safe,/localStorage/);
+});
