@@ -122,7 +122,7 @@ test("startup refuses to present an empty PMS when canonical migrated records ex
   });
   await assert.rejects(
     restarted.initializeApplication(),
-    /canonical audit snapshot exists without a valid full-state snapshot|canonical PMS records exist but no committed full-state recovery snapshot/i
+    /canonical audit snapshot exists without a valid full-state snapshot|canonical PMS records exist but no committed full-state recovery snapshot|canonical legacy rows exist without a verified migration marker/i
   );
   assert.equal(restarted.status, "FAILED_CLOSED");
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
@@ -226,6 +226,27 @@ test("a stale legacy cache is repaired from the latest canonical snapshot withou
   assert.deepEqual((await restarted.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, updated);
   assert.equal(restarted.migration.migrationId, first.migration.migrationId);
   assert.equal(restarted.domainProjection.alreadyProjected, true);
+});
+
+test("canonical snapshot updates never rewrite the immutable legacy domain projection source", async () => {
+  const raw = JSON.stringify(state);
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
+  const first = await coordinator("immutable-projection-source", storage).initializeApplication();
+  const sourceId = "pms-domain-projection-source:" + first.migration.migrationId;
+  const sourceBefore = await first.repository.getEntity("audit", sourceId);
+  assert.deepEqual(sourceBefore.data.snapshot, state);
+  const updated = structuredClone(state);
+  updated.b.push({ id: 8, g: "Second Guest", room: "101", st: "res", in: 12, out: 13 });
+  await first.bridge.persistCompatibilitySnapshot(updated);
+  const restarted = await coordinator("immutable-projection-source-restart", storage, {
+    repository: first.repository
+  }).initializeApplication();
+  const sourceAfter = await restarted.repository.getEntity("audit", sourceId);
+  const canonicalAfter = await restarted.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  assert.deepEqual(sourceAfter.data.snapshot, state);
+  assert.deepEqual(canonicalAfter.data.snapshot, updated);
+  assert.equal(restarted.domainProjection.alreadyProjected, true);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
 });
 
 test("fresh canonical installation can save, restart and project without legacy migration rows", async () => {
