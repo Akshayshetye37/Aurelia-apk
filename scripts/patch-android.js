@@ -17,12 +17,12 @@ manifest = stripForbiddenPermissions(manifest);
 manifest = disableManifestBackup(manifest);
 if (!manifest.includes('com.aurelia.paybridge')) {
   if (!manifest.includes('<queries>')) {
-    manifest = manifest.replace(/<manifest\\b[^>]*>/, match => match + '\\n    <queries><package android:name="com.aurelia.paybridge" /></queries>');
+    manifest = manifest.replace(/<manifest\b[^>]*>/, match => match + '\n    <queries><package android:name="com.aurelia.paybridge" /></queries>');
   } else if (!manifest.includes('android:name="com.aurelia.paybridge"')) {
-    manifest = manifest.replace('</queries>', '        <package android:name="com.aurelia.paybridge" />\\n    </queries>');
+    manifest = manifest.replace('</queries>', '        <package android:name="com.aurelia.paybridge" />\n    </queries>');
   }
   if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
-    manifest = manifest.replace(/<application\\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\\n    <application');
+    manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
   }
 }
 if (!manifest.includes('AureliaUPINotificationListener')) {
