@@ -102,7 +102,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       try(Cursor sessions=db.rawQuery("SELECT entity_id,data_json FROM pms_entities WHERE entity_type='upi_session'",null)) {
         while(sessions.moveToNext()) {
           try { String vpa=new JSONObject(sessions.getString(1)).optString("vpa","").trim();
-            if(vpa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}"))sessionVpas.put(sessions.getString(0),vpa);
+            if(vpa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}"))sessionVpas.put(sessions.getString(0),vpa.toLowerCase(java.util.Locale.ROOT));
           } catch(Exception malformed) { throw new IllegalStateException("upi_reference_legacy_session_invalid",malformed); }
         }
       }
@@ -446,7 +446,6 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     finally{db.endTransaction();}
   }
 
-  /** A bank reference is a single-use financial identity within the receiving VPA. */
   /** A bank reference is single-use within its receiving VPA. */
   synchronized JSONObject claimUpiReference(String reference,String referenceType,String entityId,String receivingVpa,long amountPaise) {
     String clean=reference==null?"":reference.trim().toUpperCase(java.util.Locale.ROOT);
