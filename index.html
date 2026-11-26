@@ -1451,45 +1451,7 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
 
 
 
-<script id="aurelia-reference-workspace-runtime">
-/* Desktop reference navigation; all destinations delegate to the existing PMS router. */
-(function(){
- const app=document.querySelector('.app'),dock=document.getElementById('dock');
- if(!app||!dock||document.querySelector('.aurelia-design-shell'))return;
- const shell=document.createElement('div');shell.className='aurelia-design-shell';
- const sidebar=document.createElement('aside');sidebar.className='aurelia-design-sidebar';sidebar.setAttribute('aria-label','Workspace navigation');
- sidebar.innerHTML='<div class="aurelia-design-brand"><div class="aurelia-design-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8 19.2 6v5.4c0 4.6-3 8.2-7.2 9.8-4.2-1.6-7.2-5.2-7.2-9.8V6L12 2.8Z"/><path d="M8.5 14.8 12 8.2l3.5 6.6M9.7 12.6h4.6"/></svg></div><div class="aurelia-design-brand-copy"><strong>AURELIA PMS</strong><small id="aurelia-design-property">Aurelia PMS</small></div></div><nav class="aurelia-design-nav" id="aurelia-design-nav"><div class="aurelia-design-nav-label">Workspace</div></nav><div class="aurelia-design-sidebar-footer"><button class="btn" type="button" id="aurelia-design-new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New Reservation</button></div>';
- const workspace=document.createElement('div');workspace.className='aurelia-design-workspace';
- app.parentNode.insertBefore(shell,app);shell.append(sidebar,workspace);workspace.append(app,dock);
- const header=app.querySelector('.aurelia-shell-header'),actions=app.querySelector('.aurelia-header-actions');
- if(header&&actions&&!header.querySelector('.aurelia-page-crumb')){
-  const crumb=document.createElement('div');crumb.className='aurelia-page-crumb';
-  crumb.innerHTML='<h2 id="aurelia-design-page-title">Overview</h2><span class="rail"><i></i>INR · Aurelia UPI</span>';
-  header.querySelector('.aurelia-header-main')?.insertBefore(crumb,actions);
- }
- function sync(){
-  const tabs=typeof TABS!=='undefined'?TABS:[['home','Overview'],['rooms','Chambers'],['stays','Stays'],['dining','Dining'],['upi','Aurelia UPI'],['more','More']];
-  const icons=typeof IC!=='undefined'?IC:{};
-  const nav=document.getElementById('aurelia-design-nav');
-  if(nav)nav.innerHTML='<div class="aurelia-design-nav-label">Workspace</div>'+tabs.map(([key,label])=>'<button type="button" data-aurelia-tab="'+key+'" class="'+(typeof S!=='undefined'&&S.tab===key?'active':'')+'" aria-current="'+(typeof S!=='undefined'&&S.tab===key?'page':'false')+'"><svg viewBox="0 0 24 24"><path d="'+(icons[key]||'M4 4h16v16H4z')+'"/></svg><span>'+label+'</span></button>').join('');
-  const title=document.getElementById('aurelia-design-page-title');
-  if(title&&typeof S!=='undefined')title.textContent=(tabs.find(tab=>tab[0]===S.tab)||tabs[0])[1];
-  const property=document.getElementById('aurelia-design-property');
-  if(property&&typeof S!=='undefined')property.textContent=String(S.set&&S.set.name||'Aurelia PMS');
- }
- document.getElementById('aurelia-design-nav')?.addEventListener('click',event=>{
-  const button=event.target.closest('button[data-aurelia-tab]');if(!button)return;
-  if(typeof go==='function')go(button.dataset.aureliaTab);
- });
- document.getElementById('aurelia-design-new')?.addEventListener('click',()=>{if(typeof resv==='function')resv()});
- const originalRender=window.render;
- if(typeof originalRender==='function'&&!originalRender.__aureliaReferenceWorkspace){
-  const wrappedRender=function(){const result=originalRender.apply(this,arguments);sync();return result};
-  wrappedRender.__aureliaReferenceWorkspace=true;window.render=wrappedRender;
- }
- sync();
-})();
-</script>
+
 </body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),400)}
 SUB.rest=()=>hd('Restaurant business')+`<div class="grid g2"><div class="card"><h3>${esc(S.restaurant.name||'The Dining Room')}</h3><div class="lab">Independent revenue and invoices</div><div class="tot">${rk(S.sales.filter(x=>!x.postedToHotel).reduce((a,x)=>a+(Number(x.a)||0),0))}</div><div class="lab">Walk-in / restaurant takings</div></div><div class="card"><h3>Pending hotel folios</h3><div class="tot">${K(S.b.filter(b=>b.st==='in').reduce((a,b)=>a+Math.max(0,dueB(b)),0))}</div><div class="lab">Hotel balances only</div></div></div><div class="card" style="margin-top:14px"><h3>Restaurant bills</h3>${S.sales.map(x=>`<div class="item"><div class="f"><b>${esc(x.guest||'Walk-in')} · ${rk(x.a)}</b><small>${esc(x.id||'')} · Table ${esc(x.t||'—')} · ${esc(x.m||'Room folio')}</small></div>${x.room?`<span class="tag occ">Room ${esc(x.room)}</span>`:'<span class="tag ready">Separate</span>'}<button class="btn sm ghost" onclick="openRestaurantReceipt(S.sales.find(q=>q.id==='${esc(x.id)}'))">Bill</button></div>`).join('')||'<div class="empty">No restaurant bills yet.</div>'}</div><div class="card" style="margin-top:14px"><h3>Payments awaiting review</h3>${S.sig.filter(x=>x.st!=='matched').map(x=>`<div class="item"><div class="f"><b>${rk(x.amt)} · ${esc(x.app)}</b><small>${esc(x.payer||'Unknown')} · ${esc(x.ref||'No reference')}</small></div><button class="btn sm ghost" onclick="sigM('${esc(x.id)}')">Match</button></div>`).join('')||'<div class="empty">No pending payment signals.</div>'}</div>`;
 // Include new separated entities in backup and persistence.
@@ -4156,5 +4118,44 @@ window.printGuestPreview=function(){
 </script>
 
 
+<script id="aurelia-reference-workspace-runtime">
+/* Desktop reference navigation; all destinations delegate to the existing PMS router. */
+(function(){
+ const app=document.querySelector('.app'),dock=document.getElementById('dock');
+ if(!app||!dock||document.querySelector('.aurelia-design-shell'))return;
+ const shell=document.createElement('div');shell.className='aurelia-design-shell';
+ const sidebar=document.createElement('aside');sidebar.className='aurelia-design-sidebar';sidebar.setAttribute('aria-label','Workspace navigation');
+ sidebar.innerHTML='<div class="aurelia-design-brand"><div class="aurelia-design-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8 19.2 6v5.4c0 4.6-3 8.2-7.2 9.8-4.2-1.6-7.2-5.2-7.2-9.8V6L12 2.8Z"/><path d="M8.5 14.8 12 8.2l3.5 6.6M9.7 12.6h4.6"/></svg></div><div class="aurelia-design-brand-copy"><strong>AURELIA PMS</strong><small id="aurelia-design-property">Aurelia PMS</small></div></div><nav class="aurelia-design-nav" id="aurelia-design-nav"><div class="aurelia-design-nav-label">Workspace</div></nav><div class="aurelia-design-sidebar-footer"><button class="btn" type="button" id="aurelia-design-new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New Reservation</button></div>';
+ const workspace=document.createElement('div');workspace.className='aurelia-design-workspace';
+ app.parentNode.insertBefore(shell,app);shell.append(sidebar,workspace);workspace.append(app,dock);
+ const header=app.querySelector('.aurelia-shell-header'),actions=app.querySelector('.aurelia-header-actions');
+ if(header&&actions&&!header.querySelector('.aurelia-page-crumb')){
+  const crumb=document.createElement('div');crumb.className='aurelia-page-crumb';
+  crumb.innerHTML='<h2 id="aurelia-design-page-title">Overview</h2><span class="rail"><i></i>INR · Aurelia UPI</span>';
+  header.querySelector('.aurelia-header-main')?.insertBefore(crumb,actions);
+ }
+ function sync(){
+  const tabs=typeof TABS!=='undefined'?TABS:[['home','Overview'],['rooms','Chambers'],['stays','Stays'],['dining','Dining'],['upi','Aurelia UPI'],['more','More']];
+  const icons=typeof IC!=='undefined'?IC:{};
+  const nav=document.getElementById('aurelia-design-nav');
+  if(nav)nav.innerHTML='<div class="aurelia-design-nav-label">Workspace</div>'+tabs.map(([key,label])=>'<button type="button" data-aurelia-tab="'+key+'" class="'+(typeof S!=='undefined'&&S.tab===key?'active':'')+'" aria-current="'+(typeof S!=='undefined'&&S.tab===key?'page':'false')+'"><svg viewBox="0 0 24 24"><path d="'+(icons[key]||'M4 4h16v16H4z')+'"/></svg><span>'+label+'</span></button>').join('');
+  const title=document.getElementById('aurelia-design-page-title');
+  if(title&&typeof S!=='undefined')title.textContent=(tabs.find(tab=>tab[0]===S.tab)||tabs[0])[1];
+  const property=document.getElementById('aurelia-design-property');
+  if(property&&typeof S!=='undefined')property.textContent=String(S.set&&S.set.name||'Aurelia PMS');
+ }
+ document.getElementById('aurelia-design-nav')?.addEventListener('click',event=>{
+  const button=event.target.closest('button[data-aurelia-tab]');if(!button)return;
+  if(typeof go==='function')go(button.dataset.aureliaTab);
+ });
+ document.getElementById('aurelia-design-new')?.addEventListener('click',()=>{if(typeof resv==='function')resv()});
+ const originalRender=window.render;
+ if(typeof originalRender==='function'&&!originalRender.__aureliaReferenceWorkspace){
+  const wrappedRender=function(){const result=originalRender.apply(this,arguments);sync();return result};
+  wrappedRender.__aureliaReferenceWorkspace=true;window.render=wrappedRender;
+ }
+ sync();
+})();
+</script>
 </body>
 </html>
