@@ -436,6 +436,8 @@ export function matchEvidenceToSessions(evidence, sessions, {
   const candidates = (Array.isArray(sessions) ? sessions : []).filter(session => {
     if (session.currency !== "INR" || session.rail !== "AURELIA_UPI" ||
         session.amountPaise !== evidence.amountPaise) return false;
+    if (evidence.receivingVpa &&
+        String(evidence.receivingVpa).trim().toLowerCase() !== String(session.vpa || "").trim().toLowerCase()) return false;
     const createdAt = Date.parse(session.createdAt);
     const expiryValues = [session.expiresAt, session.verificationExpiresAt].filter(Boolean).map(Date.parse).filter(Number.isFinite);
     const expiresAt = expiryValues.length ? Math.max(...expiryValues) : createdAt + matchWindowMs;
