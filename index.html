@@ -524,7 +524,7 @@ try{render()}catch(bootErr){
   if(v)v.innerHTML='<div class="card" style="margin:20px;padding:20px"><h2>Startup recovery</h2><p class="lab">The first screen failed to draw. Details were written to the console.</p><pre style="white-space:pre-wrap;font-size:12px;color:#df7c70">'+String(bootErr&&bootErr.stack||bootErr)+'</pre><button class="btn" onclick="location.reload()">Reload</button></div>';
 }
 /* ===== Full module set ===== */
-IC.more='M5 12h.01M12 12h.01M19 12h.01';TABS.push(['more','More']);
+IC.more='M5 12h.01M12 12h.01M19 12h.01';
 const bk=i=>S.b.find(x=>x.id===i),aud=(a,d)=>S.aud.unshift({a,d,at:new Date()}),tt=b=>nts(b)*(rm(b.room)||{r:0}).r+b.ch.reduce((a,x)=>a+x[1],0)-(b.dc||0),dueB=b=>tt(b)-(b.p||0),on=k=>S.fe[k]!==false,tmf=d=>d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
 const M=['Dashboard','Reservations','Bookings','Guests','Rooms','Folio','Invoices','Housekeeping','POS','Expenses','Reports','Audit','Import/Export','WhatsApp actions','Aurelia UPI collection','Aurelia UPI reconciliation','Offline mode'],G={'Aurelia UPI':['Direct UPI collection sessions','Incoming payment notification observer','Payer and UTR matching','Manual bank verification','Duplicate and conflict detection','FIFO request queue','Payment audit and announcements'],Restaurant:['Restaurant billing','Staying-guest billing','Walk-in billing','Add and remove food','Add to room folio','Bill PDF','WhatsApp sharing','Restaurant audit'],Inventory:['Purchase and add stock','Stock deduction on sale','Low-stock alerts','Inventory audit'],'Backup and recovery':['Automatic local backup','Recovery queue']};
 Object.assign(S,{sub:null,co:0,aud:[],fe:{},led:[],terms:'Check-in from 14:00 and check-out by 11:00. A valid ID is required for every adult guest. Quiet hours run from 22:00 to 06:00. Damage to property is billed to the room folio.',set:{name:'Hari Om Retreat',phone:'',addr:'',tax:'',upi:'',cur:'₹'},exp:[],inv:[]});
@@ -661,8 +661,6 @@ const shrink=(f,cb)=>{if(!f)return;const r=new FileReader();r.onload=()=>{const 
 const IDT=['Aadhaar (UIDAI)','PAN card','Passport','Voter ID (EPIC)','Driving licence','Ration card (supporting ID only)','Government employee ID','Other government-issued photo ID','Foreign passport + visa','NRC / National ID (other country)'],PM=['UPI'];
 Object.assign(S,{sig:[],sales:[],inN:0,day:day0(),mm:false,menu:MENU,bk:{folder:false,label:'',last:null,hash:'',hist:[]},au:{release:true,noshow:true,reconcile:false,checkin:false,checkout:false,backup:true,hrs:60}});
 Object.assign(S.set,{checkInTime:'14:00',checkOutTime:'11:00',tag:'Peace, comfort and mindful hospitality.',gst:0,logo:'',qr:''});
-S.rooms.forEach(x=>x.demo=1);S.b.forEach(x=>{x.demo=1;x.pays=[]});S.g.forEach((g,i)=>{g.demo=1;g.idn='NRC-'+(214000+i*7919);g.img=DEMO_IMG});S.inv.forEach(x=>x.demo=1);Object.values(MENU).forEach(a=>a.forEach(m=>m[3]=1));S.t[2].demo=1;
-S.b[1].pays=[{a:1000,m:'Aurelia UPI',rail:'AURELIA_UPI',r:'',at:new Date().toISOString()}];
 const gOf=n=>S.g.find(g=>g.n===n),paid=b=>(b.pays||[]).reduce((a,x)=>a+x.a,0),catOf=x=>x[2]||(/dining|dinner|breakfast|lunch/i.test(x[0])?'din':'ext');
 const lines=b=>[[`Room ${esc(String(b.room))} · ${nts(b)} night${nts(b)>1?'s':''}`,nts(b)*(rm(b.room)||{r:0}).r],...b.ch];
 const ask=(t,m,l,c)=>{if(!/^[A-Za-z_$][A-Za-z0-9_$]*\((?:\d+)?\);?$/.test(String(c||""))){toast("Confirmation action is invalid");return}openS(`<h2 class="foil">${esc(t)}</h2><p class="lab">${esc(m)}</p><div class="row"><button class="btn ghost sm" onclick="closeS()">Keep it</button><button class="btn sm" onclick="closeS();${c}">${esc(l)}</button></div>`)};
@@ -1754,6 +1752,7 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
       x.onclick=function(){if(typeof openGlobalSearch==='function')openGlobalSearch()};
       document.body.appendChild(x);
     }
+  }
     function positionBookingAction(){
       var dock=document.getElementById('dock');
       if(!dock)return;
