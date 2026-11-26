@@ -47,6 +47,35 @@ function assertStorage(storage) {
   }
 }
 
+const PROJECTION_SOURCE_PREFIX = "pms-domain-projection-source:";
+async function loadOrCreateProjectionSourceSnapshot(bridge, migrationId, currentSnapshot) {
+  const entityId = PROJECTION_SOURCE_PREFIX + migrationId;
+  const existing = await bridge.fetchEntity("audit", entityId);
+  if (existing) {
+    if (existing.data?.migrationId !== migrationId || !existing.data?.snapshot ||
+        typeof existing.data.snapshot !== "object" || Array.isArray(existing.data.snapshot)) {
+      throw new Error("Immutable PMS domain projection source is invalid; startup stopped");
+    }
+    return parseLegacyPmsSnapshot(JSON.stringify(existing.data.snapshot)).parsed;
+  }
+  await bridge.mutateEntity({
+    entityType: "audit", entityId, expectedVersion: 0,
+    eventType: "pms.domain_projection_source.created",
+    mutate: data => {
+      data.migrationId = migrationId;
+      data.sourceKey = "canonical-initial-snapshot";
+      data.snapshot = currentSnapshot;
+      return data;
+    }
+  });
+  const saved = await bridge.fetchEntity("audit", entityId);
+  if (!saved?.data?.snapshot || saved.data.migrationId !== migrationId ||
+      JSON.stringify(saved.data.snapshot) !== JSON.stringify(currentSnapshot)) {
+    throw new Error("Immutable PMS domain projection source failed exact read-back verification");
+  }
+  return parseLegacyPmsSnapshot(JSON.stringify(saved.data.snapshot)).parsed;
+}
+
 export class PmsBootstrapCoordinator {
   constructor({
     storage = null,
@@ -139,23 +168,27 @@ export class PmsBootstrapCoordinator {
       ? Object.freeze({status:recovery.freshInstallation?"READY_CANONICAL":"MIGRATION_VERIFIED",migrated:false,alreadyMigrated:true,recoveredFromCanonical:true,freshInstallation:Boolean(recovery.freshInstallation),migrationId:recovery.migrationId||null,entityCount:(await this.repository.listEntities("legacy")).length,legacyKeyPreserved:false})
       : await this.executeGuardedMigration();
     this.status=migration.status;
-    const sourceSnapshot=recovery.snapshot||migration.snapshot||null;
+    const runtimeSnapshot=recovery.snapshot||migration.snapshot||null;
+    let projectionSnapshot=recovery.migrationSnapshot||migration.migrationSnapshot||null;
+    if(!projectionSnapshot&&runtimeSnapshot&&migration.migrationId){
+      projectionSnapshot=await loadOrCreateProjectionSourceSnapshot(bridge,migration.migrationId,runtimeSnapshot);
+    }
     let domainProjection=null;
-    if(["MIGRATION_VERIFIED","READY_CANONICAL"].includes(migration.status)&&migration.migrationId&&sourceSnapshot){
-      domainProjection=await projectLegacyPmsDomains({bridge,snapshot:sourceSnapshot,migrationId:migration.migrationId});
+    if(["MIGRATION_VERIFIED","READY_CANONICAL"].includes(migration.status)&&migration.migrationId&&projectionSnapshot){
+      domainProjection=await projectLegacyPmsDomains({bridge,snapshot:projectionSnapshot,migrationId:migration.migrationId});
     }
     const authority=await ensureCanonicalPrepared({
       bridge,migrationId:migration.migrationId||null,
       projectionStatus:domainProjection?.manifest?.status==="VERIFIED"?"VERIFIED":(domainProjection?"PENDING":"NOT_REQUIRED"),
       now:this.now
     });
-    if(sourceSnapshot){
+    if(runtimeSnapshot){
       let canonical=await bridge.fetchEntity("audit",PMS_LEGACY_SNAPSHOT_ENTITY_ID);
       if(!canonical){
-        await bridge.persistCompatibilitySnapshot(sourceSnapshot);
+        await bridge.persistCompatibilitySnapshot(runtimeSnapshot);
         canonical=await bridge.fetchEntity("audit",PMS_LEGACY_SNAPSHOT_ENTITY_ID);
       }
-      if(!canonical?.data?.snapshot||JSON.stringify(canonical.data.snapshot)!==JSON.stringify(sourceSnapshot)){
+      if(!canonical?.data?.snapshot||JSON.stringify(canonical.data.snapshot)!==JSON.stringify(runtimeSnapshot)){
         throw new Error("Canonical PMS snapshot failed exact repository read-back; legacy source will not be deleted");
       }
       parseLegacyPmsSnapshot(JSON.stringify(canonical.data.snapshot));
@@ -164,8 +197,8 @@ export class PmsBootstrapCoordinator {
         if(this.storage.getItem(AURELIA_LEGACY_STATE_KEY)!=null)throw new Error("Plaintext legacy PMS snapshot could not be purged after canonical verification");
       }
     }
-    const {snapshot:recoverySnapshot,...recoverySummary}=recovery;
-    const {snapshot:migrationSnapshot,...migrationSummary}=migration;
+    const {snapshot:recoverySnapshot,migrationSnapshot:recoveryMigrationSnapshot,...recoverySummary}=recovery;
+    const {snapshot:migrationSnapshot,migrationSnapshot:sourceMigrationSnapshot,...migrationSummary}=migration;
     const finalMigration=Object.freeze({...migrationSummary,legacyKeyPreserved:this.storage.getItem(AURELIA_LEGACY_STATE_KEY)!=null});
     return Object.freeze({
       success:true,environment:this.environment,storageEngine:this.storageEngine,
@@ -207,7 +240,7 @@ export class PmsBootstrapCoordinator {
         this.storage.setItem(AURELIA_MIGRATION_STATUS_KEY,"READY_CANONICAL:"+migrationId);
         if(this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY)!=="READY_CANONICAL:"+migrationId)throw new Error("Fresh canonical installation marker failed exact read-back verification");
       }
-      return Object.freeze({restored:true,source:"canonical-audit-snapshot",migrationAlreadyVerified:true,freshInstallation,migrationId,version:canonical.version,snapshotSha256:canonical.data.snapshotSha256||null,snapshot:parsed.parsed});
+      return Object.freeze({restored:true,source:"canonical-audit-snapshot",migrationAlreadyVerified:true,freshInstallation,migrationId,version:canonical.version,snapshotSha256:canonical.data.snapshotSha256||null,migrationSnapshot:source.parsed,snapshot:parsed.parsed});
     }
     if(freshMatch)throw new Error("Fresh canonical installation marker has no committed full-state snapshot; startup stopped");
     if(markerMatch){
@@ -217,7 +250,7 @@ export class PmsBootstrapCoordinator {
       if(rows.length!==expected.length)throw new Error("Verified migration source entity count no longer matches its immutable snapshot");
       const actual=new Map(rows.map(row=>[row.id,row]));
       for(const [key,value] of expected){const row=actual.get(key);if(!row||row.version!==1||JSON.stringify(row.data)!==JSON.stringify(value))throw new Error("Verified migration source read-back mismatch for "+key)}
-      return Object.freeze({restored:false,source:"canonical-migration-snapshot",migrationAlreadyVerified:false,migrationId:markerMatch[1],snapshot:parsed.parsed});
+      return Object.freeze({restored:false,source:"canonical-migration-snapshot",migrationAlreadyVerified:false,migrationId:markerMatch[1],snapshot:parsed.parsed,migrationSnapshot:parsed.parsed});
     }
     const migrated=await this.repository.listEntities("legacy");
     if(migrated.length)throw new Error("Canonical PMS records exist but no committed full-state recovery snapshot is available; startup stopped to prevent an empty-state overwrite");
@@ -249,7 +282,7 @@ export class PmsBootstrapCoordinator {
       const actual=new Map(legacyRows.map(row=>[row.id,row]));
       for(const [key,value] of expected){const row=actual.get(key);if(!row||row.version!==1||JSON.stringify(row.data)!==JSON.stringify(value))throw new Error("Verified migration source read-back mismatch for "+key)}
       if(!latestSnapshot&&rawAtStart!==original.raw)throw new Error("Legacy PMS cache differs from its immutable migration source but no committed canonical snapshot exists; startup stopped");
-      return Object.freeze({status:"MIGRATION_VERIFIED",migrated:false,alreadyMigrated:true,migrationId,entityCount:legacyRows.length,legacyKeyPreserved:rawAtStart!=null,snapshot:latestSnapshot||originalSnapshot.parsed});
+      return Object.freeze({status:"MIGRATION_VERIFIED",migrated:false,alreadyMigrated:true,migrationId,entityCount:legacyRows.length,legacyKeyPreserved:rawAtStart!=null,snapshot:latestSnapshot||originalSnapshot.parsed,migrationSnapshot:originalSnapshot.parsed});
     }
     if(legacyRows.length){
       if(!latestSnapshot)throw new Error("Legacy migration marker is missing and no canonical recovery snapshot exists; startup stopped");
@@ -272,7 +305,7 @@ export class PmsBootstrapCoordinator {
     for(const [key,value] of expected){const row=actual.get(key);if(!row||row.version!==1||JSON.stringify(row.data)!==JSON.stringify(value))throw new Error("Legacy migration rejected: read-back mismatch for "+key)}
     this.storage.setItem(AURELIA_MIGRATION_STATUS_KEY,"VERIFIED:"+migrationId);
     if(this.storage.getItem(AURELIA_LEGACY_STATE_KEY)!==rawAtStart)throw new Error("Legacy migration source changed during verification; startup stopped");
-    return Object.freeze({status:"MIGRATION_VERIFIED",migrated:!result.alreadyMigrated,alreadyMigrated:Boolean(result.alreadyMigrated),migrationId,entityCount:rows.length,legacyKeyPreserved:true,snapshot:snapshot.parsed});
+    return Object.freeze({status:"MIGRATION_VERIFIED",migrated:!result.alreadyMigrated,alreadyMigrated:Boolean(result.alreadyMigrated),migrationId,entityCount:rows.length,legacyKeyPreserved:true,snapshot:snapshot.parsed,migrationSnapshot:snapshot.parsed});
   }
 
 }
