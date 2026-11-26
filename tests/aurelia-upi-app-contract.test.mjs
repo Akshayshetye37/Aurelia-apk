@@ -109,7 +109,9 @@ test('Aurelia UPI collection and active QR views expose the redesigned payment w
   const app = await read('src/aurelia-upi/app.mjs');
   const css = await read('assets/aurelia-upi.css');
   const collect = app.slice(app.indexOf('function renderCollect'), app.indexOf('function renderActivity'));
-  const active = app.slice(app.indexOf('function renderActiveSession'), app.indexOf('function renderMetric'));
+  const activeStart = app.indexOf('function renderActiveSession');
+  const activeEnd = app.indexOf('function renderOverview', activeStart);
+  const active = app.slice(activeStart, activeEnd);
   assert.match(collect, /au-collect-layout/);
   assert.match(collect, /au-amount-input/);
   assert.match(collect, /au-receiving-card/);
