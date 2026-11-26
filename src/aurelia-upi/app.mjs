@@ -629,7 +629,7 @@ async function confirmEvidence(id) {
     throw new Error("This collection is not eligible for payment reconciliation.");
   }
 
-  // The encrypted database enforces global UTR uniqueness across payment and refund records.
+  // The encrypted database enforces UTR uniqueness within each receiving VPA across payment and refund records.
   // Repeating the same claim for the same payment is idempotent after a crash/retry.
   await repository.claimReference(utr, "PAYMENT", "payment_" + session.id, session.vpa, session.amountPaise);
 
