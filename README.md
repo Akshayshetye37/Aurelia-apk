@@ -77,7 +77,7 @@ The provider examples are illustrative. Actual payment methods, refunds, settlem
 
 ### Current implementation status
 
-**Planned architecture only.** The PayBridge subsystem, companion app discovery/pairing protocol, provider capability catalogue and Aurelia Gateway application are not asserted to exist or be production-ready by this documentation. The current main-branch payment policy remains Aurelia UPI only. No third-party gateway, automatic settlement or provider routing is enabled by this plan.
+**Integration foundation added; end-to-end connection not yet device-qualified.** The main branch now contains the PMS-side PayBridge protocol constants, signature-checked Messenger client, native Capacitor plugin, explicit PMS consent dialog, and Settings connection controls. The separate Android companion application scaffold (Aurelia Gateway) is on the `gateway-provider-files` branch. Its service requires the Gateway user's local pairing approval and a matching application signing identity. Protocol v1 currently supports the authenticated handshake only and advertises no provider-management or payment capability. The two APKs have not yet been installed and tested together on a physical device. The current payment collection policy remains Aurelia UPI only; no third-party gateway, automatic settlement or provider routing is enabled.
 
 ## Payment accounting
 
