@@ -99,7 +99,7 @@ test('Aurelia dashboard identity replaces the legacy homestay defaults in every 
 
 test('dashboard greeting and header clock share India/device time and refresh on resume', () => {
   assert.match(html, /function aureliaIndiaClock\(now=new Date\(\)\)/);
-  assert.match(html, /Intl\.DateTimeFormat\.resolvedOptions\(\)\.timeZone/);
+  assert.match(html, /Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/);
   assert.match(html, /'Asia\/Kolkata'/);
   assert.match(html, /h=aureliaIndiaClock\(\)\.hour/);
   assert.match(html, /id="aurelia-dashboard-greeting"/);
