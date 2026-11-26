@@ -18,14 +18,17 @@ test("Web Storage quota/security errors fail closed without a volatile write fal
   assert.equal(values.size, 0);
 });
 
-test("strict accounting persistence cannot write outside the canonical asynchronous repository", async () => {
+test("PMS accounting persistence delegates to the canonical async write coordinator", async () => {
   const fs = await import("node:fs");
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-  const p = html.indexOf("function persistStrict(){");
-  const q = html.indexOf("\n}\n\n// Awaitable canonical commit", p);
+  const p = html.indexOf("async function persist(){");
+  const q = html.indexOf("\nlet LOCAL_STATE_STATUS=", p);
   assert.ok(p >= 0 && q > p);
-  const strict = html.slice(p, q);
-  assert.match(strict, /Synchronous accounting persistence is disabled/);
-  assert.equal(strict.includes("localStorage"), false);
-  assert.equal(strict.includes("setItem(SK"), false);
+  const persist = html.slice(p, q);
+  assert.match(persist, /AureliaLocalFirstWrites\.save\(snapshot\)/);
+  assert.match(persist, /result\.committed!==true/);
+  assert.doesNotMatch(persist, /localStorage|setItem\(SK/);
+  const coordinator = fs.readFileSync(new URL("../src/storage/pms-local-first-write-coordinator.mjs", import.meta.url), "utf8");
+  assert.match(coordinator, /readBack/);
+  assert.match(coordinator, /stored\.snapshot/);
 });
