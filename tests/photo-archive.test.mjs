@@ -45,3 +45,37 @@ test("sandboxed preview never substitutes volatile memory for durable photo stor
   assert.deepEqual(await archive.archive(), {});
   await assert.rejects(archive.restore({ "preview-photo": "data:image/png;base64,AA==" }), /restore is disabled/i);
 });
+
+test("native legacy photo migration verifies every write before purging plaintext Web Storage", async () => {
+  const values = new Map();
+  let source = [["guest:1", "data:image/jpeg;base64,AA=="]];
+  let deleted = false;
+  const nativeWindow = { AureliaNative: true };
+  nativeWindow.nat = request => {
+    queueMicrotask(() => {
+      let payload = true;
+      if (request.type === "photoStore") values.set(request.key, request.data);
+      if (request.type === "photoLoad") payload = values.get(request.key) ?? null;
+      if (request.type === "photoArchive") payload = JSON.stringify(Object.fromEntries(values));
+      if (request.type === "photoRestore") { values.clear(); Object.entries(request.archive).forEach(([key, value]) => values.set(key, value)); }
+      nativeWindow.aureliaNativePhotoResult(request.requestId, true, payload);
+    });
+    return true;
+  };
+  const archive = createPhotoArchive({
+    nativeWindow,
+    sandboxed: () => false,
+    readLegacyPhotoFallbackEntries: () => source,
+    deleteLegacyPhotoFallbackEntries: entries => {
+      assert.deepEqual(entries, source);
+      source = [];
+      deleted = true;
+    }
+  });
+  assert.equal(await archive.migrateLegacyPhotos(), 1);
+  assert.equal(values.get("guest:1"), "data:image/jpeg;base64,AA==");
+  assert.equal(deleted, true);
+  assert.deepEqual(source, []);
+  assert.equal(await archive.put("guest:2", "data:image/png;base64,BB=="), true);
+  assert.equal(await archive.get("guest:2"), "data:image/png;base64,BB==");
+});
