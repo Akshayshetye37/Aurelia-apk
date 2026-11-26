@@ -232,18 +232,17 @@ test("canonical snapshot updates never rewrite the immutable legacy domain proje
   const raw = JSON.stringify(state);
   const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
   const first = await coordinator("immutable-projection-source", storage).initializeApplication();
-  const sourceId = "pms-domain-projection-source:" + first.migration.migrationId;
-  const sourceBefore = await first.repository.getEntity("audit", sourceId);
-  assert.deepEqual(sourceBefore.data.snapshot, state);
+  const sourceBefore = await first.repository.readMigrationSnapshot(first.migration.migrationId);
+  assert.deepEqual(JSON.parse(sourceBefore.raw), state);
   const updated = structuredClone(state);
   updated.b.push({ id: 8, g: "Second Guest", room: "101", st: "res", in: 12, out: 13 });
   await first.bridge.persistCompatibilitySnapshot(updated);
   const restarted = await coordinator("immutable-projection-source-restart", storage, {
     repository: first.repository
   }).initializeApplication();
-  const sourceAfter = await restarted.repository.getEntity("audit", sourceId);
+  const sourceAfter = await restarted.repository.readMigrationSnapshot(first.migration.migrationId);
   const canonicalAfter = await restarted.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
-  assert.deepEqual(sourceAfter.data.snapshot, state);
+  assert.deepEqual(JSON.parse(sourceAfter.raw), state);
   assert.deepEqual(canonicalAfter.data.snapshot, updated);
   assert.equal(restarted.domainProjection.alreadyProjected, true);
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
