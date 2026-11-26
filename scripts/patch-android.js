@@ -15,6 +15,16 @@ if (!manifest.includes('android.permission.INTERNET')) {
 // Use Android Photo Picker and Storage Access Framework; remove broad permissions.
 manifest = stripForbiddenPermissions(manifest);
 manifest = disableManifestBackup(manifest);
+if (!manifest.includes('com.aurelia.paybridge')) {
+  if (!manifest.includes('<queries>')) {
+    manifest = manifest.replace(/<manifest\\b[^>]*>/, match => match + '\\n    <queries><package android:name="com.aurelia.paybridge" /></queries>');
+  } else if (!manifest.includes('android:name="com.aurelia.paybridge"')) {
+    manifest = manifest.replace('</queries>', '        <package android:name="com.aurelia.paybridge" />\\n    </queries>');
+  }
+  if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
+    manifest = manifest.replace(/<application\\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\\n    <application');
+  }
+}
 if (!manifest.includes('AureliaUPINotificationListener')) {
   const observer = '    <service android:name="com.aurelia.pms.AureliaUPINotificationListener" ' +
     'android:label="Aurelia UPI notification observer" android:exported="true" ' +
@@ -147,6 +157,9 @@ const proguardRules = [
   '-keep class com.aurelia.pms.PmsUnlockManager { *; }',
   '-keep class com.aurelia.pms.AureliaNativeActionsPlugin { *; }',
   '-keep class com.aurelia.pms.AureliaUPINotificationListener { *; }',
+  '-keep class com.aurelia.pms.PayBridgeClient { *; }',
+  '-keep class com.aurelia.pms.PayBridgeProtocol { *; }',
+  '-keep class com.aurelia.pms.AureliaPayBridgePlugin { *; }',
   '-keep class net.zetetic.database.** { *; }',
   ''
 ].join('\n');
@@ -159,7 +172,10 @@ const nativeTemplates = [
   'LocalPmsRepository.java',
   'CapacitorPmsStoragePlugin.java',
   'StorageSerializationException.java',
-  'AureliaUPINotificationListener.java'
+  'AureliaUPINotificationListener.java',
+  'PayBridgeProtocol.java',
+  'PayBridgeClient.java',
+  'AureliaPayBridgePlugin.java'
 ];
 for (const templateName of nativeTemplates) {
   const source = path.join(androidDir, 'templates', templateName);
@@ -216,6 +232,7 @@ public class MainActivity extends BridgeActivity {
   @Override public void onCreate(Bundle savedInstanceState) {
     registerPlugin(CapacitorPmsStoragePlugin.class);
     registerPlugin(AureliaNativeActionsPlugin.class);
+    registerPlugin(AureliaPayBridgePlugin.class);
     super.onCreate(savedInstanceState);
     if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) WebView.setWebContentsDebuggingEnabled(false);
     if (bridge != null && bridge.getWebView() != null) {
