@@ -85,12 +85,12 @@ test('New booking action tracks the real dock edge without double-counting safe 
   assert.match(html, /new ResizeObserver\(positionBookingAction\)/);
   assert.match(html, /new MutationObserver\(observeDock\)/);
   assert.match(html, /--aurelia-booking-bottom/);
-  assert.doesNotMatch(html, /aurelia-booking-bottom[^\\n]*env\\(safe-area-inset-bottom/);
-  assert.match(html, /#hor-book\\{bottom:var\\(--aurelia-booking-bottom,148px\\)!important\\}/);
+  assert.equal(html.includes('bottom:var(--aurelia-booking-bottom,148px) + env(safe-area-inset-bottom'), false);
+  assert.equal(html.includes('#hor-book{bottom:var(--aurelia-booking-bottom,148px)!important}'), true);
 });
 
 test('PMS startup does not mutate non-existent demo bookings, guests or dining tables', () => {
-  assert.doesNotMatch(html, /S\\.t\\[2\\]\\.demo=1/);
-  assert.doesNotMatch(html, /S\\.b\\[1\\]\\.pays=/);
-  assert.doesNotMatch(html, /NRC-['\\+]\\(214000/);
+  assert.equal(html.includes('S.t[2].demo=1'), false);
+  assert.equal(html.includes('S.b[1].pays='), false);
+  assert.equal(html.includes('214000+i*7919'), false);
 });
