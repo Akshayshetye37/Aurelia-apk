@@ -580,8 +580,11 @@ public class MainActivity extends BridgeActivity {
       printSettings.setAllowFileAccess(false);
       printSettings.setAllowContentAccess(false);
       printSettings.setBlockNetworkLoads(true);
+      final boolean[] printStarted = {false};
       printView.setWebViewClient(new android.webkit.WebViewClient() {
         @Override public void onPageFinished(android.webkit.WebView view, String url) {
+          if (printStarted[0]) return;
+          printStarted[0] = true;
           try {
             android.print.PrintManager manager = (android.print.PrintManager) getSystemService(PRINT_SERVICE);
             android.print.PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(title);
