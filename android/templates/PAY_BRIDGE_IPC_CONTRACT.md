@@ -1,12 +1,12 @@
-# Aurelia Pay Bridge IPC contract
+# Aurelia Gateway IPC contract
 
-Status: PMS-side Messenger client and the separate Aurelia Pay Bridge Android service both implement protocol-v1 handshake source code. Source-level contract alignment has been inspected, but a successful installed two-APK handshake has not yet been demonstrated. Protocol v1 remains handshake-only.
+Status: PMS-side Messenger client and the separate Aurelia Gateway Android service both implement protocol-v1 handshake source code. Source-level contract alignment has been inspected, but a successful installed two-APK handshake has not yet been demonstrated. Protocol v1 remains handshake-only.
 
 ## Android identity and access
-- Pay Bridge package: `com.aurelia.paybridge`
+- Aurelia Gateway package: `com.aurelia.paybridge`
 - Explicit service class: `com.aurelia.paybridge.ipc.PayBridgeService`
 - Service must be exported and protected by `com.aurelia.paybridge.permission.BIND_PAY_BRIDGE`.
-- Pay Bridge must declare that permission with `android:protectionLevel="signature"`.
+- Aurelia Gateway must declare that permission with `android:protectionLevel="signature"`.
 - PMS declares the matching `uses-permission` and narrow Android package-visibility query.
 - Both APKs must be signed with the same trusted signing identity. PMS checks Android package signature equality before binding.
 - PMS fails closed on missing package, signer mismatch, missing permission, invalid service identity, invalid handshake, or malformed response.
@@ -21,7 +21,7 @@ Status: PMS-side Messenger client and the separate Aurelia Pay Bridge Android se
   - `packageName` (string, `com.aurelia.pms`)
   - `nonce` (string, unique per connection)
   - `replyTo` (Messenger)
-- Pay Bridge replies to `replyTo` with `what=101` and a Bundle containing:
+- Aurelia Gateway replies to `replyTo` with `what=101` and a Bundle containing:
   - `protocolVersion` (int, must be 1)
   - `packageName` (string, must be `com.aurelia.paybridge`)
   - `nonce` (string, exact echo of PMS nonce)
@@ -37,7 +37,7 @@ Status: PMS-side Messenger client and the separate Aurelia Pay Bridge Android se
 - Payment initiation, transaction events, refunds, and evidence transfer remain disabled until their versioned messages are specified and implemented on both apps.
 - Provider secrets and webhook secrets remain on the owner's trusted HTTPS backend, never in either APK.
 - A payment response must never settle a folio automatically. Staff confirmation remains mandatory.
-- Existing manual PMS payment methods remain available when Pay Bridge is absent.
+- Existing manual PMS payment methods remain available when Aurelia Gateway is absent.
 
 ## Future extension rules
 - New protocol versions must negotiate explicitly; never silently reinterpret v1 messages.
@@ -58,7 +58,7 @@ Reserved operation identifiers (not implemented or advertised yet):
 - 400/401: reconciliation request / result
 - 500/501: payment event / acknowledgement
 
-The future Bridge service manifest declaration is provided in `PAY_BRIDGE_MANIFEST_TEMPLATE.xml`. It is a template only and must be added to the separate Pay Bridge app, never to the PMS manifest. The service must also check caller permission and signer identity in its implementation; manifest protection alone does not replace per-request validation.
+The future Bridge service manifest declaration is provided in `PAY_BRIDGE_MANIFEST_TEMPLATE.xml`. It is a template only and must be added to the separate Aurelia Gateway app, never to the PMS manifest. The service must also check caller permission and signer identity in its implementation; manifest protection alone does not replace per-request validation.
 
 Every payment operation must carry a unique request ID, transaction ID where applicable, booking and folio references, integer amount in paise, ISO currency, provider ID and merchant reference. Refunds must reference the original provider transaction. Capabilities may be advertised only after the corresponding operation is fully implemented and tested on both apps.
 
@@ -67,6 +67,6 @@ Every payment operation must carry a unique request ID, transaction ID where app
 
 The PMS provider-management UI remains locked unless the authenticated handshake advertises the exact capability string provider.management. A successful package/signature/nonce handshake alone does not authorize provider configuration.
 
-The future Pay Bridge may advertise provider.management only after it implements provider catalogue discovery, provider activation/configuration status, strict caller validation, and versioned request/response messages for those operations. Provider-specific adapters and payment execution are separate capabilities and must not be implied by provider.management.
+The future Aurelia Gateway may advertise provider.management only after it implements provider catalogue discovery, provider activation/configuration status, strict caller validation, and versioned request/response messages for those operations. Provider-specific adapters and payment execution are separate capabilities and must not be implied by provider.management.
 
-The PMS may store only non-secret provider preferences and public merchant identifiers. Provider credentials, API secrets, private keys, salts and webhook secrets remain on the owner's trusted HTTPS backend. A provider must never become active in the PMS solely because a local preference was saved; Pay Bridge is authoritative for actual activation and availability.
+The PMS may store only non-secret provider preferences and public merchant identifiers. Provider credentials, API secrets, private keys, salts and webhook secrets remain on the owner's trusted HTTPS backend. A provider must never become active in the PMS solely because a local preference was saved; Aurelia Gateway is authoritative for actual activation and availability.
