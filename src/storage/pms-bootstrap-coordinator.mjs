@@ -39,8 +39,10 @@ export async function stableMigrationId(raw) {
 }
 
 function assertStorage(storage) {
-  if (!storage || storage.memoryOnly === true ||
-      typeof storage.getItem !== "function" ||
+  if (!storage || storage.memoryOnly === true) {
+    throw new TypeError("A memory-only storage adapter cannot be used for PMS migration");
+  }
+  if (typeof storage.getItem !== "function" ||
       typeof storage.setItem !== "function" ||
       typeof storage.removeItem !== "function") {
     throw new TypeError("A durable legacy migration store with verified removal is required");
