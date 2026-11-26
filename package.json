@@ -11,8 +11,7 @@
   "dependencies": {
     "@capacitor/android": "^7.6.9",
     "@capacitor/core": "^7.6.9",
-    "qrcode": "1.5.4",
-    "zod": "^3.25.76"
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.6.9",
