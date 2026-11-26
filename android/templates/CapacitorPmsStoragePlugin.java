@@ -286,6 +286,25 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     });
   }
 
+  @PluginMethod public void claimUpiReference(PluginCall call) {
+    String reference=call.getString("reference"),type=call.getString("referenceType"),entityId=call.getString("entityId");
+    Long amount=call.getLong("amountPaise");
+    if(empty(reference)||empty(type)||empty(entityId)||amount==null||amount<=0L||amount>100000000000L||
+        !("PAYMENT".equals(type)||"REFUND".equals(type))) {
+      call.reject("Invalid Aurelia UPI bank reference claim","AURELIA_UPI_INVALID_REFERENCE_CLAIM");return;
+    }
+    io.execute(() -> {
+      try {
+        JSONObject result=repository().claimUpiReference(reference,type,entityId,amount.longValue());
+        call.resolve(new JSObject(result.toString()));
+      } catch(Exception error) {
+        String code=error.getMessage()!=null&&error.getMessage().contains("upi_reference_already_claimed")
+          ?"AURELIA_UPI_REFERENCE_ALREADY_CLAIMED":storageErrorCode(error,"AURELIA_UPI_REFERENCE_CLAIM_FAILED");
+        call.reject("Aurelia UPI bank reference claim rejected",code,error);
+      }
+    });
+  }
+
   @PluginMethod public void listUpiEvidence(PluginCall call) {
     io.execute(() -> {try{JSObject out=new JSObject();out.put("evidence",repository().listUpiEvidence());call.resolve(out);}
       catch(Exception e){call.reject("Aurelia UPI evidence read failed",storageErrorCode(e,"AURELIA_UPI_EVIDENCE_READ_FAILED"),e);}});
