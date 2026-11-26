@@ -16,6 +16,7 @@ import {
   markCustomerPaid
 } from "./domain.mjs";
 import { createAureliaUPIRepository } from "./repository.mjs";
+import { secureRandomId } from "./security.mjs";
 
 const repository = createAureliaUPIRepository();
 const state = {
@@ -67,17 +68,23 @@ const statusLabel = status => ({
 }[status] || status);
 const badge = status => '<span class="au-badge au-' + esc(String(status || "").toLowerCase()) + '">' + esc(statusLabel(status)) + '</span>';
 
-function audit(action, detail) {
+async function audit(action, detail) {
   const entry = {
-    id: "audit_" + (globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2)),
+    id: secureRandomId("audit"),
     action,
     detail: String(detail || "").slice(0, 300),
     at: new Date().toISOString(),
     rail: "AURELIA_UPI"
   };
+  try {
+    // Persist the audit entity and its outbox event before exposing it as durable.
+    await repository.saveAudit(entry);
+  } catch (error) {
+    state.storageError = error?.message || "Financial audit storage unavailable.";
+    throw new Error("Aurelia UPI could not persist the required financial audit record.", { cause: error });
+  }
   state.audit.unshift(entry);
   state.audit = state.audit.slice(0, 500);
-  repository.saveAudit(entry).catch(error => { state.storageError = error.message || "Audit storage unavailable"; });
 }
 
 async function refreshData() {
@@ -400,7 +407,7 @@ async function createCollection(form) {
   await persistSessionChanges(before, after, "AURELIA_UPI_SESSION_QUEUED");
   state.sessions = after;
   const committedSession = after.find(row => row.id === session.id) || session;
-  audit("Collection created", session.reference + " · " + formatPaise(amountPaise) + " · " + committedSession.status);
+  await audit("Collection created", session.reference + " · " + formatPaise(amountPaise) + " · " + committedSession.status);
   state.draft = null;
   state.view = "overview";
   notify(committedSession.status === "ACTIVE" ? "Aurelia UPI request is active." : "Request added to the Aurelia UPI FIFO queue.");
@@ -449,7 +456,7 @@ async function importEvidence() {
       state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
     }
   }
-  audit("Incoming evidence imported", (evidence.utr || "No UTR") + " · " + formatPaise(evidence.amountPaise));
+  await audit("Incoming evidence imported", (evidence.utr || "No UTR") + " · " + formatPaise(evidence.amountPaise));
   notify("Payment alert added for manual review. No settlement was made.");
   state.view = "review";
   rerender();
@@ -473,7 +480,7 @@ async function assignEvidence(id) {
     state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
   }
   await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_MANUALLY_ASSIGNED");
-  audit("Evidence assigned for review", evidence.id + " → " + session.reference);
+  await audit("Evidence assigned for review", evidence.id + " → " + session.reference);
   rerender();
 }
 
@@ -495,7 +502,7 @@ async function importStatementFile(file) {
     const row = parsed.rows[index];
     const evidence = {
       ...row,
-      id: "statement_" + (globalThis.crypto?.randomUUID?.() || (Date.now() + "_" + index)),
+      id: secureRandomId("statement"),
       sourcePackage: "LOCAL_BANK_STATEMENT_CSV",
       fingerprint: [row.amountPaise, row.utr || "", row.receivedAt, row.rawText].join("|").slice(0, 1200),
       status: "UNMATCHED",
@@ -536,7 +543,7 @@ async function importStatementFile(file) {
       }
     }
   }
-  audit("Bank statement CSV imported", parsed.rows.length + " UPI row(s) · " + duplicates + " duplicate(s) · " + conflicts + " conflict(s)");
+  await audit("Bank statement CSV imported", parsed.rows.length + " UPI row(s) · " + duplicates + " duplicate(s) · " + conflicts + " conflict(s)");
   notify("Imported " + parsed.rows.length + " UPI statement row(s). " + matched + " matched for review; none were settled automatically.");
   state.view = "review";
   rerender();
@@ -546,7 +553,7 @@ async function importSignal(signal = {}) {
   const amountPaise = Number(signal.amountPaise);
   if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) throw new Error("Legacy UPI signal has an invalid amount.");
   const evidence = {
-    id: "legacy_" + String(signal.id || globalThis.crypto?.randomUUID?.() || Date.now()).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100),
+    id: "legacy_" + String(signal.id || secureRandomId("signal")).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100),
     source: "LEGACY_NOTIFICATION",
     sourcePackage: String(signal.source || "AURELIA_LEGACY_SIGNAL").slice(0, 160),
     amountPaise,
@@ -581,7 +588,7 @@ async function importSignal(signal = {}) {
       state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
     }
   }
-  audit("Legacy payment signal imported for review", evidence.utr || evidence.id);
+  await audit("Legacy payment signal imported for review", evidence.utr || evidence.id);
   state.view = "review";
   context?.go?.("upi");
   rerender();
@@ -605,7 +612,9 @@ async function confirmEvidence(id) {
   if (!verified) throw new Error("Confirm that you checked the credit in the receiving bank account.");
   if (!repository.isNative) throw new Error("Preview mode cannot confirm or post payments. Unlock the Android PMS storage first.");
   const utr = String(document.getElementById("au-utr-" + id)?.value || evidence.utr || "").trim().toUpperCase();
-  if (utr && !/^[A-Z0-9]{8,30}$/.test(utr)) throw new Error("Enter a valid 8–30 character bank UTR / reference.");
+  if (!/^[A-Z0-9]{8,30}$/.test(utr)) {
+    throw new Error("A bank UTR/reference is required. Verify the transaction reference in the receiving bank account before confirming.");
+  }
   if (utr && state.payments.some(row => row.sessionId !== session.id &&
       String(row.transactionReference || "").toUpperCase() === utr &&
       ["CONFIRMED_PENDING_PMS", "CONFIRMED", "APPLIED_TO_PMS"].includes(row.status))) {
@@ -619,6 +628,10 @@ async function confirmEvidence(id) {
   if (!["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED", "CONFIRMED"].includes(session.status)) {
     throw new Error("This collection is not eligible for payment reconciliation.");
   }
+
+  // The encrypted database enforces global UTR uniqueness across payment and refund records.
+  // Repeating the same claim for the same payment is idempotent after a crash/retry.
+  await repository.claimReference(utr, "PAYMENT", "payment_" + session.id, session.amountPaise);
 
   const existingPayment = state.payments.find(row => row.sessionId === session.id);
   const alreadyApplied = ["CONFIRMED", "APPLIED_TO_PMS"].includes(existingPayment?.status);
@@ -713,7 +726,7 @@ async function confirmEvidence(id) {
   state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
   state.evidence = state.evidence.map(row => row.id === evidence.id ? evidence : row);
   state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
-  audit("Payment verified", session.reference + " · " + formatPaise(session.amountPaise));
+  await audit("Payment verified", session.reference + " · " + formatPaise(session.amountPaise));
   const promoted = promoteNextSession(state.sessions, session.vpa);
   if (promoted.promoted) {
     await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
@@ -765,7 +778,7 @@ async function retryPendingPosting(sessionId) {
   await repository.savePayment(payment, "AURELIA_UPI_PMS_POSTING_RETRIED");
   state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
 
-  audit("PMS posting recovered", session.reference);
+  await audit("PMS posting recovered", session.reference);
   const promoted = promoteNextSession(state.sessions, session.vpa);
   if (promoted.promoted) {
     await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
@@ -796,7 +809,7 @@ async function rejectEvidence(id) {
       state.sessions = promoted.sessions;
     }
   }
-  audit("Evidence rejected", evidence.utr || evidence.id);
+  await audit("Evidence rejected", evidence.utr || evidence.id);
   await refreshData();
   state.view = "review";
   rerender();
@@ -826,7 +839,7 @@ async function markCustomerReportedPaid(id) {
   if (!existingClaim) await repository.saveEvidence(claim, "AURELIA_UPI_CUSTOMER_CLAIM_RECORDED");
   state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
   if (!existingClaim) state.evidence.unshift(claim);
-  audit("Customer reported payment sent", session.reference + " · awaiting bank verification");
+  await audit("Customer reported payment sent", session.reference + " · awaiting bank verification");
   notify("Customer claim recorded. Check the receiving bank account; no payment has been settled.");
   rerender();
 }
@@ -844,7 +857,7 @@ async function cancelSession(id) {
       state.sessions = promoted.sessions;
     }
   }
-  audit("Collection cancelled", session.reference);
+  await audit("Collection cancelled", session.reference);
   rerender();
 }
 
@@ -858,9 +871,10 @@ async function completeRefund(id) {
     throw new Error("This refund transfer UTR is already recorded against another refund.");
   }
   const completed = completeRefundRecord(refund, { transferReference, manualVerified: verified });
+  await repository.claimReference(transferReference, "REFUND", refund.id, refund.amountPaise);
   await repository.saveRefund(completed, "AURELIA_UPI_REFUND_TRANSFER_RECORDED");
   state.refunds = state.refunds.map(row => row.id === id ? completed : row);
-  audit("Refund transfer recorded", refund.paymentId + " · " + transferReference);
+  await audit("Refund transfer recorded", refund.paymentId + " · " + transferReference);
   notify("Refund transfer recorded with its bank reference. Aurelia did not initiate the transfer.");
   rerender();
 }
@@ -882,7 +896,7 @@ async function createRefund(id) {
   });
   await repository.saveRefund(refund);
   state.refunds.unshift(refund);
-  audit("Refund requested", refund.id + " · " + formatPaise(amount) + " · manual bank transfer required");
+  await audit("Refund requested", refund.id + " · " + formatPaise(amount) + " · manual bank transfer required");
   notify("Refund request recorded. Complete the transfer in your bank app and record its reference.");
   state.view = "refunds";
   rerender();
@@ -1083,7 +1097,7 @@ function startTicker() {
           await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
           state.sessions = promoted.sessions;
         }
-        audit("Collection expired", active.reference);
+        await audit("Collection expired", active.reference);
         rerender();
       } catch (error) { state.storageError = error?.message || "Could not update the Aurelia UPI queue."; }
       return;
@@ -1098,7 +1112,7 @@ function startTicker() {
         });
         await repository.saveSession(review, "AURELIA_UPI_VERIFICATION_WINDOW_ELAPSED");
         state.sessions = state.sessions.map(row => row.id === review.id ? review : row);
-        audit("Verification window elapsed", active.reference + " · manual bank review required");
+        await audit("Verification window elapsed", active.reference + " · manual bank review required");
         rerender();
       } catch (error) { state.storageError = error?.message || "Could not move the payment into manual review."; }
     }
