@@ -235,6 +235,148 @@ input[type=date]{max-width:100%;min-width:0}
 .aurelia-skip-link:focus{transform:translateY(0);outline:3px solid #fff;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.aurelia-skip-link{transition:none}}
 </style>
+<style id="aurelia-reference-workspace">
+/* Aurelia reference workspace — visual system adapted to the existing PMS runtime. */
+:root{
+ --bg:#07120e;--s1:#0c1d16;--s2:#10241c;--ln:rgba(223,192,123,.18);
+ --gold:#dfc07b;--gold2:#9c7a3c;--tx:#f5f0e6;--mu:#9ab0a4;
+ --em:#3ec48d;--rb:#e06d60;--am:#eab354;
+ --serif:"Cormorant Garamond",Georgia,serif;
+ --sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+body[data-theme="light"]{
+ --bg:#f5f2ea;--s1:#fff;--s2:#faf7f0;--ln:rgba(20,61,45,.12);
+ --gold:#9a742c;--gold2:#b58d43;--tx:#15231c;--mu:#52665c;
+ --em:#177d56;--rb:#b83b31;--am:#b37412;
+}
+html,body{min-height:100%;overflow-x:hidden}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);font-weight:400}
+.aurelia-design-shell{display:flex;min-height:100vh;width:100%}
+.aurelia-design-sidebar{
+ width:256px;flex:0 0 256px;position:sticky;top:0;height:100vh;z-index:35;
+ display:flex;flex-direction:column;padding:20px 14px 16px;
+ background:var(--s1);border-right:1px solid var(--ln)
+}
+.aurelia-design-brand{display:flex;align-items:center;gap:12px;padding:4px 8px 18px;margin-bottom:14px;border-bottom:1px solid var(--ln)}
+.aurelia-design-mark{width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:12px;color:#161105;background:linear-gradient(135deg,#f2da9c,#9c7a3c);box-shadow:0 6px 18px rgba(223,192,123,.22)}
+.aurelia-design-mark svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+.aurelia-design-brand-copy{min-width:0}
+.aurelia-design-brand-copy strong{display:block;color:var(--gold);font:700 13px/1.2 var(--sans);letter-spacing:.14em}
+.aurelia-design-brand-copy small{display:block;margin-top:3px;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aurelia-design-nav{flex:1;overflow-y:auto;padding-right:2px}
+.aurelia-design-nav-label{padding:12px 10px 6px;color:var(--mu);font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.72}
+.aurelia-design-nav button{width:100%;display:flex;align-items:center;gap:11px;margin-bottom:2px;padding:10px 11px;border-radius:11px;color:var(--mu);font-size:13.5px;font-weight:500;text-align:left;transition:background .18s,color .18s}
+.aurelia-design-nav button svg{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.aurelia-design-nav button:hover{background:rgba(223,192,123,.09);color:var(--tx)}
+.aurelia-design-nav button.active{background:linear-gradient(135deg,rgba(223,192,123,.2),rgba(223,192,123,.06));color:var(--gold);box-shadow:inset 0 0 0 1px rgba(223,192,123,.28)}
+body[data-theme="light"] .aurelia-design-nav button.active{background:rgba(20,61,45,.09);color:#143d2d;box-shadow:inset 0 0 0 1px rgba(20,61,45,.18)}
+.aurelia-design-sidebar-footer{padding-top:12px;border-top:1px solid var(--ln)}
+.aurelia-design-sidebar-footer .btn{width:100%;display:flex;align-items:center;justify-content:center;gap:7px}
+.aurelia-design-sidebar-footer svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+.aurelia-design-workspace{flex:1;min-width:0;display:flex;flex-direction:column}
+.app{width:100%;max-width:none;margin:0;padding:0;min-width:0}
+.aurelia-shell-header{position:sticky;top:0;z-index:25;padding:12px 24px 10px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--ln)}
+.aurelia-header-main{min-height:36px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.aurelia-brand{display:none}
+.aurelia-page-crumb{display:flex;align-items:center;gap:9px;min-width:0}
+.aurelia-page-crumb h2{font:600 22px/1.1 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aurelia-page-crumb .rail{display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border:1px solid var(--ln);border-radius:99px;background:var(--s2);color:var(--mu);font-size:11.5px;white-space:nowrap}
+.aurelia-page-crumb .rail i{width:7px;height:7px;border-radius:50%;background:var(--em);box-shadow:0 0 0 3px rgba(62,196,141,.12)}
+.aurelia-header-actions{gap:8px}
+.aurelia-header-action{height:36px;min-width:36px;padding:0 10px;border:1px solid var(--ln);border-radius:10px;background:var(--s2);color:var(--mu)}
+.aurelia-header-action:hover{border-color:rgba(223,192,123,.38);color:var(--tx)}
+.aurelia-header-action svg{width:16px;height:16px}
+.aurelia-status-row{display:flex;align-items:center;gap:8px;padding:8px 0 0;border:0}
+.aurelia-status-pill{padding:3px 9px;border:1px solid var(--ln);border-radius:99px;background:var(--s2);color:var(--mu);font-size:10.5px}
+.aurelia-status-pill.gold{color:var(--gold)}
+.aurelia-status-clock{margin-left:auto;color:var(--mu);font-size:12px;font-variant-numeric:tabular-nums}
+#v{width:100%;max-width:1220px;margin:0 auto;padding:22px 24px 48px;min-width:0}
+#v .view{animation:referenceViewIn .28s ease-out}
+@keyframes referenceViewIn{from{opacity:.82;transform:translateY(5px)}to{opacity:1;transform:none}}
+#v h1,#v h2,#v h3,#v h4{font-family:var(--serif);letter-spacing:-.01em}
+#v h2{font-size:28px;font-weight:600}
+#v .hero{position:relative;height:auto;min-height:290px;margin:0 0 18px;padding:0;border-radius:24px;overflow:hidden;border:1px solid rgba(223,192,123,.38);background:radial-gradient(900px 420px at 85% 15%,#2a4738 0%,#10261d 48%,#07130e 100%);box-shadow:0 18px 44px rgba(0,0,0,.28)}
+#v .hero canvas{opacity:.5}
+#v .hero>svg{opacity:.85}
+#v .hero .tx{position:relative;z-index:2;max-width:620px;padding:28px 28px 18px}
+#v .hero small{display:inline-flex;color:#f2da9c;font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+#v .hero h1{font-size:clamp(38px,5vw,52px);line-height:1.02;margin:8px 0;color:#fbf7ee}
+#v .hero h1 span{animation-duration:.55s;filter:none}
+#v .hero p{font:italic 500 18px/1.35 var(--serif);color:#e6d7b5}
+#v .avail{position:relative;left:auto;right:auto;bottom:auto;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;margin:18px 14px 14px;padding:12px;border:1px solid rgba(223,192,123,.28);border-radius:16px;background:rgba(7,20,15,.78);backdrop-filter:blur(12px)}
+#v .avail label{display:block;color:#b8cabf;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+#v .avail input{width:100%;padding:8px 10px;border:1px solid rgba(255,255,255,.14);border-radius:9px;background:rgba(255,255,255,.07);color:#fff;font-size:13.5px}
+#v .btn{padding:10px 16px;border-radius:11px;font-size:13.5px;font-weight:600;line-height:1.2;background:linear-gradient(135deg,#f3dc9e,#cba04f);color:#181205;box-shadow:0 6px 18px rgba(203,160,79,.2)}
+#v .btn::after{display:none}
+#v .btn.ghost{background:transparent;color:var(--tx);border:1px solid rgba(223,192,123,.38);box-shadow:none}
+#v .btn:active{transform:scale(.98)}
+#v .card{padding:20px;border:1px solid var(--ln);border-radius:18px;background:var(--s2);box-shadow:0 6px 20px rgba(0,0,0,.16);transform:none}
+#v .card::before{display:none}
+#v .grid{gap:16px;margin-top:16px}
+#v .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+#v .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+#v .g2>.card{min-width:0}
+#v .k{font:600 36px/1.08 var(--serif);margin:8px 0 4px;color:var(--tx)}
+#v .lab{color:var(--mu);font-size:13px}
+#v .up{color:var(--em)}
+#v .tag{padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:600}
+#v .tag.ready{background:rgba(62,196,141,.14);color:var(--em);border:0}
+#v .tag.occ{background:rgba(223,192,123,.12);color:var(--gold);border:0}
+#v .tag.clean{background:rgba(234,179,84,.14);color:var(--am);border:0}
+#v .tag.out{background:rgba(224,109,96,.14);color:var(--rb);border:0}
+#v .chips{gap:8px}
+#v .chip{padding:7px 14px;border-radius:99px;border:1px solid var(--ln);background:var(--s2);color:var(--mu);font-size:13px}
+#v .chip.on{background:var(--gold);border-color:var(--gold);color:#181205;font-weight:600}
+#v .item{padding:12px 0}
+#v .av{border-radius:12px;border:1px solid var(--ln);background:rgba(223,192,123,.12);color:var(--gold)}
+#v .rooms{gap:10px}
+#v .room .n{font:600 34px/1 var(--serif)}
+#v .tbls{gap:10px}
+#v .tb{border-radius:14px;aspect-ratio:auto;min-height:84px;background:var(--s1);font:600 22px/1 var(--serif)}
+#v .tb.seat{background:rgba(223,192,123,.12);color:var(--gold)}
+#v .tb.on{border-color:var(--gold);box-shadow:0 0 0 2px rgba(223,192,123,.12)}
+#v .mi{padding:11px 0;border-bottom:1px dashed var(--ln)}
+#v .mi b{font:600 17px/1.2 var(--serif)}
+#v .mi span{font-weight:600;color:var(--gold)}
+#v .bar{height:7px;border-radius:99px;background:rgba(255,255,255,.06)}
+#v .bar i{background:linear-gradient(90deg,var(--gold2),var(--gold))}
+#v .pan{background:var(--s1);border:1px solid rgba(223,192,123,.38)}
+#v .fld input,#v .fld select,#v .fld textarea,.pan .fld input,.pan .fld select,.pan .fld textarea{border:1px solid var(--ln);border-radius:10px;background:rgba(255,255,255,.045);color:var(--tx)}
+#v .fld input:focus,#v .fld select:focus,.pan .fld input:focus,.pan .fld select:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(223,192,123,.12)}
+#v .empty{font:italic 500 18px var(--serif);color:var(--mu)}
+.dock{display:none}
+.aurelia-design-sidebar button:focus-visible,.aurelia-page-crumb button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(max-width:1040px){#v .g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){
+ .aurelia-design-sidebar{display:none}
+ .aurelia-design-workspace{width:100%}
+ .app{padding:0}
+ .aurelia-shell-header{padding:10px 14px}
+ .aurelia-brand{display:flex;align-items:center;gap:9px}
+ .aurelia-brand-mark{width:34px;height:34px;border-radius:10px}
+ .aurelia-brand-copy strong{font-size:12px}
+ .aurelia-page-crumb{display:none}
+ .aurelia-status-row{display:none}
+ #v{padding:16px 14px 112px}
+ .dock{display:grid}
+ #hor-book{display:flex!important}
+ #toast{bottom:92px}
+}
+@media(max-width:640px){
+ #v .g2{grid-template-columns:1fr}
+ #v .hero{min-height:250px;border-radius:20px}
+ #v .hero .tx{padding:20px 20px 12px}
+ #v .hero h1{font-size:clamp(36px,10vw,46px)}
+ #v .avail{grid-template-columns:1fr 1fr}
+ #v .avail .btn{grid-column:1/-1;width:100%}
+ #v .card{padding:16px}
+}
+@media(prefers-reduced-motion:reduce){#v .view{animation:none!important}}
+@media print{
+ .aurelia-design-sidebar,.aurelia-shell-header,.dock,#hor-book{display:none!important}
+ .aurelia-design-workspace,.app,#v{display:block!important;width:100%!important;max-width:none!important;padding:0!important}
+}
+</style>
 </head><body>
 <a class="aurelia-skip-link" href="#v">Skip to main content</a>
 
@@ -1308,6 +1450,45 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
 
 
 
+<script id="aurelia-reference-workspace-runtime">
+/* Desktop reference navigation; all destinations delegate to the existing PMS router. */
+(function(){
+ const app=document.querySelector('.app'),dock=document.getElementById('dock');
+ if(!app||!dock||document.querySelector('.aurelia-design-shell'))return;
+ const shell=document.createElement('div');shell.className='aurelia-design-shell';
+ const sidebar=document.createElement('aside');sidebar.className='aurelia-design-sidebar';sidebar.setAttribute('aria-label','Workspace navigation');
+ sidebar.innerHTML='<div class="aurelia-design-brand"><div class="aurelia-design-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8 19.2 6v5.4c0 4.6-3 8.2-7.2 9.8-4.2-1.6-7.2-5.2-7.2-9.8V6L12 2.8Z"/><path d="M8.5 14.8 12 8.2l3.5 6.6M9.7 12.6h4.6"/></svg></div><div class="aurelia-design-brand-copy"><strong>AURELIA PMS</strong><small id="aurelia-design-property">Aurelia PMS</small></div></div><nav class="aurelia-design-nav" id="aurelia-design-nav"><div class="aurelia-design-nav-label">Workspace</div></nav><div class="aurelia-design-sidebar-footer"><button class="btn" type="button" id="aurelia-design-new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New Reservation</button></div>';
+ const workspace=document.createElement('div');workspace.className='aurelia-design-workspace';
+ app.parentNode.insertBefore(shell,app);shell.append(sidebar,workspace);workspace.append(app,dock);
+ const header=app.querySelector('.aurelia-shell-header'),actions=app.querySelector('.aurelia-header-actions');
+ if(header&&actions&&!header.querySelector('.aurelia-page-crumb')){
+  const crumb=document.createElement('div');crumb.className='aurelia-page-crumb';
+  crumb.innerHTML='<h2 id="aurelia-design-page-title">Overview</h2><span class="rail"><i></i>INR · Aurelia UPI</span>';
+  header.querySelector('.aurelia-header-main')?.insertBefore(crumb,actions);
+ }
+ function sync(){
+  const tabs=typeof TABS!=='undefined'?TABS:[['home','Overview'],['rooms','Chambers'],['stays','Stays'],['dining','Dining'],['upi','Aurelia UPI'],['more','More']];
+  const icons=typeof IC!=='undefined'?IC:{};
+  const nav=document.getElementById('aurelia-design-nav');
+  if(nav)nav.innerHTML='<div class="aurelia-design-nav-label">Workspace</div>'+tabs.map(([key,label])=>'<button type="button" data-aurelia-tab="'+key+'" class="'+(typeof S!=='undefined'&&S.tab===key?'active':'')+'" aria-current="'+(typeof S!=='undefined'&&S.tab===key?'page':'false')+'"><svg viewBox="0 0 24 24"><path d="'+(icons[key]||'M4 4h16v16H4z')+'"/></svg><span>'+label+'</span></button>').join('');
+  const title=document.getElementById('aurelia-design-page-title');
+  if(title&&typeof S!=='undefined')title.textContent=(tabs.find(tab=>tab[0]===S.tab)||tabs[0])[1];
+  const property=document.getElementById('aurelia-design-property');
+  if(property&&typeof S!=='undefined')property.textContent=String(S.set&&S.set.name||'Aurelia PMS');
+ }
+ document.getElementById('aurelia-design-nav')?.addEventListener('click',event=>{
+  const button=event.target.closest('button[data-aurelia-tab]');if(!button)return;
+  if(typeof go==='function')go(button.dataset.aureliaTab);
+ });
+ document.getElementById('aurelia-design-new')?.addEventListener('click',()=>{if(typeof resv==='function')resv()});
+ const originalRender=window.render;
+ if(typeof originalRender==='function'&&!originalRender.__aureliaReferenceWorkspace){
+  const wrappedRender=function(){const result=originalRender.apply(this,arguments);sync();return result};
+  wrappedRender.__aureliaReferenceWorkspace=true;window.render=wrappedRender;
+ }
+ sync();
+})();
+</script>
 </body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),400)}
 SUB.rest=()=>hd('Restaurant business')+`<div class="grid g2"><div class="card"><h3>${esc(S.restaurant.name||'The Dining Room')}</h3><div class="lab">Independent revenue and invoices</div><div class="tot">${rk(S.sales.filter(x=>!x.postedToHotel).reduce((a,x)=>a+(Number(x.a)||0),0))}</div><div class="lab">Walk-in / restaurant takings</div></div><div class="card"><h3>Pending hotel folios</h3><div class="tot">${K(S.b.filter(b=>b.st==='in').reduce((a,b)=>a+Math.max(0,dueB(b)),0))}</div><div class="lab">Hotel balances only</div></div></div><div class="card" style="margin-top:14px"><h3>Restaurant bills</h3>${S.sales.map(x=>`<div class="item"><div class="f"><b>${esc(x.guest||'Walk-in')} · ${rk(x.a)}</b><small>${esc(x.id||'')} · Table ${esc(x.t||'—')} · ${esc(x.m||'Room folio')}</small></div>${x.room?`<span class="tag occ">Room ${esc(x.room)}</span>`:'<span class="tag ready">Separate</span>'}<button class="btn sm ghost" onclick="openRestaurantReceipt(S.sales.find(q=>q.id==='${esc(x.id)}'))">Bill</button></div>`).join('')||'<div class="empty">No restaurant bills yet.</div>'}</div><div class="card" style="margin-top:14px"><h3>Payments awaiting review</h3>${S.sig.filter(x=>x.st!=='matched').map(x=>`<div class="item"><div class="f"><b>${rk(x.amt)} · ${esc(x.app)}</b><small>${esc(x.payer||'Unknown')} · ${esc(x.ref||'No reference')}</small></div><button class="btn sm ghost" onclick="sigM('${esc(x.id)}')">Match</button></div>`).join('')||'<div class="empty">No pending payment signals.</div>'}</div>`;
 // Include new separated entities in backup and persistence.
