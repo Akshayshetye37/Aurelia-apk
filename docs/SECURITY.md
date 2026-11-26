@@ -9,6 +9,20 @@ This document records a preliminary static review of Aurelia PMS source. It is n
 - The maintained payment policy on `main` exposes **Aurelia UPI only**. Other provider integrations from historical branches are not part of the enabled payment collection path.
 - Android native implementation is generated from Capacitor and the checked-in `android/templates`; the template directory must be preserved during generation.
 
+## Aurelia UPI financial-hardening update — 26 November 2026
+
+The dedicated branch `feature/aurelia-upi-financial-hardening-2026-11-26` adds the following source-level controls:
+
+- Payment-related identifiers use Web Crypto `randomUUID()` or `getRandomValues()`; there is no `Math.random()` or timestamp fallback.
+- Aurelia UPI audit writes are awaited. The UI does not present an audit entry as durable until the encrypted repository transaction succeeds; failures are surfaced.
+- Native SQLCipher schema version 9 adds `aurelia_upi_reference_claims`. A unique reference key and unique (reference type, entity) pair enforce single-use payment/refund UTR claims inside a SQLite transaction.
+- Payment confirmation requires a bank UTR/reference and atomically claims it before the payment record can proceed. Replaying the same claim for the same entity and amount is idempotent; reuse by a different entity or altered amount is rejected.
+- Refund completion claims the outgoing transfer reference in the same uniqueness namespace.
+
+The new regression contract suite is `tests/aurelia-upi-security.test.mjs`. These source changes are not yet represented as a completed CI run or device qualification until the branch's workflow runs finish.
+
+**Important unchanged release blockers:** SQLCipher remains the intended canonical PMS store but is not yet wired to all live PMS reads/writes; legacy migration/rollback and background lock lifecycle remain unqualified. Android native compilation, database migration from version 8 on supported devices, PIN/recovery/biometric negative cases, notification observer behavior, and full real-device UPI/bank reconciliation remain outstanding. No real-money production readiness is claimed.
+
 ## Implemented source-level controls
 
 - The Android native patch strips camera and legacy shared-storage permission declarations and explicitly sets android:allowBackup to false.
