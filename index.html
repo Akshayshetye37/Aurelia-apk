@@ -1712,7 +1712,7 @@ SUB.io=function(){
 #toast{transition:opacity .25s, transform .25s cubic-bezier(.22,.8,.28,1) !important}
 
 /* Legacy floating booking action disabled. */
-#hor-book{display:none!important;
+#hor-book{
   position:fixed;right:16px;bottom:calc(88px + env(safe-area-inset-bottom,0px));z-index:36;
   display:flex;align-items:center;gap:8px;height:50px;padding:0 16px 0 14px;border:0;border-radius:999px;
   background:linear-gradient(135deg,#c79b4b,#f1d995 50%,#d9b76e);color:#1b1303;
@@ -1730,7 +1730,7 @@ SUB.io=function(){
   box-shadow:0 8px 24px rgba(0,0,0,.35);animation:fx-rise .45s .08s both;
 }
 body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!important}
-@media(max-width:380px){#hor-book span{display:none}#hor-book{width:50px;padding:0;justify-content:center}} #hor-book{display:none!important}
+@media(max-width:380px){#hor-book span{display:none}#hor-book{width:50px;padding:0;justify-content:center}} #hor-book{bottom:calc(148px + env(safe-area-inset-bottom,0px))!important}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
