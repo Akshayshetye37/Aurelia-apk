@@ -173,8 +173,10 @@ package com.aurelia.pms;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.provider.DocumentsContract;
 import android.database.Cursor;
 import android.util.Base64;
@@ -215,7 +217,7 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(CapacitorPmsStoragePlugin.class);
     registerPlugin(AureliaNativeActionsPlugin.class);
     super.onCreate(savedInstanceState);
-    if (!BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(false);
+    if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) WebView.setWebContentsDebuggingEnabled(false);
     if (bridge != null && bridge.getWebView() != null) {
       android.webkit.WebSettings appSettings = bridge.getWebView().getSettings();
       appSettings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
