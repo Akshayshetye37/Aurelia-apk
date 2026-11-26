@@ -42,6 +42,8 @@ test('payment and refund references are claimed atomically by the encrypted nati
   const app = await read('src/aurelia-upi/app.mjs');
   assert.match(schema, /VERSION\s*=\s*9/);
   assert.match(schema, /aurelia_upi_reference_claims\(receiving_vpa TEXT NOT NULL,reference TEXT NOT NULL/);
+  assert.match(schema, /PRIMARY KEY\\(receiving_vpa,reference\\)/);
+  assert.match(schema, /upi_reference_legacy_vpa_missing/);
   assert.match(schema, /UNIQUE\(reference_type,entity_id\)/);
   assert.match(schema, /claimUpiReference/);
   assert.match(schema, /SELECT entity_type,entity_id,data_json FROM pms_entities WHERE entity_type IN/);
