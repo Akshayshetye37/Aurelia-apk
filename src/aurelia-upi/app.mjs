@@ -36,6 +36,8 @@ const state = {
 let context = null;
 let ticker = null;
 let domObserver = null;
+const actionLocks = new Set();
+let collectionInFlight = false;
 
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -92,8 +94,18 @@ async function refreshData() {
       repository.getUpiObserverStatus().catch(() => ({ available: false, notificationAccessEnabled: false, listenerConnected: false, lastConnectedAt: 0 }))
     ]);
     state.sessions = sessions.map(row => row.data || row);
+    state.payments = payments.map(row => row.data || row);
+    // A manually verified payment awaiting PMS posting keeps its VPA queue slot
+    // reserved. Do not promote another request until the posting saga is complete.
+    const pendingSessionIds = new Set(state.payments
+      .filter(row => row.status === "CONFIRMED_PENDING_PMS")
+      .map(row => row.sessionId));
+    const pendingVpas = new Set(state.sessions
+      .filter(row => pendingSessionIds.has(row.id))
+      .map(row => String(row.vpa || "").toLowerCase()).filter(Boolean));
     // Recover FIFO ownership after process death or an interrupted previous promotion.
     for (const receivingVpa of new Set(state.sessions.map(row => String(row.vpa || "").toLowerCase()).filter(Boolean))) {
+      if (pendingVpas.has(receivingVpa)) continue;
       const promoted = promoteNextSession(state.sessions, receivingVpa);
       if (promoted.promoted) {
         await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_RECOVERED");
@@ -101,7 +113,6 @@ async function refreshData() {
       }
     }
     state.evidence = evidence.map(row => row.data || row);
-    state.payments = payments.map(row => row.data || row);
     state.refunds = refunds.map(row => row.data || row);
     state.audit = auditRows.map(row => row.data || row);
     state.observerStatus = observerStatus;
@@ -608,22 +619,22 @@ async function confirmEvidence(id) {
   if (!["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED", "CONFIRMED"].includes(session.status)) {
     throw new Error("This collection is not eligible for payment reconciliation.");
   }
+
   const existingPayment = state.payments.find(row => row.sessionId === session.id);
   const alreadyApplied = ["CONFIRMED", "APPLIED_TO_PMS"].includes(existingPayment?.status);
   const now = new Date().toISOString();
   const alreadyConfirmed = session.status === SESSION_STATUS.CONFIRMED;
-  let confirmedSession = session;
-  if (!alreadyConfirmed) {
-    const reviewSession = session.status === SESSION_STATUS.REVIEW_REQUIRED
-      ? session
-      : transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: id });
-    confirmedSession = transitionSession(reviewSession, SESSION_STATUS.CONFIRMED, {
-      manualVerified: true,
-      confirmedBy: "LOCAL_OPERATOR",
-      confirmedAt: now,
-      transactionReference: utr || null
-    });
+
+  // Persist the review lock first. This keeps the FIFO slot occupied while a
+  // verified payment is being applied to the PMS ledger.
+  const reviewSession = alreadyConfirmed || session.status === SESSION_STATUS.REVIEW_REQUIRED
+    ? session
+    : transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: id });
+  if (!alreadyConfirmed && reviewSession !== session) {
+    await repository.saveSession(reviewSession, "AURELIA_UPI_PAYMENT_REVIEW_LOCKED");
+    state.sessions = state.sessions.map(row => row.id === reviewSession.id ? reviewSession : row);
   }
+
   const payment = {
     ...(existingPayment || {}),
     id: existingPayment?.id || "payment_" + session.id,
@@ -646,6 +657,13 @@ async function confirmEvidence(id) {
     ? state.payments.map(row => row.id === payment.id ? payment : row)
     : [payment, ...state.payments];
 
+  const confirmedSession = alreadyConfirmed ? session : transitionSession(reviewSession, SESSION_STATUS.CONFIRMED, {
+    manualVerified: true,
+    confirmedBy: "LOCAL_OPERATOR",
+    confirmedAt: now,
+    transactionReference: utr || null
+  });
+
   try {
     if (!alreadyApplied) {
       if (session.kind === "folio" && session.bookingId) {
@@ -659,31 +677,24 @@ async function confirmEvidence(id) {
       } else {
         payment.status = "CONFIRMED";
       }
-    } else {
-      payment.status = existingPayment.status;
     }
+
+    // The bank-confirmed session is finalized only after the PMS post succeeds.
+    // If this write fails, the pending payment remains retryable and the review
+    // state continues to reserve the queue slot.
     if (!alreadyConfirmed) {
       await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
+      state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
     }
+    await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
   } catch (error) {
-    if (!alreadyApplied) {
-      payment.status = "CONFIRMED_PENDING_PMS";
-      await repository.savePayment(payment, "AURELIA_UPI_PMS_APPLY_FAILED");
-      state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
-    }
+    if (!alreadyApplied) payment.status = "CONFIRMED_PENDING_PMS";
+    await repository.savePayment(payment, "AURELIA_UPI_PMS_APPLY_FAILED").catch(() => {});
+    state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
     throw new Error("Bank credit verified and recorded, but PMS posting/finalization needs retry: " + (error?.message || "unknown error"));
   }
 
-  try {
-    await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
-    state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
-  } catch (error) {
-    if (!alreadyApplied) {
-      payment.status = "CONFIRMED_PENDING_PMS";
-      state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
-    }
-    throw new Error("PMS posting succeeded but Aurelia UPI finalization needs retry: " + (error?.message || "storage error"));
-  }
+  state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
   evidence.status = "CONFIRMED";
   evidence.matchDecision = "CONFIRMED";
   evidence.reviewedAt = now;
@@ -716,24 +727,50 @@ async function confirmEvidence(id) {
 async function retryPendingPosting(sessionId) {
   const session = state.sessions.find(row => row.id === sessionId);
   const payment = state.payments.find(row => row.sessionId === sessionId && row.status === "CONFIRMED_PENDING_PMS");
-  if (!session || session.status !== SESSION_STATUS.CONFIRMED || !payment) {
-    throw new Error("No verified Aurelia UPI payment is waiting for PMS posting.");
+  if (!session || !payment || payment.manualVerified !== true) {
+    throw new Error("No manually verified Aurelia UPI payment is waiting for PMS posting.");
   }
   if (!repository.isNative) throw new Error("Unlock encrypted Android PMS storage before retrying posting.");
+
+  let reviewSession = session;
+  if (session.status !== SESSION_STATUS.CONFIRMED && session.status !== SESSION_STATUS.REVIEW_REQUIRED) {
+    reviewSession = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, {
+      observedEvidenceId: payment.evidenceId || session.observedEvidenceId || null
+    });
+    await repository.saveSession(reviewSession, "AURELIA_UPI_PAYMENT_REVIEW_RECOVERED");
+    state.sessions = state.sessions.map(row => row.id === reviewSession.id ? reviewSession : row);
+  }
+
   if (session.kind === "folio" && session.bookingId) {
     if (typeof context?.applyFolioPayment !== "function") throw new Error("Aurelia folio posting bridge is unavailable.");
     await context.applyFolioPayment(session, payment.transactionReference || "");
-    payment.status = "APPLIED_TO_PMS";
   } else if (session.kind === "restaurant" && session.tableId) {
     if (typeof context?.applyRestaurantPayment !== "function") throw new Error("Aurelia dining posting bridge is unavailable.");
     await context.applyRestaurantPayment(session, payment.transactionReference || "");
-    payment.status = "APPLIED_TO_PMS";
-  } else {
-    payment.status = "CONFIRMED";
   }
+
+  if (reviewSession.status !== SESSION_STATUS.CONFIRMED) {
+    const confirmed = transitionSession(reviewSession, SESSION_STATUS.CONFIRMED, {
+      manualVerified: true,
+      confirmedBy: payment.confirmedBy || "LOCAL_OPERATOR",
+      confirmedAt: payment.confirmedAt || new Date().toISOString(),
+      transactionReference: payment.transactionReference || null
+    });
+    await repository.saveSession(confirmed, "AURELIA_UPI_PAYMENT_CONFIRMATION_RECOVERED");
+    state.sessions = state.sessions.map(row => row.id === confirmed.id ? confirmed : row);
+  }
+
+  payment.status = session.kind === "general" ? "CONFIRMED" :
+    (session.kind === "folio" || session.kind === "restaurant" ? "APPLIED_TO_PMS" : "CONFIRMED");
   await repository.savePayment(payment, "AURELIA_UPI_PMS_POSTING_RETRIED");
   state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
+
   audit("PMS posting recovered", session.reference);
+  const promoted = promoteNextSession(state.sessions, session.vpa);
+  if (promoted.promoted) {
+    await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
+    state.sessions = promoted.sessions;
+  }
   notify("The verified Aurelia UPI payment is now posted to the PMS ledger.");
   rerender();
 }
@@ -958,13 +995,30 @@ function onActionClick(event) {
     if (action === "complete-refund") { await completeRefund(id); return; }
     if (action === "retry-posting") { await retryPendingPosting(id); return; }
   };
-  run().catch(error => notify(error?.message || "Aurelia UPI action failed."));
+  const lockKey = action + ":" + String(id || "");
+  if (actionLocks.has(lockKey)) return;
+  actionLocks.add(lockKey);
+  button.disabled = true;
+  run().catch(error => notify(error?.message || "Aurelia UPI action failed."))
+    .finally(() => {
+      actionLocks.delete(lockKey);
+      if (button.isConnected) button.disabled = false;
+    });
 }
 
 function onSubmit(event) {
   if (event.target?.id !== "au-collect-form") return;
   event.preventDefault();
-  createCollection(event.target).catch(error => notify(error?.message || "Could not create Aurelia UPI request."));
+  if (collectionInFlight) return;
+  collectionInFlight = true;
+  const submit = event.target.querySelector('[type="submit"]');
+  if (submit) submit.disabled = true;
+  createCollection(event.target)
+    .catch(error => notify(error?.message || "Could not create Aurelia UPI request."))
+    .finally(() => {
+      collectionInFlight = false;
+      if (submit?.isConnected) submit.disabled = false;
+    });
 }
 
 function onKindChange(event) {

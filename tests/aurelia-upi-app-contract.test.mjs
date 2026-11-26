@@ -53,3 +53,36 @@ test('bank statement import stores normalized UPI rows as evidence without retai
   assert.match(domain, /export function parseBankStatementCsv/);
   assert.match(domain, /source: "BANK_STATEMENT_CSV"/);
 });
+
+
+test('verified payment keeps its FIFO slot until PMS posting and session finalization complete', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  const refresh = app.slice(app.indexOf('async function refreshData'), app.indexOf('async function ensureLoaded'));
+  assert.match(refresh, /pendingSessionIds/);
+  assert.match(refresh, /pendingVpas\.has\(receivingVpa\)/);
+  const confirm = app.slice(app.indexOf('async function confirmEvidence'), app.indexOf('async function retryPendingPosting'));
+  assert.ok(confirm.indexOf('saveSession(reviewSession') < confirm.indexOf('applyFolioPayment'));
+  assert.ok(confirm.indexOf('applyFolioPayment') < confirm.indexOf('saveSession(confirmedSession'));
+  const retry = app.slice(app.indexOf('async function retryPendingPosting'), app.indexOf('async function rejectEvidence'));
+  assert.match(retry, /payment\.manualVerified !== true/);
+  assert.match(retry, /AURELIA_UPI_PAYMENT_CONFIRMATION_RECOVERED/);
+  assert.match(retry, /AURELIA_UPI_QUEUE_PROMOTED/);
+});
+
+test('collection submission and payment review actions reject concurrent duplicate taps', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  assert.match(app, /const actionLocks = new Set\(\)/);
+  assert.match(app, /if \(actionLocks\.has\(lockKey\)\) return/);
+  assert.match(app, /if \(collectionInFlight\) return/);
+});
+
+test('restaurant settlement sheet exposes Aurelia UPI only', async () => {
+  const html = await read('index.html');
+  const start = html.indexOf("window.__restPay={table:Number(t.n),amount,method:'UPI'}");
+  const end = html.indexOf('function selectRestPay(method)', start);
+  assert.ok(start >= 0 && end > start);
+  const sheet = html.slice(start, end);
+  assert.match(sheet, /data-pay="UPI"/);
+  assert.match(sheet, /Aurelia UPI/);
+  assert.doesNotMatch(sheet, /data-pay="Cash"|Cash/);
+});
