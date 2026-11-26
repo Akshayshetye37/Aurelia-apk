@@ -4,6 +4,13 @@ const stableId = value =>
   (typeof value === "number" && Number.isSafeInteger(value));
 
 const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
+const cloneJson = value => {
+  let serialized;
+  try { serialized = JSON.stringify(value); }
+  catch { throw new TypeError("PMS domain entities must contain JSON-safe data"); }
+  if (typeof serialized !== "string") throw new TypeError("PMS domain entities must contain JSON-safe data");
+  return JSON.parse(serialized);
+};
 const issue = (path, message) => ({ code: "custom", path, message });
 
 function validateBase(row, issues) {
@@ -86,7 +93,7 @@ const schemas = Object.fromEntries(Object.entries(validators).map(([type, valida
       validate(value, issues);
       return issues.length
         ? { success: false, error: { issues } }
-        : { success: true, data: value };
+        : { success: true, data: cloneJson(value) };
     }
   })
 ]));
