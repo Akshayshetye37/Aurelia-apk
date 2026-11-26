@@ -245,11 +245,12 @@ export function parseIncomingUpiNotification(input = {}) {
   if (!text) return { ok: false, reason: "empty_alert" };
   const normalized = text.replace(/\s+/g, " ");
   const lower = normalized.toLowerCase();
-  const creditPattern = /\b(?:credited|received|deposit(?:ed)?|payment\s+received|money\s+received|upi\/cr|paid you|transferred\s+to\s+(?:your\s+)?(?:a\/c|account|wallet)|added\s+to\s+(?:your\s+)?(?:account|wallet))\b/i;
-  const creditMatch = creditPattern.exec(normalized);
-  if (!creditMatch) return { ok: false, reason: "credit_language_missing" };
-  const debitMatch = /\b(?:debited|withdrawn|deducted|spent|paid\s+to|sent\s+to|money\s+sent)\b/i.exec(normalized);
-  if (debitMatch && debitMatch.index < creditMatch.index) return { ok: false, reason: "debit_alert_rejected" };
+  const creditPattern = /\\b(?:credited|received(?:\\s+from)?|deposit(?:ed)?|payment\\s+received|money\\s+received|upi\\/cr|paid\\s+you|transferred\\s+to\\s+your\\s+(?:a\\/c|account|wallet)|added\\s+to\\s+your\\s+(?:account|wallet))\\b/i;
+  if (!creditPattern.test(normalized)) return { ok: false, reason: "credit_language_missing" };
+  // Any explicit outgoing/failure wording makes the whole alert ineligible.
+  // "Payment successful" is not a credit signal: debit alerts commonly use it.
+  const debitPattern = /\\b(?:debited|withdrawn|deducted|spent|paid\\s+to|sent\\s+to|money\\s+sent|you\\s+paid|payment\\s+failed|declined|reversed|refund|otp)\\b/i;
+  if (debitPattern.test(normalized)) return { ok: false, reason: "debit_alert_rejected" };
 
   // Remove balance/limit clauses before amount extraction so an available balance is not mistaken for the credit.
   const balancePattern = /(?:(?:avl|avail|available|tot|total|ledger|clear|curr|current)(?:\s+(?:bal|balance|limit))?|bal|balance)\b[\s:=-]*(?:(?:rs\.?|inr|₹)\s*)?\b\d[\d,]{0,15}(?:\.\d{1,2})?/gi;
@@ -275,8 +276,8 @@ export function parseIncomingUpiNotification(input = {}) {
   catch { return { ok: false, reason: "amount_invalid" }; }
 
   const utrPatterns = [
-    /(?:upi\s*ref(?:erence)?\s*(?:no\.?|num)?|utr(?:\s*no\.?)?|rrn(?:\s*no\.?)?|txn\s*(?:id|ref|#)?|transaction\s*id|ref\s*no\.?)[\s:=-]+([a-zA-Z0-9_-]{6,35})/i,
-    /(?:upi\/(?:[0-9]+\/|cr\/)([a-zA-Z0-9_-]{6,35}))/i,
+    /(?:upi\s*ref(?:erence)?\s*(?:no\.?|num)?|utr(?:\s*no\.?)?|rrn(?:\s*no\.?)?|txn\s*(?:id|ref|#)?|transaction\s*id|ref\s*no\.?)[\s:=-]+([a-zA-Z0-9_-]{8,30})/i,
+    /(?:upi\/(?:[0-9]+\/|cr\/)([a-zA-Z0-9_-]{8,30}))/i,
     /\b([0-9]{12})\b/
   ];
   let utr = null;
