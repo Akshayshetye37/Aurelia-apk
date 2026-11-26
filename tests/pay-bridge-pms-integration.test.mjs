@@ -28,6 +28,8 @@ test('PMS requires a visible user approval before binding to Aurelia Gateway', (
   assert.match(client, /checkSignatures\(context\.getPackageName\(\), PACKAGE\)/);
   assert.match(client, /pendingNonce/);
   assert.match(client, /MSG_HANDSHAKE_RESULT/);
+  assert.match(client, /Aurelia Gateway/);
+  assert.doesNotMatch(client, /Pay Bridge/);
 });
 
 test('protocol v1 advertises no payment or provider-management capability', () => {
