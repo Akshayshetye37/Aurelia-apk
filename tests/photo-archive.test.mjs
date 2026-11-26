@@ -50,7 +50,7 @@ test("native legacy photo migration verifies every write before purging plaintex
   const values = new Map();
   let source = [["guest:1", "data:image/jpeg;base64,AA=="]];
   let deleted = false;
-  const nativeWindow = { AureliaNative: true };
+  const nativeWindow = { Capacitor: { Plugins: { AureliaNativeActions: { postMessage: async () => ({ accepted: true }) } } } };
   nativeWindow.nat = request => {
     queueMicrotask(() => {
       let payload = true;
