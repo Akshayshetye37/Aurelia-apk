@@ -35,3 +35,12 @@ test("photo persistence has no localStorage or volatile-memory fallback",()=>{
  assert.match(safe,/preferences\.setItem/);
  assert.doesNotMatch(safe,/localStorage/);
 });
+
+test("backup restore verifies the canonical snapshot instead of the preferences-only Web Storage adapter", () => {
+ const start=html.indexOf("async function restoreGo(){"),end=html.indexOf("\nfunction clonePmsRuntimeState",start);
+ assert.ok(start>=0&&end>start);
+ const restore=html.slice(start,end);
+ assert.match(restore,/AureliaRepositoryCompatibility\.readBack\(\)/);
+ assert.match(restore,/readBack\?\.snapshot/);
+ assert.doesNotMatch(restore,/localStorage|__aureliaStorage/);
+});

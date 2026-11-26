@@ -1022,7 +1022,7 @@ async function restoreGo(){
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
   if(!await persist())throw new Error('Restored records could not be saved to durable device storage.');
-  const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+  const readBack=await window.AureliaRepositoryCompatibility.readBack();const saved=readBack?.snapshot||null;
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
   S.rst=null;S.rstMode=null;location.reload();return true;
  }catch(e){
