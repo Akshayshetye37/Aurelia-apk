@@ -118,6 +118,15 @@ test('persist returns success only after exact durable read-back', () => {
   assert.equal(brokenContext.LOCAL_STATE_STATUS, 'write-failed');
 });
 
+test('reset only reloads after persisted application state is confirmed absent', () => {
+  const start = html.indexOf('function resetAll(){');
+  const end = html.indexOf('/* backup engine */', start);
+  const reset = html.slice(start, end);
+  assert.ok(reset.includes('storage.removeItem(SK)'));
+  assert.ok(reset.includes('storage.getItem(SK)!==null'));
+  assert.ok(reset.includes('Reset failed: device storage could not be cleared'));
+});
+
 test('Stays and Folio expose the extension and the web build packages its rules', () => {
   assert.ok(html.includes('scripts/stay-extension.js'));
   assert.ok(html.includes('Change departure before check-in'));
