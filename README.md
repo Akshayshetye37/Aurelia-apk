@@ -87,7 +87,7 @@ A UPI intent/QR is a payment request, not independent proof of settlement. Staff
 
 ## Aurelia UPI workspace
 
-The Aurelia UPI collection, notification evidence, FIFO queue, manual reconciliation, refund register and local QR implementation are documented in [docs/AURELIA_UPI.md](docs/AURELIA_UPI.md). The Sovereign PMS shell uses Overview, Chambers, Stays, Dining, Vault and Aurelia UPI as primary navigation. The supplied HTML is used as the visual reference; its static demo data and simulated payment confirmation are not used as production settlement logic.
+The Aurelia UPI collection, notification evidence, FIFO queue, manual reconciliation, refund register and local QR implementation are documented in [docs/AURELIA_UPI.md](docs/AURELIA_UPI.md). The Aurelia PMS shell uses Overview, Chambers, Stays, Dining, Vault and Aurelia UPI as primary navigation. The supplied HTML is used as the visual reference; its static demo data and simulated payment confirmation are not used as production settlement logic.
 
 ## Branch audit and adoption policy — 24 November 2026
 
