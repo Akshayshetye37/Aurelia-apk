@@ -21,6 +21,7 @@ export function createPhotoArchive({
   const pendingNative = new Map();
   let nativeSequence = 0;
   let legacyMigration = null;
+  const hasNativeBridge = () => Boolean(hasNativeBridge() || nativeWindow?.Capacitor?.Plugins?.AureliaNativeActions?.postMessage);
 
   if (nativeWindow) {
     nativeWindow.aureliaNativePhotoResult = (id, ok, payload) => {
@@ -41,7 +42,7 @@ export function createPhotoArchive({
 
   function native(type, extra = {}) {
     return new Promise((resolve, reject) => {
-      if (!nativeWindow?.AureliaNative || typeof nativeWindow.nat !== "function") {
+      if (!hasNativeBridge() || typeof nativeWindow.nat !== "function") {
         reject(new Error("Native photo storage is only available in the Android app"));
         return;
       }
@@ -115,7 +116,7 @@ export function createPhotoArchive({
   }
 
   async function migrateLegacyPhotosNow() {
-    if (nativeWindow?.AureliaNative) {
+    if (hasNativeBridge()) {
       if (!legacyMigration) {
         legacyMigration = migrateLegacyPhotosNative().catch(error => {
           legacyMigration = null;
@@ -145,7 +146,7 @@ export function createPhotoArchive({
   async function put(key, data) {
     if (!key || typeof data !== "string" || !/^data:image\//i.test(data)) throw new TypeError("Photo archive requires a stable key and image data URL.");
     await migrateLegacyPhotosNow();
-    if (nativeWindow?.AureliaNative) {
+    if (hasNativeBridge()) {
       await native("photoStore", { key, data });
       if (await native("photoLoad", { key }) !== data) throw new Error("Native photo write failed exact read-back verification.");
       return true;
@@ -170,7 +171,7 @@ export function createPhotoArchive({
   async function get(key) {
     if (!key) return null;
     await migrateLegacyPhotosNow();
-    if (nativeWindow?.AureliaNative) return native("photoLoad", { key });
+    if (hasNativeBridge()) return native("photoLoad", { key });
     if (sandboxed()) return null;
     const db = await database();
     try {
@@ -184,7 +185,7 @@ export function createPhotoArchive({
 
   async function archive() {
     await migrateLegacyPhotosNow();
-    if (nativeWindow?.AureliaNative) return native("photoArchive");
+    if (hasNativeBridge()) return native("photoArchive");
     if (sandboxed()) return {};
     const output = {};
     const db = await database();
@@ -211,7 +212,7 @@ export function createPhotoArchive({
     for (const [key, value] of entries) {
       if (!key || typeof value !== "string" || !/^data:image\//i.test(value)) throw new Error("Photo archive contains an invalid original image");
     }
-    if (nativeWindow?.AureliaNative) {
+    if (hasNativeBridge()) {
       await native("photoRestore", { archive });
       const stored = await native("photoArchive");
       if (!stored || entries.some(([key, value]) => stored[key] !== value) ||
