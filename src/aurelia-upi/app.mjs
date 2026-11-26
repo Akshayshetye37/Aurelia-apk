@@ -505,8 +505,8 @@ async function confirmEvidence(id) {
   if (!evidence) throw new Error("Payment evidence was not found.");
   const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
   if (!session) throw new Error("This alert has no unique collection session. Manual folio allocation is required.");
-  const evidenceStatus = evidence.matchDecision || evidence.status;
-  if (["DUPLICATE", "CONFLICT", "REJECTED", "CONFIRMED"].includes(evidenceStatus)) {
+  const terminalEvidenceStates = ["DUPLICATE", "CONFLICT", "REJECTED", "CONFIRMED"];
+  if ([evidence.status, evidence.matchDecision].some(value => terminalEvidenceStates.includes(value))) {
     throw new Error("This evidence has already been reviewed and cannot settle another collection.");
   }
   if (!Number.isSafeInteger(Number(evidence.amountPaise)) ||
@@ -525,7 +525,7 @@ async function confirmEvidence(id) {
   }
   if (utr && state.evidence.some(row => row.id !== evidence.id &&
       String(row.utr || "").toUpperCase() === utr &&
-      ["CONFIRMED", "DUPLICATE", "CONFLICT"].includes(row.status))) {
+      [row.status, row.matchDecision].some(value => ["CONFIRMED", "DUPLICATE", "CONFLICT"].includes(value)))) {
     throw new Error("This UTR is already present in reviewed payment evidence.");
   }
   if (!["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED", "CONFIRMED"].includes(session.status)) {
@@ -739,7 +739,7 @@ async function completeRefund(id) {
   if (!refund) throw new Error("Refund record was not found.");
   const verified = document.getElementById("au-refund-verify-" + id)?.checked === true;
   const transferReference = String(document.getElementById("au-refund-utr-" + id)?.value || "").trim().toUpperCase();
-  if (state.refunds.some(row => row.id !== id &&
+  if (transferReference && state.refunds.some(row => row.id !== id &&
       String(row.transferReference || "").toUpperCase() === transferReference)) {
     throw new Error("This refund transfer UTR is already recorded against another refund.");
   }

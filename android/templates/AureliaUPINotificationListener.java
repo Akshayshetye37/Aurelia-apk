@@ -24,7 +24,8 @@ import java.util.regex.Pattern;
  */
 public final class AureliaUPINotificationListener extends NotificationListenerService {
   private static final String TAG = "AureliaUPIObserver";
-  // Curated from the upstream YouPI-PG banking-app allowlist; alerts are still content-filtered.
+  // Narrow financial-app allowlist. Gmail/Google Messages/Samsung Messages are
+  // notification-preview sources only; no inbox or SMS permission is requested.
   private static final Set<String> ALLOWED_PACKAGES = new HashSet<>(Arrays.asList(
     "com.axis.mobile",
     "com.bankofbaroda.mconnect",
@@ -49,7 +50,6 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
     "com.mobikwik_new",
     "com.msf.kbank.mobile",
     "com.myairtelapp",
-    "com.nextbillion.groww",
     "com.phonepe.app",
     "com.samsung.android.messaging",
     "com.samsung.android.spay",
@@ -57,9 +57,7 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
     "com.sbi.upi",
     "com.snapwork.hdfc",
     "com.tatadigital.tcp",
-    "com.truecaller",
     "com.upi.axispay",
-    "in.amazon.mshop.android.shopping",
     "in.gokiwi.kiwitpap",
     "in.org.npci.upiapp",
     "indwin.c3.shareapp",

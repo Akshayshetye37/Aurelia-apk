@@ -25,6 +25,12 @@ test('notification observer is opt-in, allowlisted, credit-filtered and has no S
   assert.match(source, /PMS may be locked/);
   assert.doesNotMatch(source, /READ_SMS|SmsManager|HttpURLConnection|OkHttpClient/);
   assert.doesNotMatch(source, /Log\.[idv]\([^\n]*(?:text|rawText)/i);
+  assert.match(source, /"com\.google\.android\.gm"/);
+  assert.match(source, /"com\.google\.android\.apps\.messaging"/);
+  assert.match(source, /"com\.samsung\.android\.messaging"/);
+  assert.doesNotMatch(source, /com\.truecaller|com\.nextbillion\.groww|in\.amazon\.mshop\.android\.shopping/);
+  assert.match(source, /"paid to"/);
+  assert.doesNotMatch(source, /private static final String\[\] CREDIT = \{[^}]*payment successful/);
 });
 
 test('native plugin exposes evidence review and the notification settings bridge', async () => {
@@ -38,6 +44,8 @@ test('native plugin exposes evidence review and the notification settings bridge
   assert.match(plugin, /updateUpiEvidence/);
   assert.match(plugin, /getUpiObserverStatus/);
   assert.match(plugin, /manualVerified/);
+  const repository = await read('android/templates/LocalPmsRepository.java');
+  assert.match(repository, /if\(status\.equals\(current\)\)/);
   assert.match(actions, /openNotificationAccessSettings/);
   assert.match(patcher, /AureliaUPINotificationListener/);
   assert.match(patcher, /BIND_NOTIFICATION_LISTENER_SERVICE/);
