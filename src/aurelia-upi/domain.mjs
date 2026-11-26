@@ -161,7 +161,9 @@ export function transitionSession(session, nextStatus, patch = {}, nowMs = Date.
     throw error;
   }
   const protectedFields = new Set([
-    "id", "amountPaise", "currency", "rail", "vpa", "reference", "createdAt", "upiUri"
+    "id", "kind", "bookingId", "tableId", "guestName", "room",
+    "amountPaise", "currency", "rail", "vpa", "payeeName", "reference",
+    "note", "createdAt", "upiUri"
   ]);
   for (const key of Object.keys(patch)) {
     if (protectedFields.has(key)) throw new TypeError("Immutable Aurelia UPI field: " + key);
@@ -188,14 +190,20 @@ export function enqueueSession(sessions, session, {
   nowMs = Date.now(), activeWindowMs = DEFAULT_ACTIVE_WINDOW_MS
 } = {}) {
   const rows = (Array.isArray(sessions) ? sessions : []).map(row => ({ ...row }));
-  const hasOwner = rows.some(row =>
-    row.vpa.toLowerCase() === session.vpa.toLowerCase() &&
+  const key = session.vpa.toLowerCase();
+  const sameVpa = rows.filter(row => String(row.vpa || "").toLowerCase() === key);
+  const hasOwner = sameVpa.some(row =>
     ["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status)
   );
-  if (hasOwner) {
-    return rows.concat(transitionSession(session, "QUEUED", {
-      queuePosition: rows.filter(row => row.vpa.toLowerCase() === session.vpa.toLowerCase() && row.status === "QUEUED").length + 1
-    }, nowMs));
+  const queuedBefore = sameVpa.filter(row => row.status === "QUEUED").length;
+  if (hasOwner || queuedBefore > 0) {
+    const queued = transitionSession(session, "QUEUED", {
+      queuePosition: queuedBefore + 1
+    }, nowMs);
+    const updated = rows.concat(queued);
+    // If the previous owner has just been released, promote the oldest existing
+    // request before admitting the new request to the active slot.
+    return hasOwner ? updated : promoteNextSession(updated, key, { nowMs, activeWindowMs }).sessions;
   }
   return rows.concat(transitionSession(session, "ACTIVE", {
     expiresAt: new Date(nowMs + activeWindowMs).toISOString(),
@@ -334,12 +342,17 @@ export function matchEvidenceToSessions(evidence, sessions, {
   return { decision: "UNMATCHED", reason: "no_exact_amount_time_candidate", candidates: [] };
 }
 
-export function createRefundRecord({ paymentId, amountPaise, capturedPaise, reason = "" } = {}, nowMs = Date.now()) {
+export function createRefundRecord({
+  paymentId, amountPaise, capturedPaise, alreadyRefundedPaise = 0, reason = ""
+} = {}, nowMs = Date.now()) {
   const amount = Number(amountPaise);
   const captured = Number(capturedPaise);
+  const alreadyRefunded = Number(alreadyRefundedPaise);
   if (!paymentId || !Number.isSafeInteger(amount) || amount <= 0 ||
-      !Number.isSafeInteger(captured) || captured <= 0 || amount > captured) {
-    throw new TypeError("Refund must reference a confirmed Aurelia UPI payment and not exceed its captured amount.");
+      !Number.isSafeInteger(captured) || captured <= 0 ||
+      !Number.isSafeInteger(alreadyRefunded) || alreadyRefunded < 0 ||
+      amount + alreadyRefunded > captured) {
+    throw new TypeError("The cumulative refund amount cannot exceed the confirmed Aurelia UPI payment amount.");
   }
   return {
     id: makeId("ref"),
