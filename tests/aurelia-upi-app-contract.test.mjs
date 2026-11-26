@@ -11,6 +11,9 @@ test('Aurelia UPI reconciliation revalidates exact amount, UTR uniqueness and op
   assert.match(app, /This UTR is already linked to another Aurelia UPI payment/);
   assert.match(app, /CONFIRMED_PENDING_PMS/);
   assert.match(app, /retryPendingPosting/);
+  assert.match(app, /au-statement-account-verified/);
+  assert.match(app, /configured Aurelia UPI receiving account/);
+  assert.match(app, /receivingVpa/);
   assert.match(app, /AURELIA_UPI_PAYMENT_APPLIED/);
 });
 
