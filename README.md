@@ -11,17 +11,73 @@ Aurelia PMS is the property-management application maintained in this repository
 
 ## Payment security boundary
 
-**Aurelia UPI is the only enabled payment collection method in Aurelia PMS.**
+**Aurelia UPI is currently the only enabled payment collection method in Aurelia PMS.** No third-party gateway provider is currently integrated or enabled on `main`.
 
-All other payment rails and payment-provider gateway integrations are disabled in the main application:
+The planned payment architecture is **Aurelia PayBridge**, a first-class integration subsystem inside Aurelia PMS. PayBridge is intended to connect PMS to a separate, optional Android companion application named **Aurelia Gateway**. The design is documented below; this is an architectural plan, not a claim that PayBridge, Aurelia Gateway, or any provider integration is implemented or production-ready.
 
-- Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue integrations are not enabled in PMS.
-- Card, bank-transfer and third-party mobile-money choices are not offered in the PMS payment interface.
-- Provider selection, gateway checkout, gateway credentials, provider SDKs and provider webhook processing must not be added to the PMS main branch.
-- Payment collection controls fail closed: the UI exposes only Aurelia UPI and the application-side policy rejects non-UPI method selections.
-- The provider-integration branches are historical/development branches, not the enabled payment configuration for `main`. Do not merge them into `main` without an explicit, reviewed reactivation change.
+Current restrictions remain in force:
 
-This is a reversible application-level block, not deletion of historical branch data. To reactivate a provider in the future, make a deliberate source change, security review and end-to-end qualification first. Do not activate a provider merely by changing a saved preference or local setting.
+- Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay, CCAvenue and other provider integrations are not currently enabled in PMS.
+- Card, bank-transfer and third-party mobile-money choices are not currently offered as live payment methods.
+- Provider SDKs, provider credentials, gateway checkout and provider webhook processing are not enabled in the PMS main application.
+- Payment collection controls fail closed: the active collection flow exposes Aurelia UPI only and rejects non-UPI method selections.
+- Historical provider-integration branches are development material, not enabled configuration for `main`. Do not merge provider implementations or activate payment rails without explicit review and end-to-end qualification.
+
+The intended PayBridge architecture does not change these current restrictions. Any future activation requires implementation, security review, provider-specific qualification and verified end-to-end testing. A saved preference, installed companion app or successful client-side response must never activate a provider or establish that a payment has settled.
+
+## Aurelia PayBridge and the future Aurelia Gateway app
+
+### Product overview
+
+PayBridge is planned as a built-in subsystem of Aurelia PMS. Its purpose is to give PMS one stable, provider-independent interface for payment gateway capabilities supplied by a separate Android companion application, **Aurelia Gateway**.
+
+Aurelia Gateway is planned as an optional install. A PMS user who needs third-party gateway processing would install both applications, authorize their connection, configure a gateway/provider in Aurelia Gateway, and then use the capabilities made available to PMS through PayBridge. Users should not need a custom PMS integration for every provider.
+
+### Application responsibilities
+
+**Aurelia PMS / PayBridge owns:**
+
+- PMS payment intents, booking folios, invoices, balances and the canonical payment ledger.
+- Gateway-app discovery, authenticated connection state and user-approved connection authorization.
+- Reading the gateway app's versioned capability catalogue and presenting supported payment options.
+- Routing payment requests to the selected, authorized gateway/provider.
+- Validating the returned transaction evidence before the PMS records a payment.
+- PMS-side audit references, idempotency and reconciliation state.
+
+**Aurelia Gateway owns:**
+
+- The provider catalogue and provider-specific integrations (for example, Razorpay, PayU, Cashfree, Jio and other providers where supported and commercially enabled).
+- Provider onboarding/configuration and provider-specific checkout flows.
+- Provider API communication and provider transaction references.
+- Obtaining authoritative transaction status/evidence from provider services and reporting it through the agreed protocol.
+- Provider-specific capabilities and limitations, exposed to PMS through a capability catalogue.
+
+The provider examples are illustrative. Actual payment methods, refunds, settlement, availability and other capabilities must be confirmed against each provider's current APIs, commercial terms and eligibility.
+
+### Intended connection and payment flow
+
+1. PMS checks whether the genuine, compatible Aurelia Gateway app is installed.
+2. The applications establish a versioned, authenticated connection. The owner explicitly authorizes the pairing; installation or discovery alone does not establish trust.
+3. Aurelia Gateway exposes its supported providers, payment methods and capabilities. PMS displays only options that are configured, supported and enabled.
+4. PMS creates a uniquely identified payment intent and sends it through PayBridge to the selected gateway application/provider.
+5. Aurelia Gateway conducts the provider-specific payment workflow and obtains transaction evidence.
+6. PayBridge validates the response and its correlation to the original intent. For production payments, authoritative status must be verified through a trusted backend/provider API or a cryptographically authenticated server notification—not merely a client-side success screen, redirect or app-to-app message.
+7. The canonical PMS payment service applies an idempotent state transition and records verified payment evidence in the PMS ledger. Gateway applications must never write directly to or independently alter the PMS ledger.
+
+### Integration and security principles
+
+- Use a documented, versioned IPC/API contract so the gateway app can evolve independently of PMS. Android implementation may use signature-protected bound services/AIDL or another reviewed IPC mechanism, with package visibility and lifecycle constraints handled explicitly.
+- Separate app discovery, app authentication, connection authorization and payment authorization; they are distinct security decisions.
+- Keep provider secrets and authoritative signing credentials in an appropriately secured backend, not in browser storage, source files, APK resources or client-side configuration.
+- Authenticate and integrity-protect messages; validate request IDs, amounts, currency, merchant/account context, timestamps and transaction references.
+- Enforce idempotency, replay protection, duplicate-callback handling, explicit pending/failed/cancelled/refunded states and auditable reconciliation.
+- Treat provider capability declarations as input to the UI, not as proof of successful payment or settlement.
+- Keep provider failover and automatic routing disabled unless explicitly configured, tested and approved. Never silently retry a payment in a way that could charge the customer twice.
+- Keep the existing Aurelia UPI flow and ledger behavior isolated from future gateway adapters until the new integration passes its own acceptance and regression gates.
+
+### Current implementation status
+
+**Planned architecture only.** The PayBridge subsystem, companion app discovery/pairing protocol, provider capability catalogue and Aurelia Gateway application are not asserted to exist or be production-ready by this documentation. The current main-branch payment policy remains Aurelia UPI only. No third-party gateway, automatic settlement or provider routing is enabled by this plan.
 
 ## Payment accounting
 
@@ -47,7 +103,7 @@ A branch inventory identified 73 branches. Many feature, integration, backup and
 
 ### Explicitly excluded from the active main application
 
-Do not import multi-provider payment adapters, gateway SDKs, provider onboarding, Pay Bridge, gateway webhooks, or automatic settlement from `feature/multi-provider-payment-backend`, `feature/payment-provider-production-adapters`, `feature/pay-bridge-platform`, or similar historical branches. The active payment collection boundary remains Aurelia UPI only. Those branches are retained as historical development material and do not enable payment rails on `main`.
+Do not import multi-provider payment adapters, gateway SDKs, provider onboarding, gateway webhooks or automatic settlement from `feature/multi-provider-payment-backend`, `feature/payment-provider-production-adapters`, `feature/pay-bridge-platform`, or similar historical branches without a separate reviewed adoption. The approved direction is to design and implement PayBridge as a first-class PMS subsystem and connect it to the future Aurelia Gateway companion app through a versioned, authenticated protocol. The active payment collection boundary remains Aurelia UPI only until that work is implemented, qualified and explicitly enabled.
 
 ### APK workflow and verification boundary
 
