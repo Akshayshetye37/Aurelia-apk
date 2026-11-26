@@ -183,7 +183,7 @@ test("index startup verifies canonical repository before replaying PMS operation
   assert.match(loader, /PMS startup stopped safely/);
   assert.match(html, /type="application\/x-aurelia-deferred"/);
   assert.match(html, /async function persist\(\)/);
-  assert.match(html, /coordinator\.save\(snapshot\)/);
+  assert.match(html, /AureliaLocalFirstWrites\.save\(snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW/);
   assert.match(html, /normalized domain UI cutover remains disabled/);
   assert.doesNotMatch(loader, /provider-platform|gateway|pay-bridge|webhooks/i);
