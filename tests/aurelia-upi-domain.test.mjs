@@ -261,3 +261,25 @@ test('session collection identity fields cannot be rewritten during a status tra
     bookingId: 'booking-8'
   }), /Immutable Aurelia UPI field/);
 });
+
+test('bank statement CSV parser imports only dated UPI credits with exact amount and UTR', async () => {
+  const { parseBankStatementCsv } = await import('../src/aurelia-upi/domain.mjs');
+  const csv = [
+    'Date,Description,UTR,Debit,Credit,Type',
+    '26/11/2026 10:30:00,"UPI/CR/123456789012/guest@okaxis",123456789012,,250.00,CR',
+    '26/11/2026 10:31:00,"UPI/DR/123456789013/merchant@okaxis",123456789013,150.00,,DR',
+    '26/11/2026 10:32:00,"NEFT CREDIT salary",123456789014,,5000.00,CR'
+  ].join('\n');
+  const result = parseBankStatementCsv(csv);
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].amountPaise, 25000);
+  assert.equal(result.rows[0].utr, '123456789012');
+  assert.equal(result.rows[0].source, 'BANK_STATEMENT_CSV');
+  assert.equal(result.rejectedRows, 2);
+});
+
+test('bank statement CSV parser rejects missing date, amount or description columns', async () => {
+  const { parseBankStatementCsv } = await import('../src/aurelia-upi/domain.mjs');
+  assert.throws(() => parseBankStatementCsv('Narration,Credit\nUPI credit,100.00'), /Date/);
+  assert.throws(() => parseBankStatementCsv('Date,Narration\n26/11/2026,UPI credit'), /Credit or Amount/);
+});

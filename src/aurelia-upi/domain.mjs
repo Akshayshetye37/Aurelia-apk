@@ -306,6 +306,127 @@ export function parseIncomingUpiNotification(input = {}) {
   };
 }
 
+
+function parseStatementCsvRows(input) {
+  const text = String(input || "").replace(/^\uFEFF/, "");
+  if (!text.trim()) throw new TypeError("The bank statement CSV is empty.");
+  const firstLine = text.split(/\r?\n/, 1)[0] || "";
+  const delimiter = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ";" : ",";
+  const rows = [];
+  let fields = [], field = "", quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"' && field.length === 0) quoted = true;
+    else if (ch === delimiter) { fields.push(field); field = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      fields.push(field);
+      if (fields.some(value => String(value).trim())) rows.push(fields);
+      fields = []; field = "";
+    } else field += ch;
+    if (rows.length > 5001) throw new RangeError("Import no more than 5,000 bank statement rows at a time.");
+  }
+  if (quoted) throw new TypeError("The bank statement CSV contains an unterminated quoted field.");
+  if (field.length || fields.length) {
+    fields.push(field);
+    if (fields.some(value => String(value).trim())) rows.push(fields);
+  }
+  if (rows.length < 2) throw new TypeError("The bank statement CSV must contain a header and transaction rows.");
+  return rows;
+}
+
+function parseStatementDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const direct = Date.parse(raw);
+  if (Number.isFinite(direct)) return new Date(direct).toISOString();
+  const match = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(raw);
+  if (!match) return null;
+  const date = new Date(
+    Number(match[3]), Number(match[2]) - 1, Number(match[1]),
+    Number(match[4] || 0), Number(match[5] || 0), Number(match[6] || 0)
+  );
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function statementAmountPaise(value) {
+  const raw = String(value ?? "").trim().replace(/[₹,\s]/g, "").replace(/^INR/i, "");
+  if (!raw || raw === "-" || raw === "—") return 0;
+  const negative = raw.startsWith("-") || /^\(.*\)$/.test(raw);
+  const numeric = raw.replace(/[()+-]/g, "");
+  if (!/^\d{1,9}(?:\.\d{1,2})?$/.test(numeric)) return 0;
+  const paise = parseMoneyToPaise(numeric);
+  return negative ? -paise : paise;
+}
+
+/**
+ * Parses common Indian bank CSV exports into candidate UPI credit evidence.
+ * It never confirms or settles a payment. The operator must reconcile each row.
+ */
+export function parseBankStatementCsv(input) {
+  const rows = parseStatementCsvRows(input);
+  const headers = rows[0].map(value => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim());
+  const find = patterns => headers.findIndex(header => patterns.some(pattern => pattern.test(header)));
+  const dateIndex = find([/^date$/, /transaction date/, /^txn date$/, /value date/, /posting date/, /^timestamp$/]);
+  const descriptionIndex = find([/^description$/, /narration/, /particulars/, /remarks/, /^details$/]);
+  const channelIndex = find([/^mode$/, /^channel$/, /transaction mode/, /payment mode/]);
+  const creditIndex = find([/^credit$/, /credit amount/, /^deposit$/, /deposit amount/, /^cr$/]);
+  const debitIndex = find([/^debit$/, /debit amount/, /^withdrawal$/, /^dr$/]);
+  const amountIndex = find([/^amount$/, /transaction amount/, /^txn amount$/]);
+  const typeIndex = find([/^type$/, /dr cr/, /transaction type/, /txn type/, /credit debit/]);
+  const utrIndex = find([/^utr$/, /utr number/, /rrn/, /upi reference/, /reference number/, /^ref no$/, /transaction id/, /^txn id$/]);
+  if (dateIndex < 0) throw new TypeError("A Date / Transaction Date column is required.");
+  if (creditIndex < 0 && amountIndex < 0) throw new TypeError("A Credit or Amount column is required.");
+  if (descriptionIndex < 0 && channelIndex < 0) throw new TypeError("A Description / Narration or Channel column is required.");
+
+  const result = [];
+  let rejectedRows = 0;
+  for (const row of rows.slice(1)) {
+    const cell = index => index >= 0 ? String(row[index] || "").trim() : "";
+    const description = cell(descriptionIndex);
+    const channel = cell(channelIndex);
+    const type = cell(typeIndex).toUpperCase();
+    const debitPaise = debitIndex >= 0 ? statementAmountPaise(cell(debitIndex)) : 0;
+    let amountPaise = creditIndex >= 0 ? statementAmountPaise(cell(creditIndex)) : 0;
+    if (creditIndex < 0 || amountPaise <= 0) {
+      if (amountIndex >= 0) {
+        const candidate = statementAmountPaise(cell(amountIndex));
+        const creditType = /^(CR|CREDIT|DEPOSIT|IN|C)$/.test(type) ||
+          /\b(?:credited|credit|deposit|received|upi\/cr)\b/i.test(description);
+        if (candidate > 0 && creditType) amountPaise = candidate;
+      }
+    }
+    const debitType = /^(DR|DEBIT|WITHDRAWAL|OUT|D)$/.test(type) ||
+      /\b(?:debited|debit|withdrawal|paid to|sent to|upi\/dr)\b/i.test(description);
+    const isUpi = /\bupi\b|vpa|[a-z0-9._-]+@[a-z0-9.-]+/i.test(description + " " + channel);
+    const date = parseStatementDate(cell(dateIndex));
+    let utr = cell(utrIndex).toUpperCase().replace(/\s+/g, "");
+    if (!/^[A-Z0-9_-]{8,30}$/.test(utr)) {
+      const match = /(?:UTR|RRN|UPI\s*(?:REF(?:ERENCE)?|ID)?|REF(?:ERENCE)?\s*(?:NO\.?|NUMBER)?)\s*[:#/-]?\s*([A-Z0-9_-]{8,30})/i.exec(description);
+      utr = match ? match[1].toUpperCase() : "";
+    }
+    const vpa = /([A-Z0-9._-]{2,64}@[A-Z0-9.-]{2,64})/i.exec(description);
+    if (amountPaise <= 0 || debitPaise > 0 || debitType || !isUpi || !date || !utr) {
+      rejectedRows++;
+      continue;
+    }
+    result.push({
+      amountPaise,
+      currency: "INR",
+      utr,
+      senderVpa: vpa ? vpa[1] : null,
+      receivedAt: date,
+      source: "BANK_STATEMENT_CSV",
+      rawText: (date + " | " + description + " | UTR " + utr + " | CREDIT " + (amountPaise / 100).toFixed(2)).slice(0, 1000)
+    });
+  }
+  return { rows: result, rejectedRows, totalRows: rows.length - 1 };
+}
+
 export function matchEvidenceToSessions(evidence, sessions, {
   matchWindowMs = 5 * 60 * 1000,
   processingGraceMs = DEFAULT_PROCESSING_GRACE_MS

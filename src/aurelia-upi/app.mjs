@@ -155,8 +155,15 @@ function setView(view) {
 function statusSummary() {
   const active = state.sessions.filter(x => [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING].includes(x.status)).length;
   const queued = state.sessions.filter(x => x.status === "QUEUED").length;
-  const review = state.evidence.filter(x => ["REVIEW_REQUIRED", "AMBIGUOUS"].includes(x.matchDecision || x.status)).length;
-  const unmatched = state.evidence.filter(x => (x.matchDecision || x.status) === "UNMATCHED").length;
+  const terminalEvidenceStates = ["CONFIRMED", "REJECTED", "DUPLICATE", "CONFLICT"];
+  const review = state.evidence.filter(x =>
+    ![x.status, x.matchDecision].some(value => terminalEvidenceStates.includes(value)) &&
+    ["REVIEW_REQUIRED", "AMBIGUOUS"].includes(x.matchDecision || x.status)
+  ).length;
+  const unmatched = state.evidence.filter(x =>
+    ![x.status, x.matchDecision].some(value => terminalEvidenceStates.includes(value)) &&
+    (x.matchDecision || x.status) === "UNMATCHED"
+  ).length;
   const confirmed = state.payments.filter(x => ["CONFIRMED", "APPLIED_TO_PMS"].includes(x.status));
   const today = new Date().toISOString().slice(0, 10);
   const collected = confirmed.filter(x => String(x.confirmedAt || "").slice(0, 10) === today).reduce((sum, x) => sum + Number(x.amountPaise || 0), 0);
@@ -278,7 +285,10 @@ function renderActivity() {
 }
 
 function renderReviewCard(evidence) {
-  const decision = evidence.matchDecision || evidence.status || "UNMATCHED";
+  const terminalDecision = [evidence.status, evidence.matchDecision].find(value =>
+    ["CONFIRMED", "REJECTED", "DUPLICATE", "CONFLICT"].includes(value)
+  );
+  const decision = terminalDecision || evidence.matchDecision || evidence.status || "UNMATCHED";
   const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
   const isNative = !!evidence.native;
   const canReview = decision === "REVIEW_REQUIRED" || decision === "AMBIGUOUS" || decision === "UNMATCHED";
@@ -303,7 +313,8 @@ function renderReview() {
   const rows = [...state.evidence].sort((a, b) => dateMs(b.receivedAt) - dateMs(a.receivedAt));
   return '<section class="au-page-heading"><div><span class="au-kicker">EVIDENCE & RECONCILIATION</span><h3>Review incoming payment alerts</h3><p>Import a bank alert or review an Android notification. An alert never marks a folio paid by itself.</p></div></section>' +
     '<section class="au-panel au-import"><label><span>Paste incoming UPI credit alert</span><textarea id="au-alert-text" rows="4" maxlength="4000" placeholder="Paste the notification text exactly as received. Do not paste OTPs or unrelated messages."></textarea></label>' +
-    '<button class="au-primary" type="button" data-upi-action="import-evidence">Add evidence for review</button><p class="au-hint">Aurelia parses amount and UTR locally. Raw alert text is stored only in encrypted on-device storage when available.</p></section>' +
+    '<button class="au-primary" type="button" data-upi-action="import-evidence">Add evidence for review</button><p class="au-hint">Aurelia parses amount and UTR locally. Raw alert text is stored only in encrypted on-device storage when available.</p>' +
+    '<div class="au-statement-import"><label><span>Import bank statement CSV</span><input id="au-statement-file" type="file" accept=".csv,text/csv"></label><p class="au-hint">Only dated UPI credit rows with an exact amount and UTR/RRN are imported. The original file is not retained. CSV rows remain unverified evidence and never settle a payment automatically.</p></div></section>' +
     '<section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">REVIEW QUEUE</span><h3>' + rows.length + ' evidence record(s)</h3></div><button class="au-link" type="button" data-upi-action="refresh">Refresh</button></div>' +
     (rows.length ? '<div class="au-evidence-list">' + rows.map(renderReviewCard).join("") + '</div>' : '<div class="au-empty"><strong>No payment alerts yet</strong><p>Incoming credits will appear here after manual import or Android notification access is enabled.</p></div>') +
     '</section>';
@@ -451,6 +462,64 @@ async function assignEvidence(id) {
   }
   await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_MANUALLY_ASSIGNED");
   audit("Evidence assigned for review", evidence.id + " → " + session.reference);
+  rerender();
+}
+
+async function importStatementFile(file) {
+  if (!file || !/\.csv$/i.test(file.name || "") && !/text\/csv/i.test(file.type || "")) {
+    throw new Error("Select a bank statement CSV file.");
+  }
+  if (Number(file.size || 0) > 5 * 1024 * 1024) throw new Error("Bank statement CSV must be 5 MB or smaller.");
+  const parsed = parseBankStatementCsv(await file.text());
+  if (!parsed.rows.length) throw new Error("No dated UPI credit rows with a valid amount and UTR were found.");
+  let duplicates = 0, conflicts = 0, matched = 0;
+  for (let index = 0; index < parsed.rows.length; index++) {
+    const row = parsed.rows[index];
+    const evidence = {
+      ...row,
+      id: "statement_" + (globalThis.crypto?.randomUUID?.() || (Date.now() + "_" + index)),
+      sourcePackage: "LOCAL_BANK_STATEMENT_CSV",
+      fingerprint: [row.amountPaise, row.utr || "", row.receivedAt, row.rawText].join("|").slice(0, 1200),
+      status: "UNMATCHED",
+      matchDecision: "UNMATCHED",
+      candidateSessionIds: [],
+      suggestedSessionId: null,
+      createdAt: new Date().toISOString()
+    };
+    const duplicate = state.evidence.find(existing => existing.utr &&
+      String(existing.utr).toUpperCase() === String(evidence.utr).toUpperCase());
+    const sameFingerprint = state.evidence.find(existing => existing.fingerprint === evidence.fingerprint);
+    const match = matchEvidenceToSessions(evidence, state.sessions);
+    if (sameFingerprint || (duplicate && Number(duplicate.amountPaise) === evidence.amountPaise)) {
+      evidence.status = evidence.matchDecision = "DUPLICATE";
+      evidence.matchReason = "duplicate_evidence";
+      duplicates++;
+    } else if (duplicate && Number(duplicate.amountPaise) !== evidence.amountPaise) {
+      evidence.status = evidence.matchDecision = "CONFLICT";
+      evidence.matchReason = "same_utr_different_amount";
+      conflicts++;
+    } else {
+      evidence.matchDecision = match.decision;
+      evidence.matchReason = match.reason;
+      evidence.suggestedSessionId = match.suggestedSessionId || null;
+      evidence.candidateSessionIds = match.candidates.map(candidate => candidate.id);
+      evidence.status = match.decision;
+      if (evidence.suggestedSessionId) {
+        const session = state.sessions.find(candidate => candidate.id === evidence.suggestedSessionId);
+        if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED, SESSION_STATUS.OBSERVED].includes(session.status)) {
+          const updated = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: evidence.id });
+          await repository.saveSession(updated, "AURELIA_UPI_STATEMENT_MATCHED");
+          state.sessions = state.sessions.map(candidate => candidate.id === updated.id ? updated : candidate);
+          matched++;
+        }
+      }
+    }
+    await repository.saveEvidence(evidence, "AURELIA_UPI_BANK_STATEMENT_IMPORTED");
+    state.evidence.unshift(evidence);
+  }
+  audit("Bank statement CSV imported", parsed.rows.length + " UPI row(s) · " + duplicates + " duplicate(s) · " + conflicts + " conflict(s)");
+  notify("Imported " + parsed.rows.length + " UPI statement row(s). " + matched + " matched for review; none were settled automatically.");
+  state.view = "review";
   rerender();
 }
 
@@ -912,6 +981,16 @@ function onBookingChange(event) {
   }
 }
 
+function onStatementFileChange(event) {
+  if (event.target?.id !== "au-statement-file") return;
+  const input = event.target;
+  const file = input.files?.[0];
+  if (!file) return;
+  importStatementFile(file)
+    .catch(error => notify(error?.message || "Could not import bank statement CSV."))
+    .finally(() => { input.value = ""; });
+}
+
 function onTableChange(event) {
   if (event.target?.id !== "au-table") return;
   const table = (context?.getTables?.() || []).find(row => String(row.id) === String(event.target.value));
@@ -993,6 +1072,7 @@ function initialize() {
   document.addEventListener("change", onKindChange);
   document.addEventListener("change", onBookingChange);
   document.addEventListener("change", onTableChange);
+  document.addEventListener("change", onStatementFileChange);
   globalThis.addEventListener?.("focus", () => refreshData());
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshData(); });
   domObserver = new MutationObserver(records => {

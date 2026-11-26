@@ -47,8 +47,10 @@ Notification Access is sensitive. Enable it only on the device used to operate A
 
 ## Reconciliation and refunds
 
-- Manual alert paste/import and legacy notification signals enter the same review workflow.
+- Manual alert paste/import, local Android notifications and bank-statement CSV rows enter the same review workflow.
+- The CSV importer extracts dated UPI credit rows with exact amount and UTR/RRN, discards debit/non-UPI rows, and stores only the normalized candidate row—not the original statement file.
 - Unmatched and ambiguous alerts can be assigned to an exact-amount session for manual review.
+- Statement imports remain operator-supplied evidence. They do not settle payments automatically; the operator must inspect the receiving bank record and explicitly confirm.
 - Confirming one session marks other alerts linked to that session as duplicates.
 - Refund creation records a refund obligation only. Aurelia does not initiate a transfer.
 - After the operator completes the refund in the bank/UPI app, they record the transfer UTR and explicitly attest that the transfer was verified.
