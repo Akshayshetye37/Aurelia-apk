@@ -98,7 +98,7 @@ test('native compile uses SQLCipher cursors and avoids generated BuildConfig ass
 });
 
 test('outbox retry scheduling uses integer epoch milliseconds and migrates legacy ISO timestamps', () => {
-  assert.match(repository, /VERSION = 8/);
+  assert.match(repository, /VERSION = 9/);
   assert.match(repository, /ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT/);
   assert.match(repository, /retry_at_ms INTEGER/);
   assert.match(repository, /retry_at_ms<=\?/);
