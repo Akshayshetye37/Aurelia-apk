@@ -287,15 +287,15 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   @PluginMethod public void claimUpiReference(PluginCall call) {
-    String reference=call.getString("reference"),type=call.getString("referenceType"),entityId=call.getString("entityId");
+    String reference=call.getString("reference"),type=call.getString("referenceType"),entityId=call.getString("entityId"),receivingVpa=call.getString("receivingVpa");
     Long amount=call.getLong("amountPaise");
-    if(empty(reference)||empty(type)||empty(entityId)||amount==null||amount<=0L||amount>100000000000L||
+    if(empty(reference)||empty(type)||empty(entityId)||empty(receivingVpa)||amount==null||amount<=0L||amount>100000000000L||
         !("PAYMENT".equals(type)||"REFUND".equals(type))) {
       call.reject("Invalid Aurelia UPI bank reference claim","AURELIA_UPI_INVALID_REFERENCE_CLAIM");return;
     }
     io.execute(() -> {
       try {
-        JSONObject result=repository().claimUpiReference(reference,type,entityId,amount.longValue());
+        JSONObject result=repository().claimUpiReference(reference,type,entityId,receivingVpa,amount.longValue());
         call.resolve(new JSObject(result.toString()));
       } catch(Exception error) {
         String code=error.getMessage()!=null&&error.getMessage().contains("upi_reference_already_claimed")
