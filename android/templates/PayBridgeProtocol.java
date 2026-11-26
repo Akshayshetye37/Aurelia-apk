@@ -1,7 +1,7 @@
 package com.aurelia.pms;
 
 /**
- * Stable PMS-side message identifiers for the future Aurelia Pay Bridge.
+ * Stable PMS-side message identifiers for the future Aurelia Gateway.
  *
  * Protocol v1 is intentionally limited to authenticated connection handshake.
  * Reserved operation IDs are not enabled until both APKs implement and test them.
