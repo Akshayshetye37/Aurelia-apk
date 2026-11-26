@@ -46,6 +46,7 @@ test("bootstrap migrates the actual Aurelia legacy key and purges its plaintext 
   assert.equal(result.identity.scope, "LOCAL_ONLY");
   assert.ok(result.identity.installationId && result.identity.propertyId && result.identity.deviceId);
   assert.equal(result.storageEngine, "INDEXEDDB");
+  assert.ok(["strict", "default", "requested"].includes(result.persistenceDurability));
   assert.equal(result.migration.status, "MIGRATION_VERIFIED");
   assert.equal(result.migration.entityCount, Object.keys(state).length);
   assert.equal(result.domainProjection.manifest.preservesLegacySnapshot, true);
