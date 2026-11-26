@@ -4,6 +4,7 @@ name: Aurelia Android native compile check
 on:
   push:
     branches:
+      - main
       - feature/aurelia-upi-sovereign-redesign-2026-11-26
   workflow_dispatch:
 
