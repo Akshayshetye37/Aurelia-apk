@@ -266,6 +266,16 @@ test("fresh canonical installation can save, restart and project without legacy 
   assert.equal(storage.getItem(AURELIA_MIGRATION_STATUS_KEY), "READY_CANONICAL:" + restarted.migration.migrationId);
   assert.equal(restarted.domainProjection.manifest.preservesLegacySnapshot, true);
   assert.ok(await restarted.repository.getEntity("room", "101"));
+  const projectionSourceId = "pms-domain-projection-source:" + restarted.migration.migrationId;
+  const projectionSource = await restarted.repository.getEntity("audit", projectionSourceId);
+  assert.deepEqual(projectionSource.data.snapshot, state);
+  const updated = structuredClone(state);
+  updated.b.push({ id: 8, g: "Fresh Guest", room: "101", st: "res", in: 12, out: 13 });
+  await restarted.bridge.persistCompatibilitySnapshot(updated);
+  const third = await coordinator("fresh-canonical-third", storage, { repository: first.repository }).initializeApplication();
+  assert.equal(third.domainProjection.alreadyProjected, true);
+  assert.deepEqual((await third.repository.getEntity("audit", projectionSourceId)).data.snapshot, state);
+  assert.deepEqual((await third.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, updated);
 });
 
 test("stale fresh-install marker without its canonical snapshot fails closed", async () => {
