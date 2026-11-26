@@ -15,7 +15,7 @@ The dedicated branch `feature/aurelia-upi-financial-hardening-2026-11-26` adds t
 
 - Payment-related identifiers use Web Crypto `randomUUID()` or `getRandomValues()`; there is no `Math.random()` or timestamp fallback.
 - Aurelia UPI audit writes are awaited. The UI does not present an audit entry as durable until the encrypted repository transaction succeeds; failures are surfaced.
-- Native SQLCipher schema version 9 adds `aurelia_upi_reference_claims`. A unique reference key and unique (reference type, entity) pair enforce single-use payment/refund UTR claims inside a SQLite transaction.
+- Native SQLCipher schema version 9 adds `aurelia_upi_reference_claims`. A unique reference key and unique (reference type, entity) pair enforce single-use payment/refund UTR claims inside a SQLite transaction. The v8→v9 migration backfills prior manually verified payment/refund references and aborts on conflicting legacy data.
 - Payment confirmation requires a bank UTR/reference and atomically claims it before the payment record can proceed. Replaying the same claim for the same entity and amount is idempotent; reuse by a different entity or altered amount is rejected.
 - Refund completion claims the outgoing transfer reference in the same uniqueness namespace.
 
