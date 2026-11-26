@@ -372,6 +372,11 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       try(Cursor c=db.rawQuery("SELECT status FROM aurelia_upi_evidence WHERE evidence_id=?",new String[]{evidenceId})) {
         if(!c.moveToFirst())throw new IllegalArgumentException("upi_evidence_not_found");current=c.getString(0);
       }
+      if(status.equals(current)) {
+        JSONObject unchanged=readUpiEvidence(db,evidenceId);
+        db.setTransactionSuccessful();
+        return unchanged;
+      }
       if("CONFIRMED".equals(current)||"REJECTED".equals(current)||"DUPLICATE".equals(current)||"CONFLICT".equals(current))throw new IllegalStateException("upi_evidence_already_reviewed");
       long now=System.currentTimeMillis();ContentValues update=new ContentValues();update.put("status",status);
       update.put("review_note",reviewNote==null?"":reviewNote.substring(0,Math.min(240,reviewNote.length())));
