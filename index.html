@@ -718,7 +718,7 @@ function demoGo(){S.b=S.b.filter(x=>!x.demo);S.g=S.g.filter(x=>!x.demo);S.rooms=
 function confirmResetAll(){toast('Device reset is disabled while canonical PMS storage is active. No records were deleted. Use a verified owner-authorized recovery workflow.')}
 function resetAll(){toast('Device reset is disabled while canonical PMS storage is active. No records were deleted.')}
 /* backup engine */
-const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],SK='aurelia_lodge_v2',hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
+const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
 const curHash=()=>hashS(JSON.stringify(DK.map(k=>S[k])));
 function photoKeysIn(value,out=new Set(),seen=new Set()){if(!value||typeof value!=='object'||seen.has(value))return out;seen.add(value);if(!Array.isArray(value)&&typeof value.imgKey==='string'&&value.imgKey)out.add(value.imgKey);for(const v of Object.values(value))photoKeysIn(v,out,seen);return out}
 function validatePhotoArchive(data,archive){const keys=photoKeysIn(data),missing=[];if(!archive||typeof archive!=='object'||Array.isArray(archive))archive={};for(const key of keys){if(typeof archive[key]!=='string'||!/^data:image\//i.test(archive[key]))missing.push(key)}if(missing.length)throw new Error(missing.length+' original ID photo(s) are missing from the archive. No backup/restore was completed.');return keys.size}
@@ -888,7 +888,10 @@ window.aureliaNativeRecoveryBackupResult=async(id,ok,payload,fileName)=>{
 };
 function restoreF(el){
  const f=el.files&&el.files[0];if(!f)return;
+ const MAX_BACKUP_BYTES=50*1024*1024;
+ if(!Number.isSafeInteger(f.size)||f.size<0||f.size>MAX_BACKUP_BYTES){toast('Backup file exceeds the 50 MiB import limit.');el.value='';return}
  f.text().then(async t=>{
+  if(new TextEncoder().encode(t).byteLength>MAX_BACKUP_BYTES)throw new Error('Backup file exceeds the 50 MiB import limit.');
   const raw=JSON.parse(t);
   if(raw&&raw.integrity){const meta=raw.integrity,copy={...raw};delete copy.integrity;if(meta.algorithm!=='SHA-256'||typeof meta.digest!=='string'||await sha256Hex(JSON.stringify(copy))!==meta.digest)throw new Error('Backup checksum does not match its contents.')}
   if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('The selected JSON file must contain an object.');
@@ -903,6 +906,11 @@ function restoreF(el){
   let selected=null,shape=null;
   for(const x of candidates){const a=arrays(x);if(Array.isArray(a.rooms)||Array.isArray(a.bookings)||Array.isArray(a.guests)){selected=x;shape=a;break}}
   if(!selected)throw new Error('No rooms, guests or bookings arrays were found in this JSON file.');
+  const importLimits={rooms:5000,bookings:100000,guests:100000,expenses:100000,inventory:20000};
+  const importRows={rooms:shape.rooms,bookings:shape.bookings,guests:shape.guests,expenses:shape.expenses,inventory:shape.inventory};
+  for(const [name,limit] of Object.entries(importLimits)){const rows=importRows[name];if(rows!==undefined&&(!Array.isArray(rows)||rows.length>limit))throw new Error('Backup '+name+' collection exceeds its import limit of '+limit+'.')}
+  const totalRows=Object.values(importRows).reduce((sum,rows)=>sum+(Array.isArray(rows)?rows.length:0),0);
+  if(totalRows>200000)throw new Error('Backup exceeds the 200,000 total record import limit.');
   const hasFullState=['set','menu','hist','au','today','day','terms','sig','sales','led','fe','inN','t'].some(k=>selected[k]!==undefined)||raw.v===2;
   const isSnapshot=Array.isArray(selected.rooms||selected.roomList||selected.room_list||selected.roomRecords) &&
    Array.isArray(selected.b||selected.bookings||selected.stays||selected.reservations||selected.bookingRecords) && hasFullState;
@@ -1044,7 +1052,7 @@ async function persist(){
  const snapshotJson=JSON.stringify(snapshot);
  if(snapshotJson===LAST_PMS_COMMITTED_SNAPSHOT)return true;
  LOCAL_STATE_STATUS='idb-pending';window.aureliaRefreshStorageNotice?.();
- try{const result=await coordinator.save(snapshot);if(!result||result.committed!==true)throw new Error('Canonical PMS commit did not confirm durable read-back.');LOCAL_STATE_STATUS='valid';LAST_PMS_COMMITTED_SNAPSHOT=snapshotJson;S.qw=0;window.aureliaRefreshStorageNotice?.();return true}
+ try{const result=await window.AureliaLocalFirstWrites.save(snapshot);if(!result||result.committed!==true)throw new Error('Canonical PMS commit did not confirm durable read-back.');LOCAL_STATE_STATUS='valid';LAST_PMS_COMMITTED_SNAPSHOT=snapshotJson;S.qw=0;window.aureliaRefreshStorageNotice?.();return true}
  catch(error){RECOVERY_CHECK_PENDING=true;LOCAL_STATE_STATUS='write-failed';console.error('[Aurelia PMS] Canonical write/read-back failed; operational writes are frozen pending recovery.',error);if(!S.qw){S.qw=1;toast('CRITICAL: Device save failed. Changes were not committed. Keep the app open and recover before continuing.')}window.aureliaRefreshStorageNotice?.();return false}
 }
 let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[],LAST_PMS_COMMITTED_SNAPSHOT=null;
