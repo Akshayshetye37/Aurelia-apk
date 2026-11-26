@@ -7,3 +7,18 @@ test("device reset cannot erase only browser cache while leaving canonical recor
 test("manual UPI payment, check-in/out and dining folio commits await durable persistence",()=>{assert.match(html,/async function pay\(i\)/);assert.match(html,/async function completeCheckIn\(i\)/);assert.match(html,/async function completeCheckOut\(i\)/);assert.match(html,/async function confirmDiningRoomCharge\(id\)/);assert.match(html,/if\(!await persist\(\)\)/)});
 test("stay extension waits for canonical commit before reporting success",()=>{const start=html.indexOf('id="aurelia-persistence-and-stay-extension"'),end=html.indexOf("</script>",start),block=html.slice(start,end);assert.match(block,/if\(!await persist\(\)\)/)});
 test("UPI folio posting awaits the PMS commit and web build excludes gateway modules",()=>{assert.match(html,/if\(!await window\.pay\(id\)\)/);assert.match(html,/const guardedPay=async function/);assert.match(prepare,/src', 'storage/);assert.match(prepare,/src', 'folios/);assert.match(prepare,/src', 'bookings/);assert.doesNotMatch(prepare,/provider-platform|gateway|pay-bridge|webhooks/i)});
+
+test("restaurant UPI posting awaits the durable snapshot commit",()=>{
+ const start=html.indexOf("async function recordRestPay(){"),end=html.indexOf("/* Paid restaurant receipts",start);
+ assert.ok(start>=0&&end>start);
+ const record=html.slice(start,end);
+ assert.match(record,/if\(!await persist\(\)\)/);
+ assert.match(record,/restorePmsRuntimeState\(before,oldId\)/);
+ const upiStart=html.indexOf("applyRestaurantPayment:async"),upiEnd=html.indexOf("},\n };",upiStart);
+ const apply=html.slice(upiStart,upiEnd);
+ assert.match(apply,/await window\.recordRestPay\(\)/);
+});
+test("render safety net persists any remaining legacy PMS mutation and skips unchanged snapshots",()=>{
+ assert.match(html,/if\(window\.__AURELIA_RUNTIME_READY&&typeof window\.persist==='function'\)window\.persist\(\)/);
+ assert.match(html,/snapshotJson===LAST_PMS_COMMITTED_SNAPSHOT/);
+});
