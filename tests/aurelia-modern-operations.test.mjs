@@ -114,3 +114,43 @@ test('PMS startup does not mutate non-existent demo bookings, guests or dining t
   assert.equal(html.includes('S.b[1].pays='), false);
   assert.equal(html.includes('214000+i*7919'), false);
 });
+
+test('reference workspace design adds desktop sidebar navigation without replacing the PMS router', () => {
+  assert.match(html, /aurelia-design-sidebar/);
+  assert.match(html, /aurelia-design-nav/);
+  assert.match(html, /data-aurelia-tab/);
+  assert.match(html, /if\(typeof go==='function'\)go\(button\.dataset\.aureliaTab\)/);
+  assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['upi','Aurelia UPI'\],\['more','More'\]\]/);
+  assert.match(html, /id="aurelia-design-new"/);
+  assert.match(html, /if\(typeof resv==='function'\)resv\(\)/);
+});
+
+test('reference workspace keeps six-destination mobile dock and responsive desktop-to-mobile transition', () => {
+  assert.match(html, /\.aurelia-design-shell\{display:flex;min-height:100vh;width:100%\}/);
+  assert.match(html, /\.aurelia-design-sidebar\{/);
+  assert.match(html, /@media\(max-width:900px\)[\s\S]*?\.aurelia-design-sidebar\{display:none\}/);
+  assert.match(html, /@media\(max-width:900px\)[\s\S]*?\.dock\{display:grid\}/);
+  assert.match(html, /grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
+  assert.match(html, /#hor-book\{display:none!important\}/);
+  assert.match(html, /#hor-book\{display:flex!important\}/);
+});
+
+test('reference workspace applies emerald and champagne-gold visual tokens without weakening offline font policy', () => {
+  assert.match(html, /--bg:#07120e;--s1:#0c1d16;--s2:#10241c/);
+  assert.match(html, /--gold:#dfc07b/);
+  assert.match(html, /--serif:"Cormorant Garamond",Georgia,serif/);
+  assert.match(html, /--sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif/);
+  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
+  assert.match(html, /Content-Security-Policy/);
+});
+
+test('reference workspace preserves PMS app boot, local persistence and critical operations modules', () => {
+  assert.match(html, /function render\(\)/);
+  assert.match(html, /function loadState\(\)/);
+  assert.match(html, /function saveState\(\)/);
+  assert.match(html, /aurelia-persistence-and-stay-extension/);
+  assert.match(html, /aurelia-upi-integration/);
+  assert.match(html, /aurelia-modern-operations/);
+  assert.match(html, /aurelia-thermal-receipt/);
+  assert.match(html, /scripts\/stay-extension\.js/);
+});
