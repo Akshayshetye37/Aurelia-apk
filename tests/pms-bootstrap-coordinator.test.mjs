@@ -37,7 +37,7 @@ const coordinator = (name, storage, extra = {}) => new PmsBootstrapCoordinator({
   now: () => "2026-11-07T00:00:00.000Z"
 });
 
-test("bootstrap migrates the actual Aurelia legacy key and preserves its exact raw value", async () => {
+test("bootstrap migrates the actual Aurelia legacy key and purges its plaintext cache after exact canonical verification", async () => {
   const raw = JSON.stringify(state);
   const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
   const app = coordinator("migration", storage);
@@ -122,7 +122,7 @@ test("startup refuses to present an empty PMS when canonical migrated records ex
   });
   await assert.rejects(
     restarted.initializeApplication(),
-    /canonical PMS records exist but no committed full-state recovery snapshot/i
+    /canonical audit snapshot exists without a valid full-state snapshot|canonical PMS records exist but no committed full-state recovery snapshot/i
   );
   assert.equal(restarted.status, "FAILED_CLOSED");
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
