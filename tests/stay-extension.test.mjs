@@ -136,7 +136,7 @@ test('all inline application scripts parse after stay-extension integration', ()
     const close = html.indexOf('</script>', openEnd);
     assert.ok(openEnd > start && close > openEnd, 'script element is closed');
     const attributes = html.slice(start + 7, openEnd);
-    if (!attributes.includes('src=') && !/\\btype=[\"']module[\"']/.test(attributes)) {
+    if (!attributes.includes('src=') && !attributes.includes('type=\"module\"')) {
       new vm.Script(html.slice(openEnd + 1, close), { filename: 'index.html:inline-script-' + count });
       count++;
     }
