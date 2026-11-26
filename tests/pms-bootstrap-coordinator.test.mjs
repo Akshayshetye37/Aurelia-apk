@@ -26,6 +26,7 @@ const makeStorage = initial => {
   return {
     getItem: key => values.has(key) ? values.get(key) : null,
     setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key),
     values
   };
 };
@@ -63,7 +64,8 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.ok(await result.repository.getEntity("restaurant_sale", "RS-BOOT-1"));
   assert.equal(typeof result.settingsRepository.syncSnapshot, "function");
   assert.ok(await result.repository.getEntity("audit", "legacy-folio-source:booking-7"));
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null, "plaintext legacy snapshot is purged after canonical verification");
+  assert.deepEqual((await result.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, state);
   assert.match(storage.getItem(AURELIA_MIGRATION_STATUS_KEY), /^VERIFIED:/);
   assert.deepEqual((await result.repository.getEntity("legacy", "b")).data, state.b);
 });
@@ -77,7 +79,7 @@ test("bootstrap replay is idempotent and verifies the original snapshot", async 
   }).initializeApplication();
   assert.equal(second.migration.status, "MIGRATION_VERIFIED");
   assert.equal(second.migration.alreadyMigrated, true);
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
 });
 
 test("missing legacy UI state is recovered from the last committed canonical snapshot", async () => {
@@ -94,14 +96,14 @@ test("missing legacy UI state is recovered from the last committed canonical sna
   await bridge.persistCompatibilitySnapshot(state);
 
   storage.values.delete(AURELIA_LEGACY_STATE_KEY);
-  storage.values.delete(AURELIA_MIGRATION_STATUS_KEY);
   const restarted = await coordinator("recover-snapshot-restart", storage, {
     repository: first.repository
   }).initializeApplication();
 
   assert.equal(restarted.recovery.restored, true);
   assert.equal(restarted.recovery.source, "canonical-audit-snapshot");
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
+  assert.deepEqual((await restarted.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, state);
   assert.equal(restarted.migration.status, "MIGRATION_VERIFIED");
   assert.equal(restarted.migration.recoveredFromCanonical, true);
 });
@@ -109,7 +111,11 @@ test("missing legacy UI state is recovered from the last committed canonical sna
 test("startup refuses to present an empty PMS when canonical migrated records exist without a full recovery snapshot", async () => {
   const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: JSON.stringify(state) });
   const first = await coordinator("recover-no-snapshot", storage).initializeApplication();
-  storage.values.delete(AURELIA_LEGACY_STATE_KEY);
+  const snapshot = await first.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  await first.bridge.mutateEntity({
+    entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: snapshot.version,
+    eventType: "test.remove_full_snapshot", mutate: data => { data.snapshot = null; return data; }
+  });
   storage.values.delete(AURELIA_MIGRATION_STATUS_KEY);
   const restarted = coordinator("recover-no-snapshot-restart", storage, {
     repository: first.repository
@@ -160,7 +166,7 @@ test("ephemeral preview storage is rejected before canonical migration", async (
 });
 
 
-test("index startup awaits verified storage bootstrap before replaying operational scripts", async () => {
+test("index startup verifies canonical repository before replaying PMS operations", async () => {
   const fs = await import("node:fs");
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const loaderAt = html.indexOf('id="aurelia-async-runtime-bootstrap"');
@@ -168,46 +174,21 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.ok(html.includes('id="aurelia-runtime-shield"'));
   assert.ok(loaderAt > mainAt, "bootstrap loader follows inert application scripts");
   const loader = html.slice(loaderAt, html.indexOf("</script>", loaderAt));
-  assert.match(loader, /await bootstrapper\.initializeApplication\(\)/);
-  assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository, boot\.identity\)/);
-  assert.match(loader, /boot\.settingsRepository\.get\(\)/);
-  assert.match(loader, /boot\.restaurantTableRepository\.hydrateSnapshot/);
-  assert.match(loader, /boot\.restaurantSaleRepository\.hydrateSnapshot/);
-  assert.match(loader, /boot\.inventoryRepository\.hydrateSnapshot/);
-  assert.match(loader, /boot\.expenseRepository\.hydrateSnapshot/);
-  assert.match(loader, /hydrateCanonicalBookingSnapshot/);
-  assert.match(html, /compatibility\.syncRestaurantSales\(snapshot\)/);
-  assert.match(html, /window\.__AURELIA_CANONICAL_SALES/);
-  assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
-  assert.match(html, /compatibility\.syncInventory\(snapshot\)/);
-  assert.match(html, /async function addI\(c,i\)/);
-  assert.match(html, /Restaurant stock issue/);
-  assert.match(html, /async function sellStockItem\(name,price\)/);
-  assert.match(html, /Retail stock issue/);
-  assert.match(html, /commitInventoryMutation: input => boot\.inventoryRepository\.syncSnapshot\(input\.snapshot\)/);
-  assert.match(html, /window\.__AURELIA_CANONICAL_TABLES/);
-  assert.match(loader, /window\.__AURELIA_CANONICAL_SETTINGS/);
-  assert.match(html, /loadAll\(\);if\(window\.__AURELIA_CANONICAL_SETTINGS\)/);
-  assert.match(html, /compatibility\.syncSettings\(snapshot\)/);
+  assert.match(loader, /new PmsBootstrapCoordinator\(\{storage:legacyStorage\}\)\.initializeApplication\(\)/);
+  assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository,boot\.identity\)/);
+  assert.match(loader, /PmsLocalFirstWriteCoordinator/);
+  assert.match(loader, /storageBridge\.persistCompatibilitySnapshot\(snapshot\)/);
   assert.match(loader, /await replayApplicationScripts\(\)/);
   assert.match(loader, /PMS startup stopped safely/);
   assert.match(html, /type="application\/x-aurelia-deferred"/);
-  assert.match(html, /diagnostics\.embeddedPreview === true/);
-  assert.match(html, /data-preview-blocked/);
-  assert.match(html, /sandbox blocks durable storage/);
-  assert.match(html, /state\.previewBlocked/);
-  assert.match(html, /async function persistCanonicalStrict\(\)/);
-  assert.match(html, /persist: snapshot => storageBridge\.persistCompatibilitySnapshot\(snapshot\)/);
-  assert.match(html, /coordinator\.save\(state\)/);
-  assert.match(html, /readBack: async \(\) =>/);
-  assert.match(html, /async function addSig\(o\)/);
-  assert.match(html, /async function sigReject\(id,bookingId\)/);
-  assert.match(html, /async function sigReopen\(id\)/);
-  assert.match(html, /async function sigA\(id,i\)/);
-  assert.match(html, /await persistCanonicalStrict\(\)/);
+  assert.match(html, /async function persist\(\)/);
+  assert.match(html, /coordinator\.save\(snapshot\)/);
+  assert.match(html, /window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW/);
+  assert.match(html, /normalized domain UI cutover remains disabled/);
+  assert.doesNotMatch(loader, /provider-platform|gateway|pay-bridge|webhooks/i);
 });
 
-test("Android bootstrap selects the real native adapter contract and verifies migration before releasing startup",async()=>{const raw=JSON.stringify(state),storage=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw}),entities=new Map(),snapshots=new Map();let initialized=false;const plugin={async initializeStorage(){initialized=true;return{success:true,engine:"android-sqlite",contractVersion:1};},async migrateLegacySnapshot(args){const parsed=JSON.parse(args.raw);snapshots.set(args.migrationId,{id:args.migrationId,sourceKey:args.sourceKey,raw:args.raw,sourceTimestamp:args.sourceTimestamp});for(const [id,data] of Object.entries(parsed))entities.set(id,{key:"legacy:"+id,type:"legacy",id,version:1,data,updatedAt:"2026-11-07T00:00:00.000Z"});return{alreadyMigrated:false};},async readMigrationSnapshot({migrationId}){return{snapshot:snapshots.get(migrationId)||null};},async listEntities({entityType}){return{entities:Array.from(entities.values()).filter(row=>row.type===entityType)};},async getEntity({entityType,entityId}){return{entity:entities.get(entityType+":"+entityId)||null};},async transactBusinessBatch({changes}){const rows=[];for(const c of changes){const key=c.entityType+":"+c.entityId,old=entities.get(key),version=old?.version||0;if(version!==c.expectedVersion)throw new Error("Entity version conflict");const row={key,type:c.entityType,id:c.entityId,version:version+1,data:c.data,updatedAt:"2026-11-07T00:00:00.000Z"};entities.set(key,row);rows.push(row);}return{entities:rows};},async transactBusinessChange({entityType,entityId,expectedVersion,data}){const key=entityType+":"+entityId,old=entities.get(key),version=old?.version||0;if(version!==expectedVersion)throw new Error("Entity version conflict");const row={key,type:entityType,id:entityId,version:version+1,data,updatedAt:"2026-11-07T00:00:00.000Z"};entities.set(key,row);return row;}};const nativeRepository=new CapacitorPmsStorageClient(plugin);const app=new PmsBootstrapCoordinator({storage,indexedDBImpl:undefined,databaseName:"unused-android-idb",platform:"ANDROID_WEBVIEW",nativeRepositoryFactory:async()=>nativeRepository,identityProvider:async()=>({schemaVersion:1,scope:"LOCAL_ONLY",installationId:"ins_native_test_000000000001",tenantId:"local_ins_native_test_000000000001",propertyId:"property_native_test_000000001",deviceId:"device_native_test_000000001",createdAt:"2026-11-07T00:00:00.000Z"}),now:()=>"2026-11-07T00:00:00.000Z"});const result=await app.initializeApplication();assert.equal(initialized,true);assert.equal(result.repository,nativeRepository);assert.equal(result.storageEngine,"ANDROID_SQLITE");assert.equal(result.uiCutover,false);assert.equal(result.migration.status,"MIGRATION_VERIFIED");assert.equal(result.domainProjection.manifest.preservesLegacySnapshot,true);assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY),raw);});
+test("Android bootstrap selects the real native adapter contract and verifies migration before releasing startup",async()=>{const raw=JSON.stringify(state),storage=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw}),entities=new Map(),snapshots=new Map();let initialized=false;const plugin={async initializeStorage(){initialized=true;return{success:true,engine:"android-sqlite",contractVersion:1};},async migrateLegacySnapshot(args){const parsed=JSON.parse(args.raw);snapshots.set(args.migrationId,{id:args.migrationId,sourceKey:args.sourceKey,raw:args.raw,sourceTimestamp:args.sourceTimestamp});for(const [id,data] of Object.entries(parsed))entities.set(id,{key:"legacy:"+id,type:"legacy",id,version:1,data,updatedAt:"2026-11-07T00:00:00.000Z"});return{alreadyMigrated:false};},async readMigrationSnapshot({migrationId}){return{snapshot:snapshots.get(migrationId)||null};},async listEntities({entityType}){return{entities:Array.from(entities.values()).filter(row=>row.type===entityType)};},async getEntity({entityType,entityId}){return{entity:entities.get(entityType+":"+entityId)||null};},async transactBusinessBatch({changes}){const rows=[];for(const c of changes){const key=c.entityType+":"+c.entityId,old=entities.get(key),version=old?.version||0;if(version!==c.expectedVersion)throw new Error("Entity version conflict");const row={key,type:c.entityType,id:c.entityId,version:version+1,data:c.data,updatedAt:"2026-11-07T00:00:00.000Z"};entities.set(key,row);rows.push(row);}return{entities:rows};},async transactBusinessChange({entityType,entityId,expectedVersion,data}){const key=entityType+":"+entityId,old=entities.get(key),version=old?.version||0;if(version!==expectedVersion)throw new Error("Entity version conflict");const row={key,type:entityType,id:entityId,version:version+1,data,updatedAt:"2026-11-07T00:00:00.000Z"};entities.set(key,row);return row;}};const nativeRepository=new CapacitorPmsStorageClient(plugin);const app=new PmsBootstrapCoordinator({storage,indexedDBImpl:undefined,databaseName:"unused-android-idb",platform:"ANDROID_WEBVIEW",nativeRepositoryFactory:async()=>nativeRepository,identityProvider:async()=>({schemaVersion:1,scope:"LOCAL_ONLY",installationId:"ins_native_test_000000000001",tenantId:"local_ins_native_test_000000000001",propertyId:"property_native_test_000000001",deviceId:"device_native_test_000000001",createdAt:"2026-11-07T00:00:00.000Z"}),now:()=>"2026-11-07T00:00:00.000Z"});const result=await app.initializeApplication();assert.equal(initialized,true);assert.equal(result.repository,nativeRepository);assert.equal(result.storageEngine,"ANDROID_SQLITE");assert.equal(result.uiCutover,false);assert.equal(result.migration.status,"MIGRATION_VERIFIED");assert.equal(result.domainProjection.manifest.preservesLegacySnapshot,true);assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY),null);});
 test("Android bootstrap fails closed when the native SQLite plugin is not registered",async()=>{const previous=globalThis.Capacitor;globalThis.Capacitor={};const raw=JSON.stringify(state),storage=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw}),app=new PmsBootstrapCoordinator({storage,indexedDBImpl:indexedDB,databaseName:"unused-missing-native-plugin",platform:"ANDROID_WEBVIEW",now:()=>"2026-11-07T00:00:00.000Z"});try{await assert.rejects(app.initializeApplication(),/not registered/);assert.equal(app.status,"FAILED_CLOSED");assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY),raw);}finally{if(previous===undefined)delete globalThis.Capacitor;else globalThis.Capacitor=previous;}});
 
 test("startup restores the latest canonical snapshot before the immutable migration snapshot", async () => {
@@ -222,7 +203,8 @@ test("startup restores the latest canonical snapshot before the immutable migrat
   await bridge.persistCompatibilitySnapshot(updated);
   storage.values.delete(AURELIA_LEGACY_STATE_KEY);
   const restarted = await coordinator("latest-snapshot-restart", storage, { repository: first.repository }).initializeApplication();
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(updated));
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
+  assert.deepEqual((await restarted.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, updated);
   assert.equal(restarted.recovery.source, "canonical-audit-snapshot");
   assert.equal(restarted.migration.migrationId, first.migration.migrationId);
   assert.equal(restarted.domainProjection.alreadyProjected, true);
@@ -238,8 +220,10 @@ test("a stale legacy cache is repaired from the latest canonical snapshot withou
   bridge.bindActiveEngine(first.repository, first.identity);
   const updated = { ...structuredClone(state), today: 990, revision: 3 };
   await bridge.persistCompatibilitySnapshot(updated);
+  storage.setItem(AURELIA_LEGACY_STATE_KEY, original);
   const restarted = await coordinator("stale-cache-restart", storage, { repository: first.repository }).initializeApplication();
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(updated));
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
+  assert.deepEqual((await restarted.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, updated);
   assert.equal(restarted.migration.migrationId, first.migration.migrationId);
   assert.equal(restarted.domainProjection.alreadyProjected, true);
 });
@@ -255,6 +239,7 @@ test("fresh canonical installation can save, restart and project without legacy 
   await bridge.persistCompatibilitySnapshot(state);
   storage.setItem(AURELIA_LEGACY_STATE_KEY, JSON.stringify(state));
   const restarted = await coordinator("fresh-canonical-restart", storage, { repository: first.repository }).initializeApplication();
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
   assert.equal(restarted.migration.status, "READY_CANONICAL");
   assert.equal(restarted.migration.freshInstallation, true);
   assert.equal(restarted.migration.entityCount, 0);
@@ -327,7 +312,7 @@ test("bootstrap projects and exposes canonical inventory before the PMS UI start
   assert.equal(canonical.find(row => row.n === "Coffee").id, "coffee-1");
   assert.equal(canonical.find(row => row.n === "Towels").q, 5);
   assert.equal((await result.repository.getEntity("inventory", "coffee-1")).version, 1);
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
 });
 
 test("bootstrap persists canonical preparation in the device repository without enabling UI cutover", async () => {
@@ -361,7 +346,7 @@ test("bootstrap refuses to start the legacy UI after canonical authority is pers
   const app = coordinator("authority-cutover-block", storage, { repository });
   await assert.rejects(app.initializeApplication(), error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED");
   assert.equal(app.status, "FAILED_CLOSED");
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(state));
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
 });
 
 
@@ -395,7 +380,7 @@ test("canonical authority blocks direct legacy restore and migration entry point
     app.executeGuardedMigration(),
     error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED"
   );
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(state));
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
 });
 
 test("canonical authority blocks compatibility snapshot refresh", async () => {
