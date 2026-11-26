@@ -1,0 +1,229 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { webcrypto } from "node:crypto";
+import { indexedDB } from "fake-indexeddb";
+import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
+import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
+import {
+  buildRemainingFolioInvoice, buildSplitFolioInvoice, createSplitFolio, financialYearFor, issueFolioInvoice, reconcileLegacyPaymentTotals, recordSplitFolioPayment
+} from "../src/folios/folio-accounting-service.mjs";
+
+let fixtureNumber = 0;
+function fixture() {
+  const repository = new IndexedDbPmsRepository({
+    indexedDBImpl: indexedDB, databaseName: "folio-accounting-" + (++fixtureNumber)
+  });
+  let event = 0;
+  const bridge = new PmsRepositoryBridge({
+    tenantId: "tenant-local", propertyId: "property-local", deviceId: "device-local",
+    now: () => "2026-11-16T12:00:00.000Z",
+    eventId: () => "folio-event-" + (++event)
+  }).bindActiveEngine(repository);
+  return { bridge };
+}
+const booking = {
+  id: "booking-1", folioId: "folio-1", g: "Primary Guest", p: 50,
+  pays: [{ a: 50, m: "UPI", r: "UTR-1" }]
+};
+const invoice = {
+  invoiceNumber: "", lineItems: [{ id: "room-1", grossMinor: 10000, taxableMinor: 10000, taxMinor: 0, cgstMinor: 0, sgstMinor: 0, igstMinor: 0, taxProfile: { id: "room-zero", rate: 0, supply: "intrastate", inclusive: true, sac: "996311" } }],
+  totals: { grossMinor: 10000, taxMinor: 0, subtotalMinor: 10000 }
+};
+
+test("financial year follows the India local April boundary", () => {
+  assert.equal(financialYearFor("2026-03-31T18:29:59Z"), "FY2025-26");
+  assert.equal(financialYearFor("2026-03-31T18:30:00Z"), "FY2026-27");
+});
+
+test("legacy paid scalar must reconcile exactly with payment rows", () => {
+  assert.equal(reconcileLegacyPaymentTotals(booking).matched, true);
+  assert.equal(reconcileLegacyPaymentTotals({ ...booking, p: 60 }).matched, false);
+});
+
+test("invoice number, invoice snapshot, ledger and audit commit atomically", async () => {
+  const { bridge } = fixture();
+  const first = await issueFolioInvoice({
+    bridge, folioId: "folio-1", booking, invoice,
+    now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto
+  });
+  assert.equal(first.invoice.invoiceNumber, "INV/FY2026-27/000001");
+  assert.equal(first.duplicate, false);
+  const sequence = await bridge.fetchEntity("folio_sequence", "gst-invoice-sequence-FY2026-27");
+  assert.equal(sequence.data.nextNumber, 2);
+  const ledger = await bridge.fetchEntity("ledger", "invoice-issued-FY2026-27-00000001");
+  const audit = await bridge.fetchEntity("audit", "invoice-audit-FY2026-27-00000001");
+  assert.equal(ledger.data.invoiceNumber, first.invoice.invoiceNumber);
+  assert.equal(audit.data.invoiceHash, first.invoiceHash);
+  assert.equal(audit.data.taxSummary.grossMinor, 10000);
+  assert.equal(audit.data.taxLines[0].taxProfileId, "room-zero");
+  const duplicate = await issueFolioInvoice({
+    bridge, folioId: "folio-1", booking, invoice,
+    now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto
+  });
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(duplicate.invoice.invoiceNumber, first.invoice.invoiceNumber);
+  assert.equal((await bridge.fetchEntity("folio_sequence", "gst-invoice-sequence-FY2026-27")).data.nextNumber, 2);
+});
+
+test("concurrent invoice issuance allocates unique sequential numbers", async () => {
+  const { bridge } = fixture();
+  const [first, second] = await Promise.all([
+    issueFolioInvoice({ bridge, folioId: "folio-race-1", booking, invoice,
+      now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto }),
+    issueFolioInvoice({ bridge, folioId: "folio-race-2", booking: { ...booking, id: "booking-2" }, invoice,
+      now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto })
+  ]);
+  assert.deepEqual(
+    [first.invoice.invoiceNumber, second.invoice.invoiceNumber].sort(),
+    ["INV/FY2026-27/000001", "INV/FY2026-27/000002"]
+  );
+  assert.equal((await bridge.fetchEntity("folio_sequence", "gst-invoice-sequence-FY2026-27")).data.nextNumber, 3);
+});
+
+test("unreconciled historical payments block invoice issuance without consuming sequence", async () => {
+  const { bridge } = fixture();
+  await assert.rejects(issueFolioInvoice({
+    bridge, folioId: "folio-1", booking: { ...booking, p: 60 }, invoice,
+    now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto
+  }), error => error.code === "LEGACY_PAYMENT_RECONCILIATION_REQUIRED");
+  assert.equal(await bridge.fetchEntity("folio_sequence", "gst-invoice-sequence-FY2026-27"), null);
+});
+
+test("failed invoice batch does not consume sequence or create invoice records", async () => {
+  const { bridge } = fixture();
+  const original = bridge.mutateEntities.bind(bridge);
+  bridge.mutateEntities = async () => { throw new Error("simulated transaction failure"); };
+  await assert.rejects(issueFolioInvoice({
+    bridge, folioId: "folio-1", booking, invoice,
+    now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto
+  }), /simulated transaction failure/);
+  bridge.mutateEntities = original;
+  assert.equal(await bridge.fetchEntity("folio_sequence", "gst-invoice-sequence-FY2026-27"), null);
+  assert.equal(await bridge.fetchEntity("folio", "folio-1"), null);
+});
+
+test("split folio preserves master ledger and creates separately billable child atomically", async () => {
+  const { bridge } = fixture();
+  await bridge.mutateEntity({
+    entityType: "folio", entityId: "folio-1", expectedVersion: 0,
+    eventType: "folio.created",
+    mutate: entity => Object.assign(entity, { id: "folio-1", bookingId: "booking-1", paymentRows: [], chargeLines: [{ id: "room-night-1", description: "Room night", amountPaise: 10000 }] })
+  });
+  const result = await createSplitFolio({
+    bridge, masterFolioId: "folio-1", childFolioId: "folio-1-A",
+    bookingId: "booking-1", guest: { name: "Second Guest", companyGstin: "27ABCDE1234F1Z5" },
+    sourceCharges: [{ id: "room-night-1", description: "Room night", amount: 100 }],
+    allocations: [{ chargeId: "room-night-1", amountPaise: 5000 }],
+    now: () => "2026-11-16T12:00:00.000Z"
+  });
+  assert.equal(result.folio.masterFolioId, "folio-1");
+  assert.equal(result.folio.allocationTotalPaise, 5000);
+  assert.equal((await bridge.fetchEntity("folio", "folio-1")).data.splitAllocations.length, 1);
+  assert.ok(await bridge.fetchEntity("ledger", "folio-split-folio-1-A"));
+  assert.ok(await bridge.fetchEntity("audit", "folio-split-audit-folio-1-A"));
+});
+
+test("split folio rejects over-allocation and duplicate child IDs", async () => {
+  const { bridge } = fixture();
+  await bridge.mutateEntity({ entityType: "folio", entityId: "folio-master", expectedVersion: 0, eventType: "folio.created", mutate: entity => Object.assign(entity, { id: "folio-master", bookingId: "booking-1", chargeLines: [{ id: "charge-1", amountPaise: 1000 }] }) });
+  await createSplitFolio({
+    bridge, masterFolioId: "folio-master", childFolioId: "folio-child-1",
+    bookingId: "booking-1", sourceCharges: [{ id: "charge-1", amount: 10 }],
+    allocations: [{ chargeId: "charge-1", amountPaise: 600 }],
+    now: () => "2026-11-16T12:00:00.000Z"
+  });
+  await assert.rejects(createSplitFolio({
+    bridge, masterFolioId: "folio-master", childFolioId: "folio-child-2",
+    bookingId: "booking-1", sourceCharges: [{ id: "charge-1", amount: 10 }],
+    allocations: [{ chargeId: "charge-1", amountPaise: 500 }],
+    now: () => "2026-11-16T12:00:00.000Z"
+  }), error => error.code === "SPLIT_ALLOCATION_ALREADY_USED");
+  await assert.rejects(createSplitFolio({
+    bridge, masterFolioId: "folio-master", childFolioId: "folio-child-1",
+    bookingId: "booking-1", sourceCharges: [{ id: "charge-1", amount: 10 }],
+    allocations: [{ chargeId: "charge-1", amountPaise: 100 }],
+    now: () => "2026-11-16T12:00:00.000Z"
+  }), error => error.code === "SPLIT_FOLIO_ALREADY_EXISTS");
+});
+
+test("split invoice preserves source line tax and uses the split billing identity", () => {
+  const masterInvoice = {
+    folioNumber: "folio-master", invoiceNumber: "INV/FY2026-27/000001",
+    billedTo: { name: "Primary Guest", address: "Main address", phone: "123", occupants: [] },
+    property: { legalName: "Aurelia" }, stay: { roomNumber: "12", nights: 1 },
+    lineItems: [], totals: { grossMinor: 10000 }
+  };
+  const splitFolio = {
+    id: "folio-split", masterFolioId: "folio-master",
+    billingGuest: { name: "Second Guest", companyGstin: "27ABCDE1234F1Z5" },
+    paymentRows: [{ amountPaise: 1000, method: "UPI", reference: "UTR-SPLIT", at: "2026-11-16T12:00:00Z" }], paidPaise: 1000,
+    allocations: [{
+      chargeId: "room-night-1", amountPaise: 5000, sourceDescription: "Room night",
+      chargeSnapshot: {
+        id: "room-night-1", description: "Room night", grossMinor: 10000,
+        amountMinor: 10000, taxableMinor: 8475, taxMinor: 1525,
+        cgstMinor: 763, sgstMinor: 762, igstMinor: 0,
+        taxProfile: { id: "room", rate: 18, supply: "intrastate", inclusive: true, sac: "996311" }
+      }
+    }]
+  };
+  const split = buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate: "2026-11-16T12:00:00Z" });
+  assert.equal(split.folioNumber, "folio-split");
+  assert.equal(split.billedTo.name, "Second Guest");
+  assert.equal(split.billedTo.companyGstin, "27ABCDE1234F1Z5");
+  assert.equal(split.totals.grossMinor, 5000);
+  assert.equal(split.totals.taxMinor, 763);
+  assert.equal(split.totals.paidMinor, 1000);
+  assert.equal(split.totals.dueMinor, 4000);
+  assert.equal(split.payments[0].reference, "UTR-SPLIT");
+  assert.equal(split.invoiceNumber, "");
+});
+
+test("remaining master invoice excludes amounts assigned to split folios", () => {
+  const masterInvoice = {
+    invoiceNumber: "", lineItems: [
+      { id: "room-night-1", grossMinor: 10000, taxableMinor: 8475, taxMinor: 1525,
+        cgstMinor: 763, sgstMinor: 762, igstMinor: 0 },
+      { id: "food-1", grossMinor: 5000, taxableMinor: 5000, taxMinor: 0,
+        cgstMinor: 0, sgstMinor: 0, igstMinor: 0 }
+    ],
+    totals: { grossMinor: 15000, paidMinor: 0 }
+  };
+  const remaining = buildRemainingFolioInvoice({
+    masterInvoice,
+    masterFolio: { splitAllocations: [{ allocations: [{ chargeId: "room-night-1", amountPaise: 4000 }] }] }
+  });
+  assert.equal(remaining.totals.grossMinor, 11000);
+  assert.equal(remaining.lineItems.find(x => x.id === "room-night-1").grossMinor, 6000);
+  assert.equal(remaining.lineItems.find(x => x.id === "food-1").grossMinor, 5000);
+});
+
+test("split folio payment posts atomically, idempotently and never overpays", async () => {
+  const { bridge } = fixture();
+  await bridge.mutateEntity({ entityType: "folio", entityId: "master-payment", expectedVersion: 0, eventType: "folio.created", mutate: entity => Object.assign(entity, { id: "master-payment", bookingId: "booking-payment", chargeLines: [{ id: "line-1", amountPaise: 10000 }] }) });
+  await createSplitFolio({
+    bridge, masterFolioId: "master-payment", childFolioId: "child-payment",
+    bookingId: "booking-payment", sourceCharges: [{ id: "line-1", amount: 100 }],
+    allocations: [{ chargeId: "line-1", amountPaise: 10000 }],
+    now: () => "2026-11-16T12:00:00.000Z"
+  });
+  const input = {
+    bridge, folioId: "child-payment", amountPaise: 4000, method: "UPI",
+    reference: "UTR-SPLIT-1", idempotencyKey: "split-payment-1",
+    verificationConfirmed: true, now: () => "2026-11-16T12:01:00.000Z"
+  };
+  const first = await recordSplitFolioPayment(input);
+  const duplicate = await recordSplitFolioPayment(input);
+  assert.equal(first.duplicate, false);
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(first.balanceDuePaise, 6000);
+  const saved = await bridge.fetchEntity("folio", "child-payment");
+  assert.equal(saved.data.paymentRows.length, 1);
+  assert.equal(saved.data.paidPaise, 4000);
+  assert.equal(saved.data.balanceDuePaise, 6000);
+  assert.ok(await bridge.fetchEntity("ledger", "split-payment-ledger-split-payment-1"));
+  assert.ok(await bridge.fetchEntity("audit", "split-payment-audit-split-payment-1"));
+  await assert.rejects(recordSplitFolioPayment({
+    ...input, amountPaise: 7000, reference: "UTR-SPLIT-2", idempotencyKey: "split-payment-2"
+  }), error => error.code === "SPLIT_FOLIO_OVERPAYMENT");
+});
