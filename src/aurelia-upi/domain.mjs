@@ -328,7 +328,7 @@ function parseStatementCsvRows(input) {
       if (fields.some(value => String(value).trim())) rows.push(fields);
       fields = []; field = "";
     } else field += ch;
-    if (rows.length > 5001) throw new RangeError("Import no more than 5,000 bank statement rows at a time.");
+    if (rows.length > 501) throw new RangeError("Import no more than 500 bank statement rows at a time.");
   }
   if (quoted) throw new TypeError("The bank statement CSV contains an unterminated quoted field.");
   if (field.length || fields.length) {
@@ -342,15 +342,15 @@ function parseStatementCsvRows(input) {
 function parseStatementDate(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
+  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(raw);
+  if (dmy) {
+    const day = Number(dmy[1]), month = Number(dmy[2]), year = Number(dmy[3]);
+    const date = new Date(year, month - 1, day, Number(dmy[4] || 0), Number(dmy[5] || 0), Number(dmy[6] || 0));
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return date.toISOString();
+  }
   const direct = Date.parse(raw);
-  if (Number.isFinite(direct)) return new Date(direct).toISOString();
-  const match = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(raw);
-  if (!match) return null;
-  const date = new Date(
-    Number(match[3]), Number(match[2]) - 1, Number(match[1]),
-    Number(match[4] || 0), Number(match[5] || 0), Number(match[6] || 0)
-  );
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  return Number.isFinite(direct) ? new Date(direct).toISOString() : null;
 }
 
 function statementAmountPaise(value) {
@@ -378,7 +378,7 @@ export function parseBankStatementCsv(input) {
   const debitIndex = find([/^debit$/, /debit amount/, /^withdrawal$/, /^dr$/]);
   const amountIndex = find([/^amount$/, /transaction amount/, /^txn amount$/]);
   const typeIndex = find([/^type$/, /dr cr/, /transaction type/, /txn type/, /credit debit/]);
-  const utrIndex = find([/^utr$/, /utr number/, /rrn/, /upi reference/, /reference number/, /^ref no$/, /transaction id/, /^txn id$/]);
+  const utrIndex = find([/^utr$/, /utr number/, /rrn/, /upi ref/, /upi reference/, /reference number/, /^ref no$/, /transaction reference/, /transaction id/, /^txn id$/]);
   if (dateIndex < 0) throw new TypeError("A Date / Transaction Date column is required.");
   if (creditIndex < 0 && amountIndex < 0) throw new TypeError("A Credit or Amount column is required.");
   if (descriptionIndex < 0 && channelIndex < 0) throw new TypeError("A Description / Narration or Channel column is required.");
@@ -391,14 +391,14 @@ export function parseBankStatementCsv(input) {
     const channel = cell(channelIndex);
     const type = cell(typeIndex).toUpperCase();
     const debitPaise = debitIndex >= 0 ? statementAmountPaise(cell(debitIndex)) : 0;
-    let amountPaise = creditIndex >= 0 ? statementAmountPaise(cell(creditIndex)) : 0;
-    if (creditIndex < 0 || amountPaise <= 0) {
-      if (amountIndex >= 0) {
-        const candidate = statementAmountPaise(cell(amountIndex));
-        const creditType = /^(CR|CREDIT|DEPOSIT|IN|C)$/.test(type) ||
-          /\b(?:credited|credit|deposit|received|upi\/cr)\b/i.test(description);
-        if (candidate > 0 && creditType) amountPaise = candidate;
-      }
+    let amountPaise = 0;
+    if (creditIndex >= 0) {
+      amountPaise = statementAmountPaise(cell(creditIndex));
+    } else if (amountIndex >= 0) {
+      const candidate = statementAmountPaise(cell(amountIndex));
+      const creditType = /^(CR|CREDIT|DEPOSIT|IN|C)$/.test(type) ||
+        /\b(?:credited|credit|deposit|received|upi\/cr)\b/i.test(description);
+      if (candidate > 0 && creditType) amountPaise = candidate;
     }
     const debitType = /^(DR|DEBIT|WITHDRAWAL|OUT|D)$/.test(type) ||
       /\b(?:debited|debit|withdrawal|paid to|sent to|upi\/dr)\b/i.test(description);
@@ -406,11 +406,11 @@ export function parseBankStatementCsv(input) {
     const date = parseStatementDate(cell(dateIndex));
     let utr = cell(utrIndex).toUpperCase().replace(/\s+/g, "");
     if (!/^[A-Z0-9_-]{8,30}$/.test(utr)) {
-      const match = /(?:UTR|RRN|UPI\s*(?:REF(?:ERENCE)?|ID)?|REF(?:ERENCE)?\s*(?:NO\.?|NUMBER)?)\s*[:#/-]?\s*([A-Z0-9_-]{8,30})/i.exec(description);
+      const match = /(?:UPI\/(?:CR\/)?|UTR|RRN|UPI\s*(?:REF(?:ERENCE)?|ID)?|REF(?:ERENCE)?\s*(?:NO\.?|NUMBER)?)\s*[:#/-]?\s*([A-Z0-9_-]{8,30})/i.exec(description);
       utr = match ? match[1].toUpperCase() : "";
     }
     const vpa = /([A-Z0-9._-]{2,64}@[A-Z0-9.-]{2,64})/i.exec(description);
-    if (amountPaise <= 0 || debitPaise > 0 || debitType || !isUpi || !date || !utr) {
+    if (amountPaise <= 0 || debitPaise !== 0 || debitType || !isUpi || !date || !utr) {
       rejectedRows++;
       continue;
     }

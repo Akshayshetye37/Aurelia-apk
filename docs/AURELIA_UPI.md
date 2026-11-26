@@ -48,7 +48,7 @@ Notification Access is sensitive. Enable it only on the device used to operate A
 ## Reconciliation and refunds
 
 - Manual alert paste/import, local Android notifications and bank-statement CSV rows enter the same review workflow.
-- The CSV importer extracts dated UPI credit rows with exact amount and UTR/RRN, discards debit/non-UPI rows, and stores only the normalized candidate row—not the original statement file.
+- The CSV importer supports common comma- or semicolon-delimited exports with date, narration/description, credit (or amount plus CR/type), UTR/RRN and optional debit columns. It extracts dated UPI credit rows with exact amount and UTR/RRN, discards debit/non-UPI rows, and stores only the normalized candidate row—not the original statement file. Import batches are capped at 500 rows.
 - Unmatched and ambiguous alerts can be assigned to an exact-amount session for manual review.
 - Statement imports remain operator-supplied evidence. They do not settle payments automatically; the operator must inspect the receiving bank record and explicitly confirm.
 - Confirming one session marks other alerts linked to that session as duplicates.

@@ -275,6 +275,7 @@ test('bank statement CSV parser imports only dated UPI credits with exact amount
   assert.equal(result.rows[0].amountPaise, 25000);
   assert.equal(result.rows[0].utr, '123456789012');
   assert.equal(result.rows[0].source, 'BANK_STATEMENT_CSV');
+  assert.equal(result.rows[0].receivedAt.slice(0, 10), '2026-11-26');
   assert.equal(result.rejectedRows, 2);
 });
 
@@ -282,4 +283,13 @@ test('bank statement CSV parser rejects missing date, amount or description colu
   const { parseBankStatementCsv } = await import('../src/aurelia-upi/domain.mjs');
   assert.throws(() => parseBankStatementCsv('Narration,Credit\nUPI credit,100.00'), /Date/);
   assert.throws(() => parseBankStatementCsv('Date,Narration\n26/11/2026,UPI credit'), /Credit or Amount/);
+});
+
+test('bank statement CSV date parsing treats slash dates as Indian day-first dates and rejects impossible dates', async () => {
+  const { parseBankStatementCsv } = await import('../src/aurelia-upi/domain.mjs');
+  const valid = 'Date,Description,UTR,Credit\n03/04/2026,"UPI/CR/123456789012",123456789012,10.00';
+  const parsed = parseBankStatementCsv(valid);
+  assert.equal(parsed.rows[0].receivedAt.slice(0, 10), '2026-04-03');
+  const invalid = 'Date,Description,UTR,Credit\n31/02/2026,"UPI/CR/123456789012",123456789012,10.00';
+  assert.equal(parseBankStatementCsv(invalid).rows.length, 0);
 });

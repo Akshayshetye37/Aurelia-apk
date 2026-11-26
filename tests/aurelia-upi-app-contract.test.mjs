@@ -46,7 +46,8 @@ test('bank statement import stores normalized UPI rows as evidence without retai
   const app = await read('src/aurelia-upi/app.mjs');
   const domain = await read('src/aurelia-upi/domain.mjs');
   assert.match(app, /Import bank statement CSV/);
-  assert.match(app, /await file\.text\(\)/);
+  assert.match(app, /file\.text\(\)/);
+  assert.match(app, /new FileReader\(\)/);
   assert.match(app, /AURELIA_UPI_BANK_STATEMENT_IMPORTED/);
   assert.match(app, /The original file is not retained/);
   assert.match(domain, /export function parseBankStatementCsv/);

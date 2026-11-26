@@ -9,6 +9,7 @@ import {
   enqueueSession,
   promoteNextSession,
   parseIncomingUpiNotification,
+  parseBankStatementCsv,
   matchEvidenceToSessions,
   createRefundRecord,
   completeRefundRecord,
@@ -470,7 +471,13 @@ async function importStatementFile(file) {
     throw new Error("Select a bank statement CSV file.");
   }
   if (Number(file.size || 0) > 5 * 1024 * 1024) throw new Error("Bank statement CSV must be 5 MB or smaller.");
-  const parsed = parseBankStatementCsv(await file.text());
+  const csvText = typeof file.text === "function" ? await file.text() : await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read the selected CSV file."));
+    reader.readAsText(file);
+  });
+  const parsed = parseBankStatementCsv(csvText);
   if (!parsed.rows.length) throw new Error("No dated UPI credit rows with a valid amount and UTR were found.");
   let duplicates = 0, conflicts = 0, matched = 0;
   for (let index = 0; index < parsed.rows.length; index++) {
@@ -504,18 +511,19 @@ async function importStatementFile(file) {
       evidence.suggestedSessionId = match.suggestedSessionId || null;
       evidence.candidateSessionIds = match.candidates.map(candidate => candidate.id);
       evidence.status = match.decision;
-      if (evidence.suggestedSessionId) {
-        const session = state.sessions.find(candidate => candidate.id === evidence.suggestedSessionId);
-        if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED, SESSION_STATUS.OBSERVED].includes(session.status)) {
-          const updated = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: evidence.id });
-          await repository.saveSession(updated, "AURELIA_UPI_STATEMENT_MATCHED");
-          state.sessions = state.sessions.map(candidate => candidate.id === updated.id ? updated : candidate);
-          matched++;
-        }
-      }
     }
+    // Persist the evidence before blocking its collection session for review.
     await repository.saveEvidence(evidence, "AURELIA_UPI_BANK_STATEMENT_IMPORTED");
     state.evidence.unshift(evidence);
+    if (evidence.suggestedSessionId) {
+      matched++;
+      const session = state.sessions.find(candidate => candidate.id === evidence.suggestedSessionId);
+      if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.PROCESSING, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED, SESSION_STATUS.OBSERVED].includes(session.status)) {
+        const updated = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: evidence.id });
+        await repository.saveSession(updated, "AURELIA_UPI_STATEMENT_MATCHED");
+        state.sessions = state.sessions.map(candidate => candidate.id === updated.id ? updated : candidate);
+      }
+    }
   }
   audit("Bank statement CSV imported", parsed.rows.length + " UPI row(s) · " + duplicates + " duplicate(s) · " + conflicts + " conflict(s)");
   notify("Imported " + parsed.rows.length + " UPI statement row(s). " + matched + " matched for review; none were settled automatically.");
