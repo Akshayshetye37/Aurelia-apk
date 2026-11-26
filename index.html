@@ -1781,7 +1781,7 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
       observeDock();
       if(window.MutationObserver&&document.body){
         dockMutationObserver=new MutationObserver(observeDock);
-        dockMutationObserver.observe(document.body,{childList:true,subtree:true});
+        dockMutationObserver.observe(document.body,{childList:true});
       }
       window.addEventListener('resize',observeDock,{passive:true});
       window.addEventListener('orientationchange',observeDock,{passive:true});
