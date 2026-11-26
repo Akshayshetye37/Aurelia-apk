@@ -94,6 +94,39 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     if(oldVersion<8) db.execSQL("ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT");
     if(oldVersion<9) {
       db.execSQL("CREATE TABLE IF NOT EXISTS aurelia_upi_reference_claims(reference TEXT PRIMARY KEY NOT NULL CHECK(length(reference) BETWEEN 8 AND 30),reference_type TEXT NOT NULL CHECK(reference_type IN ('PAYMENT','REFUND')),entity_id TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),claimed_at INTEGER NOT NULL,UNIQUE(reference_type,entity_id))");
+      // Backfill every previously confirmed payment/refund reference before
+      // enabling the new uniqueness rule. A conflicting legacy ledger blocks
+      // the migration instead of silently permitting reference replay.
+      java.util.ArrayList<String[]> legacyClaims=new java.util.ArrayList<>();
+      try(Cursor legacy=db.rawQuery("SELECT entity_type,entity_id,data_json FROM pms_entities WHERE entity_type IN ('upi_payment','upi_refund')",null)) {
+        while(legacy.moveToNext()) {
+          JSONObject data=new JSONObject(legacy.getString(2));
+          String entityType=legacy.getString(0),entityId=legacy.getString(1),reference=null,claimType=null;
+          long amount=data.optLong("amountPaise",0L);
+          if("upi_payment".equals(entityType)) {
+            String status=data.optString("status","");
+            boolean verified=data.optBoolean("manualVerified",false);
+            if(verified&&("CONFIRMED_PENDING_PMS".equals(status)||"CONFIRMED".equals(status)||"APPLIED_TO_PMS".equals(status))) {
+              reference=data.optString("transactionReference",null);claimType="PAYMENT";
+            }
+          } else if("upi_refund".equals(entityType)&&"REFUND_RECORDED".equals(data.optString("status",""))) {
+            reference=data.optString("transferReference",null);claimType="REFUND";
+          }
+          if(reference!=null&&reference.matches("[A-Za-z0-9]{8,30}")&&amount>0L&&amount<=100000000000L)
+            legacyClaims.add(new String[]{reference.toUpperCase(java.util.Locale.ROOT),claimType,entityId,String.valueOf(amount)});
+        }
+      }
+      for(String[] claim:legacyClaims) {
+        ContentValues row=new ContentValues();row.put("reference",claim[0]);row.put("reference_type",claim[1]);
+        row.put("entity_id",claim[2]);row.put("amount_paise",Long.parseLong(claim[3]));row.put("claimed_at",System.currentTimeMillis());
+        long inserted=db.insertWithOnConflict("aurelia_upi_reference_claims",null,row,SQLiteDatabase.CONFLICT_IGNORE);
+        if(inserted<0L) {
+          try(Cursor existing=db.rawQuery("SELECT reference_type,entity_id,amount_paise FROM aurelia_upi_reference_claims WHERE reference=?",new String[]{claim[0]})) {
+            if(!existing.moveToFirst()||!claim[1].equals(existing.getString(0))||!claim[2].equals(existing.getString(1))||Long.parseLong(claim[3])!=existing.getLong(2))
+              throw new IllegalStateException("upi_reference_legacy_backfill_conflict");
+          }
+        }
+      }
     }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
