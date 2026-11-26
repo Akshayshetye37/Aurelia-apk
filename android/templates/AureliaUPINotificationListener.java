@@ -38,6 +38,7 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
     "com.fisglobal.bandhanupi.app",
     "com.freecharge.android",
     "com.google.android.apps.messaging",
+    "com.google.android.gm",
     "com.google.android.apps.nbu.paisa.user",
     "com.hdfcbank.payzapp",
     "com.icicibank.pockets",
@@ -67,10 +68,10 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
   ));
   private static final Pattern AMOUNT = Pattern.compile("(?:₹|INR\\s*|Rs\\.?\\s*)([0-9,]+(?:\\.[0-9]{1,2})?)|([0-9,]+(?:\\.[0-9]{1,2})?)\\s*(?:INR|Rs\\.?)", Pattern.CASE_INSENSITIVE);
   private static final Pattern BALANCE = Pattern.compile("(?i)(?:(?:available|avl|current|ledger|closing|total)\\s+)?(?:bal|balance)\\s*[:=-]?\\s*(?:₹|INR\\s*|Rs\\.?\\s*)?[0-9,]+(?:\\.[0-9]{1,2})?");
-  private static final Pattern UTR = Pattern.compile("\\b(?:UTR|UPI\\s*(?:Ref(?:erence)?|ID|Txn)|RRN|Ref(?:erence)?\\s*(?:No\\.?|Number)?)\\s*[:#-]?\\s*([A-Z0-9_-]{6,35})\\b", Pattern.CASE_INSENSITIVE);
+  private static final Pattern UTR = Pattern.compile("\\b(?:UTR|UPI\\s*(?:Ref(?:erence)?|ID|Txn)|RRN|Ref(?:erence)?\\s*(?:No\\.?|Number)?)\\s*[:#-]?\\s*([A-Z0-9_-]{8,30})\\b", Pattern.CASE_INSENSITIVE);
   private static final Pattern VPA = Pattern.compile("([A-Za-z0-9._-]{2,64}@[A-Za-z0-9-]{2,64}(?:[.][A-Za-z0-9-]{2,64})*)");
-  private static final String[] CREDIT = {"credited", "received", "received from", "paid you", "money received", "payment received", "payment successful", "deposit", "transferred to your", "added to account"};
-  private static final String[] EXCLUDE = {"debited", "you paid", "sent to", "money sent", "payment failed", "declined", "reversed", "refund", "otp"};
+  private static final String[] CREDIT = {"credited", "received", "received from", "paid you", "money received", "payment received", "deposit", "transferred to your", "added to account"};
+  private static final String[] EXCLUDE = {"debited", "withdrawn", "deducted", "spent", "paid to", "you paid", "sent to", "money sent", "payment failed", "declined", "reversed", "refund", "otp"};
   private final ExecutorService worker = Executors.newSingleThreadExecutor();
   private volatile boolean connected;
 
@@ -138,12 +139,12 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
     boolean credit = false;
     for (String word : CREDIT) if (normalized.contains(word)) { credit = true; break; }
     if (!credit || (!Pattern.compile("\\bupi\\b|vpa|utr|rrn", Pattern.CASE_INSENSITIVE).matcher(text).find() && !VPA.matcher(text).find())) return null;
-    String amountText = BALANCE.matcher(text).replaceAll(" ");
-    Matcher amountMatcher = AMOUNT.matcher(amountText);
+    String amountCandidates = BALANCE.matcher(text).replaceAll(" ");
+    Matcher amountMatcher = AMOUNT.matcher(amountCandidates);
     if (!amountMatcher.find()) return null;
     try {
-      String amountText = amountMatcher.group(1) != null ? amountMatcher.group(1) : amountMatcher.group(2);
-      BigDecimal rupees = new BigDecimal(amountText.replace(",", ""));
+      String parsedAmount = amountMatcher.group(1) != null ? amountMatcher.group(1) : amountMatcher.group(2);
+      BigDecimal rupees = new BigDecimal(parsedAmount.replace(",", ""));
       long paise = rupees.movePointRight(2).longValueExact();
       if (paise <= 0L || paise > 100000000000L) return null;
       Matcher utrMatcher = UTR.matcher(text);
