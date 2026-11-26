@@ -15,6 +15,13 @@ if (!manifest.includes('android.permission.INTERNET')) {
 // Use Android Photo Picker and Storage Access Framework; remove broad permissions.
 manifest = stripForbiddenPermissions(manifest);
 manifest = disableManifestBackup(manifest);
+if (!manifest.includes('AureliaUPINotificationListener')) {
+  const observer = '    <service android:name="com.aurelia.pms.AureliaUPINotificationListener" ' +
+    'android:label="Aurelia UPI notification observer" android:exported="true" ' +
+    'android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">' +
+    '<intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>';
+  manifest = manifest.replace('</application>', observer + '\n</application>');
+}
 fs.writeFileSync(manifestPath, manifest);
 
 
@@ -70,11 +77,11 @@ if (fs.existsSync(appGradleGroovy)) {
   }
   if (!gradle.includes('androidx.biometric:biometric:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match =>
-      match + "\n    implementation 'androidx.biometric:biometric:1.2.0'");
+      match + "\n    implementation 'androidx.biometric:biometric:1.1.0'");
   }
   if (!gradle.includes('net.zetetic:sqlcipher-android:4.20.0@aar') ||
       !gradle.includes('androidx.sqlite:sqlite:2.7.0') ||
-      !gradle.includes('androidx.biometric:biometric:1.2.0')) {
+      !gradle.includes('androidx.biometric:biometric:1.1.0')) {
     throw new Error('Required SQLCipher and biometric Android dependencies could not be installed into the generated Gradle project.');
   }
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
@@ -87,6 +94,44 @@ if (fs.existsSync(appGradleGroovy)) {
 } else {
   throw new Error('Android app Gradle build file was not found.');
 }
+
+// SQLCipher 4.20.0 requires compileSdk 36. AGP 8.9.1 is the minimum
+// supported Android Gradle Plugin for API 36; Gradle 8.11.1 is its minimum wrapper.
+const agpFiles = [
+  path.join(androidDir, 'build.gradle'),
+  path.join(androidDir, 'settings.gradle'),
+  path.join(androidDir, 'gradle', 'libs.versions.toml')
+];
+let agpPinned = false;
+for (const file of agpFiles) {
+  if (!fs.existsSync(file)) continue;
+  let source = fs.readFileSync(file, 'utf8');
+  const before = source;
+  source = source
+    .replace(/com\.android\.tools\.build:gradle:[0-9.]+/g, 'com.android.tools.build:gradle:8.9.1')
+    .replace(/(id\s+['"]com\.android\.(?:application|library)['"]\s+version\s+['"])[0-9.]+(['"])/g, (_match, prefix, suffix) => prefix + '8.9.1' + suffix)
+    .replace(/(agp\s*=\s*['"])[0-9.]+(['"])/g, (_match, prefix, suffix) => prefix + '8.9.1' + suffix);
+  if (source !== before) fs.writeFileSync(file, source);
+  if (source.includes('com.android.tools.build:gradle:8.9.1') ||
+      /com\.android\.(?:application|library)['"]\s+version\s+['"]8\.9\.1/.test(source) ||
+      /agp\s*=\s*['"]8\.9\.1/.test(source)) agpPinned = true;
+}
+if (!agpPinned) throw new Error('Android Gradle Plugin 8.9.1 could not be pinned for API 36.');
+
+const variablesGradle = path.join(androidDir, 'variables.gradle');
+if (!fs.existsSync(variablesGradle)) throw new Error('Capacitor variables.gradle was not found.');
+let variablesSource = fs.readFileSync(variablesGradle, 'utf8');
+if (!/compileSdkVersion\s*=\s*\d+/.test(variablesSource)) throw new Error('compileSdkVersion setting was not found in variables.gradle.');
+variablesSource = variablesSource.replace(/compileSdkVersion\s*=\s*\d+/, 'compileSdkVersion = 36');
+if (!/compileSdkVersion\s*=\s*36/.test(variablesSource)) throw new Error('compileSdkVersion 36 could not be configured.');
+fs.writeFileSync(variablesGradle, variablesSource);
+
+const wrapperProperties = path.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties');
+if (!fs.existsSync(wrapperProperties)) throw new Error('Gradle wrapper properties were not found.');
+let wrapperSource = fs.readFileSync(wrapperProperties, 'utf8');
+wrapperSource = wrapperSource.replace(/gradle-[0-9.]+-(?:all|bin)\.zip/, 'gradle-8.11.1-all.zip');
+if (!wrapperSource.includes('gradle-8.11.1-all.zip')) throw new Error('Gradle 8.11.1 wrapper could not be configured.');
+fs.writeFileSync(wrapperProperties, wrapperSource);
 
 const proguardRules = [
   '# Preserve the JavaScript bridge entry points exposed to the WebView.',
@@ -101,6 +146,7 @@ const proguardRules = [
   '-keep class com.aurelia.pms.PmsDatabaseKeyManager { *; }',
   '-keep class com.aurelia.pms.PmsUnlockManager { *; }',
   '-keep class com.aurelia.pms.AureliaNativeActionsPlugin { *; }',
+  '-keep class com.aurelia.pms.AureliaUPINotificationListener { *; }',
   '-keep class net.zetetic.database.** { *; }',
   ''
 ].join('\n');
@@ -112,7 +158,8 @@ const nativeTemplates = [
   'AureliaNativeActionsPlugin.java',
   'LocalPmsRepository.java',
   'CapacitorPmsStoragePlugin.java',
-  'StorageSerializationException.java'
+  'StorageSerializationException.java',
+  'AureliaUPINotificationListener.java'
 ];
 for (const templateName of nativeTemplates) {
   const source = path.join(androidDir, 'templates', templateName);
@@ -126,8 +173,10 @@ package com.aurelia.pms;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.provider.DocumentsContract;
 import android.database.Cursor;
 import android.util.Base64;
@@ -168,7 +217,7 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(CapacitorPmsStoragePlugin.class);
     registerPlugin(AureliaNativeActionsPlugin.class);
     super.onCreate(savedInstanceState);
-    if (!BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(false);
+    if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) WebView.setWebContentsDebuggingEnabled(false);
     if (bridge != null && bridge.getWebView() != null) {
       android.webkit.WebSettings appSettings = bridge.getWebView().getSettings();
       appSettings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -705,8 +754,24 @@ public class MainActivity extends BridgeActivity {
           String url = obj.optString("url", "");
           Uri target = Uri.parse(url);
           String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(java.util.Locale.ROOT);
-          if (!scheme.matches("https|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
+          if ("upi".equals(scheme)) {
+            String pa = target.getQueryParameter("pa"), amount = target.getQueryParameter("am"), currency = target.getQueryParameter("cu");
+            if (!"pay".equalsIgnoreCase(target.getHost()) || pa == null || !pa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}") ||
+                amount == null || !amount.matches("[0-9]{1,9}\\.[0-9]{2}") || !"INR".equals(currency) || url.length() > 2048)
+              throw new SecurityException("Invalid Aurelia UPI payment intent");
+          } else if (!scheme.matches("https|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
           runOnUiThread(() -> { try { Intent intent = new Intent(Intent.ACTION_VIEW, target); startActivity(intent); } catch (Exception e) { js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open link") + ")"); } });
+        } else if ("openNotificationAccessSettings".equals(type)) {
+          runOnUiThread(() -> {
+            try {
+              Intent intent = new Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+              intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              startActivity(intent);
+              js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",true," + q("Notification access settings opened") + ")");
+            } catch (Exception e) {
+              js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open notification access settings") + ")");
+            }
+          });
         } else if ("shareText".equals(type)) {
           String title = obj.optString("title", "Share");
           String text = obj.optString("text", "");

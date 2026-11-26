@@ -25,7 +25,7 @@ public final class AureliaNativeActionsPlugin extends Plugin {
     try {
       JSONObject request = new JSONObject(raw);
       String type = request.optString("type", "");
-      if (!type.matches("photoStore|photoLoad|photoArchive|photoRestore|chooseDeviceBackupFolder|recognizeId|deviceBackupStatus|recoverLatestBackup|backupDeviceNow|openUrl|shareText|printInvoice|shareInvoicePng|shareImage|saveFile")) {
+      if (!type.matches("photoStore|photoLoad|photoArchive|photoRestore|chooseDeviceBackupFolder|recognizeId|deviceBackupStatus|recoverLatestBackup|backupDeviceNow|openUrl|openNotificationAccessSettings|shareText|printInvoice|shareInvoicePng|shareImage|saveFile")) {
         call.reject("Unsupported native action.", "AURELIA_NATIVE_UNSUPPORTED_ACTION");
         return;
       }

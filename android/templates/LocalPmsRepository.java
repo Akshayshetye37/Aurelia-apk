@@ -3,7 +3,6 @@ package com.aurelia.pms;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
 import org.json.JSONArray;
@@ -15,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms.db";
-  private static final int VERSION = 6;
+  private static final int VERSION = 8;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final byte[] databaseKey;
@@ -52,6 +51,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE pms_migration_checkpoints(migration_id TEXT NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(migration_id,table_name))");
     db.execSQL("CREATE TABLE pms_authority(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('legacy','migrating','canonical')),migration_id TEXT,updated_at INTEGER NOT NULL)");
     db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
+    db.execSQL("CREATE TABLE aurelia_upi_evidence(evidence_id TEXT PRIMARY KEY NOT NULL,source_package TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),utr TEXT,sender_vpa TEXT,raw_text TEXT NOT NULL,received_at INTEGER NOT NULL,fingerprint TEXT NOT NULL UNIQUE,status TEXT NOT NULL CHECK(status IN ('OBSERVED','CONFIRMED','REJECTED','DUPLICATE','CONFLICT')),review_note TEXT,reviewed_by TEXT,reviewed_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)");
+    db.execSQL("CREATE INDEX aurelia_upi_evidence_time_idx ON aurelia_upi_evidence(received_at DESC)");
+    db.execSQL("CREATE INDEX aurelia_upi_evidence_utr_idx ON aurelia_upi_evidence(utr,amount_paise)");
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
@@ -83,6 +85,12 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("DROP INDEX IF EXISTS pms_outbox_delivery_idx");
       db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at_ms,created_at)");
     }
+    if(oldVersion<7) {
+      db.execSQL("CREATE TABLE IF NOT EXISTS aurelia_upi_evidence(evidence_id TEXT PRIMARY KEY NOT NULL,source_package TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),utr TEXT,raw_text TEXT NOT NULL,received_at INTEGER NOT NULL,fingerprint TEXT NOT NULL UNIQUE,status TEXT NOT NULL CHECK(status IN ('OBSERVED','CONFIRMED','REJECTED','DUPLICATE','CONFLICT')),review_note TEXT,reviewed_by TEXT,reviewed_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)");
+      db.execSQL("CREATE INDEX IF NOT EXISTS aurelia_upi_evidence_time_idx ON aurelia_upi_evidence(received_at DESC)");
+      db.execSQL("CREATE INDEX IF NOT EXISTS aurelia_upi_evidence_utr_idx ON aurelia_upi_evidence(utr,amount_paise)");
+    }
+    if(oldVersion<8) db.execSQL("ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT");
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -166,7 +174,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
         if(hasSnapshot||hasBackup) {
           if(!hasSnapshot||!hasBackup||!rawJson.equals(existing.getString(0))||!rawJson.equals(backup.getString(0))||!sha256Hex(rawJson).equals(backup.getString(1)))throw new IllegalStateException("legacy_migration_backup_mismatch");
         } else {
-          if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
+          try(Cursor count=db.rawQuery("SELECT COUNT(*) FROM pms_entities",null)) {
+            if(!count.moveToFirst()||count.getLong(0)!=0L)throw new IllegalStateException("canonical_repository_not_empty");
+          }
           long now=System.currentTimeMillis();
           ContentValues backupRow=new ContentValues();backupRow.put("backup_id",migrationId);backupRow.put("raw_json",rawJson);backupRow.put("sha256",sha256Hex(rawJson));backupRow.put("created_at",now);db.insertOrThrow("pms_legacy_backup",null,backupRow);
           ContentValues snapshotRow=new ContentValues();snapshotRow.put("snapshot_id",migrationId);snapshotRow.put("source_key",sourceKey);snapshotRow.put("raw_json",rawJson);snapshotRow.put("source_timestamp",sourceTimestamp);snapshotRow.put("created_at",now);snapshotRow.put("format_version",1);db.insertOrThrow("pms_migration_snapshots",null,snapshotRow);
@@ -306,6 +316,91 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     } catch(Exception error) {
       throw error instanceof RuntimeException?(RuntimeException)error:failure("PMS_STORAGE_AUTHORITY_READ_FAILED",error);
     }
+  }
+
+  synchronized JSONObject enqueueUpiEvidence(String evidenceId,String sourcePackage,long amountPaise,String utr,String senderVpa,String rawText,long receivedAt,String fingerprint) {
+    validateIdentity(evidenceId,"upi evidence ID");
+    validateIdentity(sourcePackage,"upi source package");
+    if(amountPaise<=0L||amountPaise>100000000000L)throw new IllegalArgumentException("invalid_upi_evidence_amount");
+    if(rawText==null||rawText.trim().isEmpty()||rawText.length()>4000)throw new IllegalArgumentException("invalid_upi_evidence_text");
+    if(fingerprint==null||!fingerprint.matches("[0-9a-f]{64}"))throw new IllegalArgumentException("invalid_upi_evidence_fingerprint");
+    if(receivedAt<=0L||receivedAt>9007199254740991L)throw new IllegalArgumentException("invalid_upi_evidence_timestamp");
+    String cleanUtr=utr==null||utr.trim().isEmpty()?null:utr.trim().toUpperCase(java.util.Locale.ROOT);
+    if(cleanUtr!=null&&!cleanUtr.matches("[A-Z0-9]{8,30}"))cleanUtr=null;
+    String cleanSenderVpa=senderVpa==null||senderVpa.trim().isEmpty()?null:senderVpa.trim();
+    if(cleanSenderVpa!=null&&!cleanSenderVpa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9-]{2,64}(?:[.][A-Za-z0-9-]{2,64})*"))cleanSenderVpa=null;
+    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    try {
+      String status="OBSERVED";
+      if(cleanUtr!=null) {
+        try(Cursor duplicate=db.rawQuery("SELECT amount_paise FROM aurelia_upi_evidence WHERE utr=? AND status<>'REJECTED' LIMIT 1",new String[]{cleanUtr})) {
+          if(duplicate.moveToFirst())status=duplicate.getLong(0)==amountPaise?"DUPLICATE":"CONFLICT";
+        }
+      }
+      long now=System.currentTimeMillis();ContentValues row=new ContentValues();
+      row.put("evidence_id",evidenceId);row.put("source_package",sourcePackage);row.put("amount_paise",amountPaise);
+      if(cleanUtr==null)row.putNull("utr");else row.put("utr",cleanUtr);
+      if(cleanSenderVpa==null)row.putNull("sender_vpa");else row.put("sender_vpa",cleanSenderVpa);
+      row.put("raw_text",rawText);row.put("received_at",receivedAt);row.put("fingerprint",fingerprint);
+      row.put("status",status);row.put("created_at",now);row.put("updated_at",now);
+      long inserted=db.insertWithOnConflict("aurelia_upi_evidence",null,row,SQLiteDatabase.CONFLICT_IGNORE);
+      String selectedId=evidenceId;
+      if(inserted<0L) {
+        try(Cursor duplicate=db.rawQuery("SELECT evidence_id FROM aurelia_upi_evidence WHERE fingerprint=?",new String[]{fingerprint})) {
+          if(!duplicate.moveToFirst())throw new IllegalStateException("upi_evidence_duplicate_lookup_failed");
+          selectedId=duplicate.getString(0);
+        }
+      }
+      JSONObject result=readUpiEvidence(db,selectedId);db.setTransactionSuccessful();return result;
+    } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("upi_evidence_enqueue_failed",e);}
+    finally{db.endTransaction();}
+  }
+
+  synchronized JSONArray listUpiEvidence() {
+    JSONArray rows=new JSONArray();
+    try(Cursor c=getReadableDatabase().rawQuery("SELECT evidence_id,source_package,amount_paise,utr,sender_vpa,raw_text,received_at,fingerprint,status,review_note,reviewed_by,reviewed_at,created_at,updated_at FROM aurelia_upi_evidence ORDER BY received_at DESC LIMIT 200",null)) {
+      while(c.moveToNext())rows.put(upiEvidenceRow(c));return rows;
+    } catch(Exception e){throw failure("upi_evidence_list_failed",e);}
+  }
+
+  synchronized JSONObject updateUpiEvidence(String evidenceId,String status,String reviewNote,boolean manualVerified) {
+    validateIdentity(evidenceId,"upi evidence ID");
+    if(!"CONFIRMED".equals(status)&&!"REJECTED".equals(status)&&!"DUPLICATE".equals(status)&&!"CONFLICT".equals(status))throw new IllegalArgumentException("invalid_upi_evidence_review_status");
+    if("CONFIRMED".equals(status)&&!manualVerified)throw new SecurityException("upi_manual_verification_required");
+    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    try {
+      String current;
+      try(Cursor c=db.rawQuery("SELECT status FROM aurelia_upi_evidence WHERE evidence_id=?",new String[]{evidenceId})) {
+        if(!c.moveToFirst())throw new IllegalArgumentException("upi_evidence_not_found");current=c.getString(0);
+      }
+      if(status.equals(current)) {
+        JSONObject unchanged=readUpiEvidence(db,evidenceId);
+        db.setTransactionSuccessful();
+        return unchanged;
+      }
+      if("CONFIRMED".equals(current)||"REJECTED".equals(current)||"DUPLICATE".equals(current)||"CONFLICT".equals(current))throw new IllegalStateException("upi_evidence_already_reviewed");
+      long now=System.currentTimeMillis();ContentValues update=new ContentValues();update.put("status",status);
+      update.put("review_note",reviewNote==null?"":reviewNote.substring(0,Math.min(240,reviewNote.length())));
+      update.put("reviewed_by","LOCAL_OPERATOR");update.put("reviewed_at",now);update.put("updated_at",now);
+      if(db.update("aurelia_upi_evidence",update,"evidence_id=?",new String[]{evidenceId})!=1)throw new IllegalStateException("upi_evidence_update_mismatch");
+      JSONObject result=readUpiEvidence(db,evidenceId);db.setTransactionSuccessful();return result;
+    } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("upi_evidence_review_failed",e);}
+    finally{db.endTransaction();}
+  }
+
+  private static JSONObject readUpiEvidence(SQLiteDatabase db,String id) throws Exception {
+    try(Cursor c=db.rawQuery("SELECT evidence_id,source_package,amount_paise,utr,sender_vpa,raw_text,received_at,fingerprint,status,review_note,reviewed_by,reviewed_at,created_at,updated_at FROM aurelia_upi_evidence WHERE evidence_id=?",new String[]{id})) {
+      if(!c.moveToFirst())return null;return upiEvidenceRow(c);
+    }
+  }
+  private static JSONObject upiEvidenceRow(Cursor c) throws Exception {
+    JSONObject row=new JSONObject();row.put("evidenceId",c.getString(0));row.put("sourcePackage",c.getString(1));
+    row.put("amountPaise",c.getLong(2));row.put("utr",c.isNull(3)?JSONObject.NULL:c.getString(3));
+    row.put("senderVpa",c.isNull(4)?JSONObject.NULL:c.getString(4));
+    row.put("rawText",c.getString(5));row.put("receivedAt",c.getLong(6));row.put("fingerprint",c.getString(7));
+    row.put("status",c.getString(8));row.put("reviewNote",c.isNull(9)?JSONObject.NULL:c.getString(9));
+    row.put("reviewedBy",c.isNull(10)?JSONObject.NULL:c.getString(10));row.put("reviewedAt",c.isNull(11)?JSONObject.NULL:c.getLong(11));
+    row.put("createdAt",c.getLong(12));row.put("updatedAt",c.getLong(13));return row;
   }
 
   synchronized JSONObject storageGet(String store,String key) {

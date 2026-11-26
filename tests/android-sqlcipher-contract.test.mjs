@@ -80,8 +80,7 @@ test('generic WebView writes cannot mutate domain, outbox, migration or reserved
 
 test('Android patch installs the SQLCipher dependency and registers the native plugin', () => {
   assert.match(patch, /net\.zetetic:sqlcipher-android:4\.20\.0@aar/);
-  assert.match(patch, /androidx\.sqlite:sqlite:2\.7\.0/);
-  assert.match(patch, /androidx\.biometric:biometric:1\.2\.0/);
+  assert.match(patch, /androidx\.biometric:biometric:1\.1\.0/);
   assert.match(patch, /PmsUnlockManager\.java/);
   assert.match(patch, /PmsDatabaseKeyManager\.java/);
   assert.match(patch, /LocalPmsRepository\.java/);
@@ -90,8 +89,17 @@ test('Android patch installs the SQLCipher dependency and registers the native p
   assert.match(patch, /net\.zetetic\.database\.\*\* \{ \*; \}/);
 });
 
+test('native compile uses SQLCipher cursors and avoids generated BuildConfig assumptions', () => {
+  assert.doesNotMatch(repository, /android\.database\.DatabaseUtils/);
+  assert.match(repository, /db\.rawQuery\("SELECT COUNT\(\*\) FROM pms_entities"/);
+  assert.match(patch, /android\.content\.pm\.ApplicationInfo/);
+  assert.match(patch, /ApplicationInfo\.FLAG_DEBUGGABLE/);
+  assert.match(patch, /import android\.os\.Build/);
+});
+
 test('outbox retry scheduling uses integer epoch milliseconds and migrates legacy ISO timestamps', () => {
-  assert.match(repository, /VERSION = 6/);
+  assert.match(repository, /VERSION = 8/);
+  assert.match(repository, /ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT/);
   assert.match(repository, /retry_at_ms INTEGER/);
   assert.match(repository, /retry_at_ms<=\?/);
   assert.match(repository, /legacy_outbox_retry_timestamp_invalid/);
