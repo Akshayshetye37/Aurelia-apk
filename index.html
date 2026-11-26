@@ -1109,14 +1109,16 @@ async function persist(){
  const coordinator=window.AureliaLocalFirstWrites;
  if(!coordinator){RECOVERY_CHECK_PENDING=true;LOCAL_STATE_STATUS='write-failed';console.error('Canonical PMS repository is unavailable; no local-storage fallback is permitted.');if(!S.qw){S.qw=1;toast('CRITICAL: Device database is unavailable. Changes are not saved. Keep the app open and recover from a verified backup.')}window.aureliaRefreshStorageNotice?.();return false}
  const snapshot={tab:S.tab,bk:S.bk};DK.forEach(k=>snapshot[k]=S[k]);
+ const snapshotJson=JSON.stringify(snapshot);
+ if(snapshotJson===LAST_PMS_COMMITTED_SNAPSHOT)return true;
  LOCAL_STATE_STATUS='idb-pending';window.aureliaRefreshStorageNotice?.();
- try{const result=await coordinator.save(snapshot);if(!result||result.committed!==true)throw new Error('Canonical PMS commit did not confirm durable read-back.');LOCAL_STATE_STATUS='valid';S.qw=0;window.aureliaRefreshStorageNotice?.();return true}
+ try{const result=await coordinator.save(snapshot);if(!result||result.committed!==true)throw new Error('Canonical PMS commit did not confirm durable read-back.');LOCAL_STATE_STATUS='valid';LAST_PMS_COMMITTED_SNAPSHOT=snapshotJson;S.qw=0;window.aureliaRefreshStorageNotice?.();return true}
  catch(error){RECOVERY_CHECK_PENDING=true;LOCAL_STATE_STATUS='write-failed';console.error('[Aurelia PMS] Canonical write/read-back failed; operational writes are frozen pending recovery.',error);if(!S.qw){S.qw=1;toast('CRITICAL: Device save failed. Changes were not committed. Keep the app open and recover before continuing.')}window.aureliaRefreshStorageNotice?.();return false}
 }
-let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
+let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[],LAST_PMS_COMMITTED_SNAPSHOT=null;
 function loadAll(){
  const raw=window.__AURELIA_CANONICAL_BOOTSTRAP_RAW||null;if(!raw){LOCAL_STATE_STATUS='missing';return}
- try{const o=JSON.parse(raw);if(!o||typeof o!=='object'||Array.isArray(o)||!Array.isArray(o.rooms)||!Array.isArray(o.b)||!Array.isArray(o.g)||!Array.isArray(o.t)||!Array.isArray(o.exp)||!Array.isArray(o.inv)||!Array.isArray(o.led)||!Array.isArray(o.aud)||!o.set||typeof o.set!=='object'||!o.menu||typeof o.menu!=='object')throw new Error('Canonical PMS snapshot is incomplete');[...DK,'bk','tab'].forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});useMenu(S.menu);S.aud.forEach(a=>a.at=new Date(a.at));S.led.forEach(l=>l[3]=new Date(l[3]));id=Math.max(id,...S.b.map(b=>b.id));LOCAL_STATE_STATUS='valid'}
+ try{const o=JSON.parse(raw);if(!o||typeof o!=='object'||Array.isArray(o)||!Array.isArray(o.rooms)||!Array.isArray(o.b)||!Array.isArray(o.g)||!Array.isArray(o.t)||!Array.isArray(o.exp)||!Array.isArray(o.inv)||!Array.isArray(o.led)||!Array.isArray(o.aud)||!o.set||typeof o.set!=='object'||!o.menu||typeof o.menu!=='object')throw new Error('Canonical PMS snapshot is incomplete');[...DK,'bk','tab'].forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});useMenu(S.menu);S.aud.forEach(a=>a.at=new Date(a.at));S.led.forEach(l=>l[3]=new Date(l[3]));id=Math.max(id,...S.b.map(b=>b.id));LOCAL_STATE_STATUS='valid';const initial={tab:S.tab,bk:S.bk};DK.forEach(k=>initial[k]=S[k]);LAST_PMS_COMMITTED_SNAPSHOT=JSON.stringify(initial)}
  catch(e){LOCAL_STATE_STATUS='invalid';RECOVERY_CHECK_PENDING=true;console.error('Canonical PMS snapshot failed validation; writes are blocked.',e)}
 }
 function openGlobalSearch(){
@@ -2862,19 +2864,21 @@ function selectRestPay(method){
  document.querySelectorAll('#rest-pay-methods [data-pay]').forEach(x=>x.classList.toggle('on',x.dataset.pay===window.__restPay.method));
  const q=document.getElementById('rest-pay-qr');if(q)q.classList.toggle('payment-qr-hidden',window.__restPay.method!=='UPI');
 }
-function recordRestPay(){
- const p=window.__restPay;if(!p){toast('Reopen the bill and try again');return}
- const t=(S.t||[]).find(x=>Number(x.n)===p.table);if(!t||!t.o||!t.o.length){toast('No open bill found for this table');return}
+async function recordRestPay(){
+ const p=window.__restPay;if(!p){toast('Reopen the bill and try again');return false}
+ const t=(S.t||[]).find(x=>Number(x.n)===p.table);if(!t||!t.o||!t.o.length){toast('No open bill found for this table');return false}
  const amount=Math.round(t.o.reduce((a,x)=>a+Math.max(0,Number(x[1])||0),0)*100)/100;
- if(Math.abs(amount-p.amount)>.009){toast('Bill changed. Reopen settlement to refresh total.');return}
- if(p.method==='UPI'&&!document.getElementById('rest-pay-confirm')?.checked){toast('Confirm receipt of the UPI payment first');return}
+ if(Math.abs(amount-p.amount)>.009){toast('Bill changed. Reopen settlement to refresh total.');return false}
+ if(p.method==='UPI'&&!document.getElementById('rest-pay-confirm')?.checked){toast('Confirm receipt of the UPI payment first');return false}
+ const before=clonePmsRuntimeState(),oldId=id;
  const guest=cleanGuestName(document.getElementById('rest-pay-name')?.value)||'Walk-in customer',phone=String(document.getElementById('rest-pay-phone')?.value||'').trim(),now=new Date().toISOString();
  const paymentLabel=p.method==='UPI'?'Aurelia UPI':p.method;
  const sale={id:'RS-'+Date.now(),entity:'restaurant',t:p.table,guest,phone,items:t.o.map(x=>[String(x[0]),Math.max(0,Number(x[1])||0)]),a:amount,m:paymentLabel,paymentRail:p.method==='UPI'?'AURELIA_UPI':p.method,paymentReference:p.transactionReference||null,aureliaUpiSessionId:p.aureliaUpiSessionId||null,at:now,status:'paid',paidAt:now,paymentConfirmed:true,postedToHotel:false};
  S.sales=Array.isArray(S.sales)?S.sales:[];S.sales.push(sale);S.today=(Number(S.today)||0)+amount;
  S.tableGuests=S.tableGuests||{};S.tableGuests[p.table]={name:guest,phone};t.o=[];t.demo=0;
  aud('Restaurant payment recorded',guest+' · '+rk(amount)+' · '+paymentLabel+' · Table '+p.table+(p.transactionReference?' · ref '+p.transactionReference:''));
- window.__restPay=null;persist();closeS();render();openRestaurantReceipt(sale);toast('Payment recorded · '+rk(amount));
+ if(!await persist()){restorePmsRuntimeState(before,oldId);toast('Restaurant payment NOT saved. Original table order and sales ledger were restored.');return false}
+ window.__restPay=null;closeS();render();openRestaurantReceipt(sale);toast('Payment recorded · '+rk(amount));return true;
 }
 /* Paid restaurant receipts never show a balance-due QR. */
 openRestaurantReceipt=function(sale){
@@ -3559,7 +3563,7 @@ window.printGuestPreview=function(){
     const confirm=document.getElementById('rest-pay-confirm');if(confirm)confirm.checked=true;
     const name=document.getElementById('rest-pay-name');if(name)name.value=session.guestName||'Dining guest';
     const ref=document.getElementById('rest-pay-phone');if(ref&&utr)ref.dataset.upiUtr=String(utr);
-    const before=(S.sales||[]).length;window.recordRestPay();
+    const before=(S.sales||[]).length;if(!await window.recordRestPay())throw new Error('The restaurant payment was not durably committed.');
     if((S.sales||[]).length!==before+1)throw new Error('The dining payment was not posted to the sales ledger.');
     const sale=S.sales[S.sales.length-1];if(sale){sale.m='Aurelia UPI';sale.paymentRail='AURELIA_UPI';sale.paymentReference=String(utr||session.reference||'');sale.aureliaUpiSessionId=session.id;}
     if(typeof closeS==='function')closeS();
@@ -3896,7 +3900,7 @@ try{
  setStatus("Canonical storage verified. Loading PMS operations…");if(window.__AURELIA_BOOTSTRAP_DIAGNOSTICS)window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase="APPLICATION_MODULES";
  await replayApplicationScripts();
  if(!window.__AURELIA_CANONICAL_BOOTSTRAP_RAW&&typeof window.persist==="function"&&!await window.persist())throw new Error("Fresh-install PMS state could not be committed to canonical storage");
- if(window.__AURELIA_BOOTSTRAP_DIAGNOSTICS)window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase="READY";if(shield)shield.remove();
+ if(typeof window.render==='function'){const originalPmsRender=window.render;window.render=function(){const result=originalPmsRender.apply(this,arguments);if(window.__AURELIA_RUNTIME_READY&&typeof window.persist==='function')window.persist();return result}}window.__AURELIA_RUNTIME_READY=true;if(window.__AURELIA_BOOTSTRAP_DIAGNOSTICS)window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase="READY";if(shield)shield.remove();
  console.info("[Aurelia Lifecycle] Canonical local snapshot storage is active; normalized domain UI cutover remains disabled.");
 }catch(error){if(window.__AURELIA_BOOTSTRAP_DIAGNOSTICS)window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase="FAILED";if(shield)shield.setAttribute("data-failed","true");setStatus("PMS startup stopped safely: "+String(error?.message||error));console.error("[Aurelia Lifecycle] Startup blocked by persistence verification failure.",error)}
 </script>
