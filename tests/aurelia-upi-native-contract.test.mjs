@@ -14,6 +14,18 @@ test('encrypted native evidence schema stores sender VPA and migrates existing P
   assert.match(source, /DUPLICATE.*CONFLICT/s);
 });
 
+test('native database enforces one-time UTR claims across payment and refund references', async () => {
+  const repository = await read('android/templates/LocalPmsRepository.java');
+  const plugin = await read('android/templates/CapacitorPmsStoragePlugin.java');
+  assert.match(repository, /VERSION\\s*=\\s*9/);
+  assert.match(repository, /reference TEXT PRIMARY KEY NOT NULL/);
+  assert.match(repository, /UNIQUE\\(reference_type,entity_id\\)/);
+  assert.match(repository, /upi_reference_already_claimed/);
+  assert.match(repository, /upi_entity_reference_already_claimed/);
+  assert.match(plugin, /@PluginMethod public void claimUpiReference/);
+  assert.match(plugin, /AURELIA_UPI_REFERENCE_ALREADY_CLAIMED/);
+});
+
 test('notification observer is opt-in, allowlisted, credit-filtered and has no SMS permission or network client', async () => {
   const source = await read('android/templates/AureliaUPINotificationListener.java');
   assert.match(source, /extends NotificationListenerService/);
