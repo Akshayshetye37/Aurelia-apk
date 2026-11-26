@@ -46,6 +46,7 @@ test('settings page exposes connection controls without activating payment rails
 
 test('Aurelia PMS remains the fixed application title and shell brand', () => {
   assert.match(html, /<title>Aurelia PMS<\/title>/);
-  assert.match(html, /AURELIA PMS/);
+  assert.match(html, /<strong>AURELIA PMS<\/strong>/);
+  assert.doesNotMatch(html, /SOVEREIGN HOSPITALITY/);
   assert.match(html, /document\.title='Aurelia PMS'/);
 });
