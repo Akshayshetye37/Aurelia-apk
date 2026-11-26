@@ -3714,7 +3714,7 @@ window.printGuestPreview=function(){
       oldAudit=S.aud.slice();
       Object.assign(booking,result.booking);
       aud('Stay extended',booking.g+' · Room '+booking.room+' · '+result.addedNights+' night(s) · '+K(result.addedCharge)+' · checkout '+date+' '+time);
-      if(!await persist())
+      if(!await persist()){
         Object.keys(booking).forEach(key=>delete booking[key]);
         Object.assign(booking,oldBooking);
         S.aud=oldAudit;
@@ -3733,7 +3733,7 @@ window.printGuestPreview=function(){
         Object.keys(booking).forEach(key=>delete booking[key]);
         Object.assign(booking,oldBooking);
         if(oldAudit)S.aud=oldAudit;
-        persist();
+        await persist();
       }
       toast(extensionConflictMessage(error));
     }
