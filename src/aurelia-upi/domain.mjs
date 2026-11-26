@@ -1,3 +1,5 @@
+import { secureRandomId } from "./security.mjs";
+
 /**
  * Aurelia UPI domain model.
  * Direct UPI only: a QR, app intent, SMS or notification is never settlement proof.
@@ -83,12 +85,7 @@ function safeText(value, max, label) {
 }
 
 function makeId(prefix) {
-  const uuid = globalThis.crypto?.randomUUID?.();
-  if (uuid) return prefix + "_" + uuid;
-  const bytes = new Uint8Array(16);
-  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
-  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-  return prefix + "_" + Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  return secureRandomId(prefix);
 }
 
 export function buildUpiIntent({
