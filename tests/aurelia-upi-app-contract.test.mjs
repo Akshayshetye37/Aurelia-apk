@@ -125,3 +125,15 @@ test('Aurelia UPI collection and active QR views expose the redesigned payment w
   assert.match(css, /@media\(max-width:760px\)/);
   assert.match(css, /prefers-reduced-motion/);
 });
+
+
+test('invoice and restaurant receipt share one debounced print action instead of firing duplicate routes', async () => {
+  const html = await read('index.html');
+  assert.match(html, /let invoicePrintBusy=false/);
+  assert.match(html, /function printInvoiceOnce\(elementId,title\)/);
+  assert.match(html, /if\(invoicePrintBusy\)return false/);
+  assert.match(html, /requestId:'print-'\+Date\.now\(\)/);
+  assert.match(html, /printInvoiceOnce\('invd','Aurelia invoice'\)/);
+  assert.match(html, /printInvoiceOnce\('rest-receipt','Aurelia restaurant receipt'\)/);
+  assert.doesNotMatch(html, /nat\(\{type:'printInvoice',html:\$\('#(?:invd|rest-receipt)'\)\.outerHTML\}\)\|\|window\.print\(\)/);
+});
