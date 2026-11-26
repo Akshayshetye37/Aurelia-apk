@@ -17,7 +17,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Fail-closed PMS client for the future Aurelia Pay Bridge Messenger service.
+ * Fail-closed PMS client for the future Aurelia Gateway Messenger service.
  * Protocol v1 handshake only; payment operations are intentionally not exposed yet.
  */
 final class PayBridgeClient {
@@ -45,7 +45,7 @@ final class PayBridgeClient {
   private boolean authenticated;
   private boolean connecting;
   private String state = "not_installed";
-  private String detail = "Aurelia Pay Bridge is not installed";
+  private String detail = "Aurelia Gateway is not installed";
   private int protocolVersion;
   private JSONArray capabilities = new JSONArray();
   private String signerSha256 = "";
@@ -64,7 +64,7 @@ final class PayBridgeClient {
         if (msg.what != MSG_HANDSHAKE_RESULT || !connecting) return;
         Bundle data = msg.getData();
         if (data == null) {
-          fail("invalid_response", "Pay Bridge returned an empty handshake response");
+          fail("invalid_response", "Aurelia Gateway returned an empty handshake response");
           return;
         }
 
@@ -101,7 +101,7 @@ final class PayBridgeClient {
           }
           if (!hasHandshake) throw new IllegalArgumentException("Required handshake capability is missing");
         } catch (Exception e) {
-          fail("invalid_response", "Pay Bridge returned invalid capabilities");
+          fail("invalid_response", "Aurelia Gateway returned invalid capabilities");
           return;
         }
 
@@ -133,7 +133,7 @@ final class PayBridgeClient {
     }
 
     @Override public void onServiceDisconnected(ComponentName name) {
-      handleUnexpectedDisconnect("Pay Bridge service process disconnected");
+      handleUnexpectedDisconnect("Aurelia Gateway service process disconnected");
     }
 
     @Override public void onBindingDied(ComponentName name) {
@@ -141,7 +141,7 @@ final class PayBridgeClient {
     }
 
     @Override public void onNullBinding(ComponentName name) {
-      fail("service_unavailable", "Pay Bridge service returned no binder");
+      fail("service_unavailable", "Aurelia Gateway service returned no binder");
     }
   };
 
@@ -151,7 +151,7 @@ final class PayBridgeClient {
       notifyStatus();
       return;
     }
-    // If PMS started before Pay Bridge was installed, re-check package visibility on
+    // If PMS started before Aurelia Gateway was installed, re-check package visibility on
     // the next foreground/resume instead of remaining stuck in NOT_INSTALLED forever.
     // This does not reset reconnect attempts or override a deliberate user disconnect.
     if (connectionRequested) {
@@ -184,7 +184,7 @@ final class PayBridgeClient {
       if (info == null) {
         unbindQuietly();
         state = "not_installed";
-        detail = "Aurelia Pay Bridge is not installed";
+        detail = "Aurelia Gateway is not installed";
         notifyStatus();
         return;
       }
@@ -214,7 +214,7 @@ final class PayBridgeClient {
       authenticated = false;
       pendingNonce = null;
       state = reconnectAttempts == 0 ? "connecting" : "reconnecting";
-      detail = "Binding to Pay Bridge native service";
+      detail = "Binding to Aurelia Gateway native service";
       startHandshakeTimeout();
 
       Intent intent = new Intent(PayBridgeProtocol.BIND_ACTION);
@@ -223,7 +223,7 @@ final class PayBridgeClient {
       if (!bound) {
         clearHandshakeTimeout();
         connecting = false;
-        scheduleReconnect("Pay Bridge native service is temporarily unavailable");
+        scheduleReconnect("Aurelia Gateway native service is temporarily unavailable");
       }
       notifyStatus();
     } catch (SecurityException e) {
@@ -318,7 +318,7 @@ final class PayBridgeClient {
     clearHandshakeTimeout();
     timeoutRunnable = () -> {
       synchronized (PayBridgeClient.this) {
-        if (connecting) handleUnexpectedDisconnect("Pay Bridge service bind or handshake timed out");
+        if (connecting) handleUnexpectedDisconnect("Aurelia Gateway service bind or handshake timed out");
       }
     };
     main.postDelayed(timeoutRunnable, HANDSHAKE_TIMEOUT_MS);
