@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms.db";
-  private static final int VERSION = 8;
+  private static final int VERSION = 9;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final byte[] databaseKey;
@@ -54,6 +54,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE aurelia_upi_evidence(evidence_id TEXT PRIMARY KEY NOT NULL,source_package TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),utr TEXT,sender_vpa TEXT,raw_text TEXT NOT NULL,received_at INTEGER NOT NULL,fingerprint TEXT NOT NULL UNIQUE,status TEXT NOT NULL CHECK(status IN ('OBSERVED','CONFIRMED','REJECTED','DUPLICATE','CONFLICT')),review_note TEXT,reviewed_by TEXT,reviewed_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)");
     db.execSQL("CREATE INDEX aurelia_upi_evidence_time_idx ON aurelia_upi_evidence(received_at DESC)");
     db.execSQL("CREATE INDEX aurelia_upi_evidence_utr_idx ON aurelia_upi_evidence(utr,amount_paise)");
+    db.execSQL("CREATE TABLE aurelia_upi_reference_claims(reference TEXT PRIMARY KEY NOT NULL CHECK(length(reference) BETWEEN 8 AND 30),reference_type TEXT NOT NULL CHECK(reference_type IN ('PAYMENT','REFUND')),entity_id TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),claimed_at INTEGER NOT NULL,UNIQUE(reference_type,entity_id))");
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
@@ -91,6 +92,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("CREATE INDEX IF NOT EXISTS aurelia_upi_evidence_utr_idx ON aurelia_upi_evidence(utr,amount_paise)");
     }
     if(oldVersion<8) db.execSQL("ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT");
+    if(oldVersion<9) {
+      db.execSQL("CREATE TABLE IF NOT EXISTS aurelia_upi_reference_claims(reference TEXT PRIMARY KEY NOT NULL CHECK(length(reference) BETWEEN 8 AND 30),reference_type TEXT NOT NULL CHECK(reference_type IN ('PAYMENT','REFUND')),entity_id TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),claimed_at INTEGER NOT NULL,UNIQUE(reference_type,entity_id))");
+    }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -386,6 +390,40 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       JSONObject result=readUpiEvidence(db,evidenceId);db.setTransactionSuccessful();return result;
     } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("upi_evidence_review_failed",e);}
     finally{db.endTransaction();}
+  }
+
+  /** A bank reference is a single-use financial identity within the receiving VPA. */
+  synchronized JSONObject claimUpiReference(String reference,String referenceType,String entityId,long amountPaise) {
+    String clean=reference==null?"":reference.trim().toUpperCase(java.util.Locale.ROOT);
+    if(!clean.matches("[A-Z0-9]{8,30}")||!("PAYMENT".equals(referenceType)||"REFUND".equals(referenceType))||
+        entityId==null||entityId.trim().isEmpty()||entityId.length()>180||
+        amountPaise<=0L||amountPaise>100000000000L) {
+      throw new IllegalArgumentException("invalid_upi_reference_claim");
+    }
+    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    try {
+      try(Cursor existing=db.rawQuery("SELECT reference,amount_paise FROM aurelia_upi_reference_claims WHERE reference_type=? AND entity_id=?",
+          new String[]{referenceType,entityId})) {
+        if(existing.moveToFirst()) {
+          if(clean.equals(existing.getString(0))&&amountPaise==existing.getLong(1)) {
+            JSONObject same=new JSONObject();same.put("claimed",true);same.put("idempotent",true);same.put("reference",clean);
+            db.setTransactionSuccessful();return same;
+          }
+          throw new IllegalStateException("upi_entity_reference_already_claimed");
+        }
+      }
+      try(Cursor existing=db.rawQuery("SELECT reference_type,entity_id,amount_paise FROM aurelia_upi_reference_claims WHERE reference=?",
+          new String[]{clean})) {
+        if(existing.moveToFirst()) throw new IllegalStateException("upi_reference_already_claimed");
+      }
+      ContentValues row=new ContentValues();row.put("reference",clean);row.put("reference_type",referenceType);
+      row.put("entity_id",entityId);row.put("amount_paise",amountPaise);row.put("claimed_at",System.currentTimeMillis());
+      db.insertOrThrow("aurelia_upi_reference_claims",null,row);
+      JSONObject result=new JSONObject();result.put("claimed",true);result.put("idempotent",false);result.put("reference",clean);
+      db.setTransactionSuccessful();return result;
+    } catch(Exception error) {
+      throw error instanceof RuntimeException?(RuntimeException)error:failure("upi_reference_claim_failed",error);
+    } finally { db.endTransaction(); }
   }
 
   private static JSONObject readUpiEvidence(SQLiteDatabase db,String id) throws Exception {
