@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Payment control state is server-authoritative. Firebase Admin SDK calls
+    // from the authenticated payment backend bypass client rules; browser,
+    // Android and other client SDKs must never read or mutate it directly.
+    match /paymentControls/{tenantId} {
+      allow read, write: if false;
+      match /audit/{auditId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Release approvals are written only by a separately authenticated
+    // release-governance process. Client-supplied evidence is never trusted.
+    match /paymentControlApprovals/{tenantId}/controls/{controlId} {
+      allow read, write: if false;
+    }
+  }
+}
