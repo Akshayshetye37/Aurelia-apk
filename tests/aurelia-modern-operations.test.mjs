@@ -67,7 +67,7 @@ test('Aurelia PMS shell uses the supplied mobile navigation and local design ass
   assert.match(html, /aurelia-quick-action primary/);
   assert.match(html, /onclick="go\('upi'\)"/);
   assert.match(html, /Aurelia UPI<\/b>/);
-  assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['more','Vault'\],\['upi','Aurelia UPI'\]\]/);
+  assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['upi','Aurelia UPI'\],\['more','More'\]\]/);
   assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|fonts\.gstatic\.com/);
 });
 
@@ -77,4 +77,20 @@ test('Aurelia PMS shell theme is packaged locally without external font or CSS r
   assert.match(theme, /--em:#68dbad/);
   assert.match(theme, /grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
   assert.match(theme, /body\[data-theme="light"\]/);
+});
+
+test('New booking action tracks the real dock edge without double-counting safe area', () => {
+  assert.match(html, /function positionBookingAction\(\)/);
+  assert.match(html, /window\.innerHeight\|\|document\.documentElement\.clientHeight/);
+  assert.match(html, /new ResizeObserver\(positionBookingAction\)/);
+  assert.match(html, /new MutationObserver\(observeDock\)/);
+  assert.match(html, /--aurelia-booking-bottom/);
+  assert.doesNotMatch(html, /aurelia-booking-bottom[^\\n]*env\\(safe-area-inset-bottom/);
+  assert.match(html, /#hor-book\\{bottom:var\\(--aurelia-booking-bottom,148px\\)!important\\}/);
+});
+
+test('PMS startup does not mutate non-existent demo bookings, guests or dining tables', () => {
+  assert.doesNotMatch(html, /S\\.t\\[2\\]\\.demo=1/);
+  assert.doesNotMatch(html, /S\\.b\\[1\\]\\.pays=/);
+  assert.doesNotMatch(html, /NRC-['\\+]\\(214000/);
 });
