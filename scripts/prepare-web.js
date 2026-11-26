@@ -60,6 +60,12 @@ async function main() {
     if (!fs.existsSync(required)) throw new Error('Prepared web asset is missing: ' + path.relative(outputDir, required));
   }
 
+  const stayExtensionSource = path.join(root, 'scripts', 'stay-extension.js');
+  if (!fs.existsSync(stayExtensionSource)) throw new Error('Stay extension rules are missing.');
+  const scriptsOutput = path.join(outputDir, 'scripts');
+  fs.mkdirSync(scriptsOutput, { recursive: true });
+  fs.copyFileSync(stayExtensionSource, path.join(scriptsOutput, 'stay-extension.js'));
+
   console.log('Prepared Aurelia PMS web app, local SVG QR engine and Aurelia UPI modules.');
 }
 
