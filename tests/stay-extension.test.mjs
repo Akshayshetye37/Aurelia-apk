@@ -10,7 +10,8 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const prepare = await readFile(new URL('../scripts/prepare-web.js', import.meta.url), 'utf8');
 
 function extractScript(source, id) {
-  const start = source.indexOf('<script id="' + id + '">');
+  const idAt = source.indexOf('id="' + id + '"');
+  const start = source.lastIndexOf('<script', idAt);
   const openEnd = source.indexOf('>', start);
   const end = source.indexOf('</script>', openEnd);
   assert.ok(start >= 0 && openEnd > start && end > openEnd, id + ' script exists');
@@ -63,68 +64,57 @@ test('stay extension rejects invalid status, shortening, conflicts, malformed da
   }), /greater than zero/);
 });
 
-test('browser storage adapter never silently falls back to volatile memory', () => {
+test('browser storage adapter is restricted to approved preferences', () => {
   const source = extractScript(html, 'aurelia-safe-storage');
-  let rejectWrites = false;
   const values = new Map();
-  const localStorage = {
-    setItem(key, value) { if (rejectWrites) throw new Error('QuotaExceededError'); values.set(String(key), String(value)); },
-    getItem(key) { return values.has(String(key)) ? values.get(String(key)) : null; },
-    removeItem(key) { values.delete(String(key)); }
+  const preferences = {
+    getItem(key) { if (!['theme', 'lang'].includes(key)) throw new Error('Preference key is not permitted'); return values.get(key) ?? null; },
+    setItem(key, value) { if (!['theme', 'lang'].includes(key)) throw new Error('Preference key is not permitted'); values.set(key, String(value)); },
+    removeItem(key) { if (!['theme', 'lang'].includes(key)) throw new Error('Preference key is not permitted'); values.delete(key); }
   };
-  const context = { window: { localStorage } };
+  const context = { window: { AureliaPreferences: preferences } };
   vm.runInNewContext(source, context);
-  rejectWrites = true;
-  assert.throws(
-    () => context.window.__aureliaStorage.setItem('aurelia_lodge_v2', '{"b":[]}'),
-    error => error.code === 'AURELIA_PERSISTENCE_UNAVAILABLE'
-  );
+  assert.throws(() => context.window.__aureliaStorage.setItem('aurelia_lodge_v2', '{"b":[]}'), /not permitted/);
+  context.window.__aureliaStorage.setItem('theme', 'dark');
+  assert.equal(values.get('theme'), 'dark');
   assert.equal(values.has('aurelia_lodge_v2'), false);
 });
 
-test('persist returns success only after exact durable read-back', () => {
-  const start = html.indexOf('function persist(){');
+test('persist returns success only after canonical commit and freezes on failure', async () => {
+  const start = html.indexOf('async function persist(){');
   const end = html.indexOf('\nlet LOCAL_STATE_STATUS=', start);
   assert.ok(start >= 0 && end > start);
   const source = html.slice(start, end);
-  const values = new Map();
-  const storage = {
-    getItem(key) { return values.get(String(key)) ?? null; },
-    setItem(key, value) { values.set(String(key), String(value)); },
-    removeItem(key) { values.delete(String(key)); }
-  };
   const context = {
-    window: { __aureliaStorage: storage },
-    RECOVERY_CHECK_PENDING: false,
-    LOCAL_STATE_STATUS: 'valid',
-    DK: ['rooms'], SK: 'aurelia_lodge_v2',
-    S: { rooms: [{ id: 1 }], tab: 'stays', bk: {}, qw: 0 },
+    window: { AureliaLocalFirstWrites: { save: async () => ({ committed: true, sequence: 1 }) }, aureliaRefreshStorageNotice() {} },
+    RECOVERY_CHECK_PENDING: false, LOCAL_STATE_STATUS: 'valid', LAST_PMS_COMMITTED_SNAPSHOT: null,
+    DK: ['rooms'], S: { tab: 'stays', rooms: [{ id: 1 }], bk: {}, qw: 0 },
     toast() {}
   };
-  vm.runInNewContext(source + '\nglobalThis.persistResult=persist();', context);
+  const success = vm.runInNewContext('let LAST_PMS_COMMITTED_SNAPSHOT=null;'+source+'; (async()=>{globalThis.persistResult=await persist()})()', context);
+  await success;
   assert.equal(context.persistResult, true);
-  assert.ok(values.has('aurelia_lodge_v2'));
+  assert.equal(context.LOCAL_STATE_STATUS, 'valid');
 
   const brokenContext = {
-    window: { __aureliaStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } },
-    RECOVERY_CHECK_PENDING: false,
-    LOCAL_STATE_STATUS: 'valid',
-    DK: ['rooms'], SK: 'aurelia_lodge_v2',
-    S: { rooms: [{ id: 1 }], tab: 'stays', bk: {}, qw: 0 },
+    window: { AureliaLocalFirstWrites: { save: async () => ({ committed: false }) }, aureliaRefreshStorageNotice() {} },
+    RECOVERY_CHECK_PENDING: false, LOCAL_STATE_STATUS: 'valid', LAST_PMS_COMMITTED_SNAPSHOT: null,
+    DK: ['rooms'], S: { tab: 'stays', rooms: [{ id: 1 }], bk: {}, qw: 0 },
     toast() {}
   };
-  vm.runInNewContext(source + '\nglobalThis.persistResult=persist();', brokenContext);
+  const failure = vm.runInNewContext('let LAST_PMS_COMMITTED_SNAPSHOT=null;'+source+'; (async()=>{globalThis.persistResult=await persist()})()', brokenContext);
+  await failure;
   assert.equal(brokenContext.persistResult, false);
   assert.equal(brokenContext.LOCAL_STATE_STATUS, 'write-failed');
+  assert.equal(brokenContext.RECOVERY_CHECK_PENDING, true);
 });
 
-test('reset only reloads after persisted application state is confirmed absent', () => {
+test('reset is explicitly disabled rather than deleting canonical data through preferences', () => {
   const start = html.indexOf('function resetAll(){');
   const end = html.indexOf('/* backup engine */', start);
   const reset = html.slice(start, end);
-  assert.ok(reset.includes('storage.removeItem(SK)'));
-  assert.ok(reset.includes('storage.getItem(SK)!==null'));
-  assert.ok(reset.includes('Reset failed: device storage could not be cleared'));
+  assert.ok(reset.includes('Device reset is disabled while canonical PMS storage is active'));
+  assert.doesNotMatch(reset, /localStorage|removeItem\(SK\)/);
 });
 
 test('Stays and Folio expose the extension and the web build packages its rules', () => {
@@ -132,7 +122,7 @@ test('Stays and Folio expose the extension and the web build packages its rules'
   assert.ok(html.includes('Change departure before check-in'));
   assert.ok(html.includes('Extend stay'));
   assert.ok(html.includes('Stay extension history'));
-  assert.ok(html.includes('if(!persist()){'));
+  assert.ok(html.includes('if(!await persist()){'));
   assert.ok(prepare.includes("path.join(root, 'scripts', 'stay-extension.js')"));
   assert.ok(prepare.includes("path.join(scriptsOutput, 'stay-extension.js')"));
 });
@@ -146,7 +136,7 @@ test('all inline application scripts parse after stay-extension integration', ()
     const close = html.indexOf('</script>', openEnd);
     assert.ok(openEnd > start && close > openEnd, 'script element is closed');
     const attributes = html.slice(start + 7, openEnd);
-    if (!attributes.includes('src=')) {
+    if (!attributes.includes('src=') && !attributes.includes('type=\"module\"')) {
       new vm.Script(html.slice(openEnd + 1, close), { filename: 'index.html:inline-script-' + count });
       count++;
     }

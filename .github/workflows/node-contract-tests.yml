@@ -26,7 +26,17 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
       - name: Run repository contract tests
         run: npm test
       - name: Verify web bundle preparation
         run: npm run build
+      - name: Verify packaged PMS modules and provider exclusion
+        run: |
+          test -f www/src/storage/pms-bootstrap-coordinator.mjs
+          test -f www/src/folios/folio-accounting-service.mjs
+          test -f www/src/bookings/cancellation-policy.mjs
+          test -f www/src/payments/repository-settlement-service.mjs
+          test -f www/scripts/stay-extension.js
+          test ! -e www/src/payments/provider-platform.mjs
