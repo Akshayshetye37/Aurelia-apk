@@ -89,6 +89,26 @@ test('New booking action tracks the real dock edge without double-counting safe 
   assert.equal(html.includes('#hor-book{bottom:var(--aurelia-booking-bottom,148px)!important}'), true);
 });
 
+
+test('Aurelia dashboard identity replaces the legacy homestay defaults in every initializer', () => {
+  assert.match(html, /set:\{name:'Aurelia PMS',tag:'Property management, thoughtfully connected\.'/);
+  assert.match(html, /S\.set=\{name:'Aurelia PMS',tag:'Property management, thoughtfully connected\.'/);
+  assert.match(html, /set:\{name:'Aurelia PMS',phone:/);
+  assert.doesNotMatch(html, /Hari Om Retreat|hariom@upi/i);
+});
+
+test('dashboard greeting and header clock share India/device time and refresh on resume', () => {
+  assert.match(html, /function aureliaIndiaClock\(now=new Date\(\)\)/);
+  assert.match(html, /Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/);
+  assert.match(html, /'Asia\/Kolkata'/);
+  assert.match(html, /h=aureliaIndiaClock\(\)\.hour/);
+  assert.match(html, /id="aurelia-dashboard-greeting"/);
+  assert.match(html, /clock\.title='Time zone: '\+time\.timeZone/);
+  assert.match(html, /setInterval\(tickClock,15000\)/);
+  assert.match(html, /document\.addEventListener\('visibilitychange'/);
+  assert.match(html, /window\.addEventListener\('focus',tickClock\)/);
+});
+
 test('PMS startup does not mutate non-existent demo bookings, guests or dining tables', () => {
   assert.equal(html.includes('S.t[2].demo=1'), false);
   assert.equal(html.includes('S.b[1].pays='), false);
