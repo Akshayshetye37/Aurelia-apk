@@ -180,6 +180,8 @@ function renderSessionRow(session, compact = false) {
     (session.room ? ' · Room ' + esc(session.room) : "") +
     (session.tableId ? ' · Table ' + esc(session.tableId) : "") +
     '</div></div><div class="au-row-end"><strong>' + esc(formatPaise(session.amountPaise)) + '</strong>' +
+    (state.payments.some(payment => payment.sessionId === session.id && payment.status === "CONFIRMED_PENDING_PMS")
+      ? '<button class="au-link" type="button" data-upi-action="retry-posting" data-id="' + esc(session.id) + '">Retry PMS posting</button>' : "") +
     (canCancel ? '<button class="au-link" type="button" data-upi-action="cancel" data-id="' + esc(session.id) + '">Cancel</button>' : "") +
     '</div></article>';
 }
@@ -494,23 +496,53 @@ async function confirmEvidence(id) {
   if (!evidence) throw new Error("Payment evidence was not found.");
   const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
   if (!session) throw new Error("This alert has no unique collection session. Manual folio allocation is required.");
+  const evidenceStatus = evidence.matchDecision || evidence.status;
+  if (["DUPLICATE", "CONFLICT", "REJECTED", "CONFIRMED"].includes(evidenceStatus)) {
+    throw new Error("This evidence has already been reviewed and cannot settle another collection.");
+  }
+  if (!Number.isSafeInteger(Number(evidence.amountPaise)) ||
+      Number(evidence.amountPaise) !== Number(session.amountPaise)) {
+    throw new Error("Evidence amount does not exactly match the selected Aurelia UPI collection.");
+  }
   const verified = document.getElementById("au-verify-" + id)?.checked === true;
   if (!verified) throw new Error("Confirm that you checked the credit in the receiving bank account.");
   if (!repository.isNative) throw new Error("Preview mode cannot confirm or post payments. Unlock the Android PMS storage first.");
   const utr = String(document.getElementById("au-utr-" + id)?.value || evidence.utr || "").trim().toUpperCase();
-  const now = new Date().toISOString();
-  let reviewSession = session;
-  if (session.status !== SESSION_STATUS.REVIEW_REQUIRED) {
-    reviewSession = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: id });
+  if (utr && !/^[A-Z0-9]{8,30}$/.test(utr)) throw new Error("Enter a valid 8–30 character bank UTR / reference.");
+  if (utr && state.payments.some(row => row.sessionId !== session.id &&
+      String(row.transactionReference || "").toUpperCase() === utr &&
+      ["CONFIRMED_PENDING_PMS", "CONFIRMED", "APPLIED_TO_PMS"].includes(row.status))) {
+    throw new Error("This UTR is already linked to another Aurelia UPI payment.");
   }
-  const confirmedSession = transitionSession(reviewSession, SESSION_STATUS.CONFIRMED, {
-    manualVerified: true,
-    confirmedBy: "LOCAL_OPERATOR",
-    confirmedAt: now,
-    transactionReference: utr || null
-  });
+  if (utr && state.evidence.some(row => row.id !== evidence.id &&
+      String(row.utr || "").toUpperCase() === utr &&
+      ["CONFIRMED", "DUPLICATE", "CONFLICT"].includes(row.status))) {
+    throw new Error("This UTR is already present in reviewed payment evidence.");
+  }
+  if (!["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED", "CONFIRMED"].includes(session.status)) {
+    throw new Error("This collection is not eligible for payment reconciliation.");
+  }
+  const existingPayment = state.payments.find(row => row.sessionId === session.id);
+  if (existingPayment && ["CONFIRMED", "APPLIED_TO_PMS"].includes(existingPayment.status)) {
+    throw new Error("This Aurelia UPI collection has already been posted.");
+  }
+  const now = new Date().toISOString();
+  const alreadyConfirmed = session.status === SESSION_STATUS.CONFIRMED;
+  let confirmedSession = session;
+  if (!alreadyConfirmed) {
+    const reviewSession = session.status === SESSION_STATUS.REVIEW_REQUIRED
+      ? session
+      : transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: id });
+    confirmedSession = transitionSession(reviewSession, SESSION_STATUS.CONFIRMED, {
+      manualVerified: true,
+      confirmedBy: "LOCAL_OPERATOR",
+      confirmedAt: now,
+      transactionReference: utr || null
+    });
+  }
   const payment = {
-    id: "payment_" + session.id,
+    ...(existingPayment || {}),
+    id: existingPayment?.id || "payment_" + session.id,
     sessionId: session.id,
     evidenceId: evidence.id,
     bookingId: session.bookingId,
@@ -521,29 +553,41 @@ async function confirmEvidence(id) {
     rail: "AURELIA_UPI",
     status: "CONFIRMED_PENDING_PMS",
     transactionReference: utr || null,
-    confirmedAt: now,
+    confirmedAt: existingPayment?.confirmedAt || now,
     confirmedBy: "LOCAL_OPERATOR",
     manualVerified: true
   };
-  await repository.savePayment(payment);
+  await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_VERIFIED_PENDING_PMS");
+  state.payments = existingPayment
+    ? state.payments.map(row => row.id === payment.id ? payment : row)
+    : [payment, ...state.payments];
 
   try {
-    if (session.kind === "folio" && session.bookingId) {
-      await context?.applyFolioPayment?.(session, utr);
-      payment.status = "APPLIED_TO_PMS";
-    } else if (session.kind === "restaurant" && session.tableId) {
-      await context?.applyRestaurantPayment?.(session, utr);
-      payment.status = "APPLIED_TO_PMS";
+    if (!["APPLIED_TO_PMS", "CONFIRMED"].includes(existingPayment?.status)) {
+      if (session.kind === "folio" && session.bookingId) {
+        if (typeof context?.applyFolioPayment !== "function") throw new Error("Aurelia folio posting bridge is unavailable.");
+        await context.applyFolioPayment(session, utr);
+        payment.status = "APPLIED_TO_PMS";
+      } else if (session.kind === "restaurant" && session.tableId) {
+        if (typeof context?.applyRestaurantPayment !== "function") throw new Error("Aurelia dining posting bridge is unavailable.");
+        await context.applyRestaurantPayment(session, utr);
+        payment.status = "APPLIED_TO_PMS";
+      } else {
+        payment.status = "CONFIRMED";
+      }
     } else {
-      payment.status = "CONFIRMED";
+      payment.status = existingPayment.status;
     }
   } catch (error) {
     payment.status = "CONFIRMED_PENDING_PMS";
     await repository.savePayment(payment, "AURELIA_UPI_PMS_APPLY_FAILED");
+    state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
     throw new Error("Bank credit verified and recorded, but PMS posting needs retry: " + (error?.message || "unknown error"));
   }
 
-  await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
+  if (!alreadyConfirmed) {
+    await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
+  }
   evidence.status = "CONFIRMED";
   evidence.matchDecision = "CONFIRMED";
   evidence.reviewedAt = now;
@@ -562,7 +606,7 @@ async function confirmEvidence(id) {
   await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
   state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
   state.evidence = state.evidence.map(row => row.id === evidence.id ? evidence : row);
-  state.payments.unshift(payment);
+  state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
   audit("Payment verified", session.reference + " · " + formatPaise(session.amountPaise));
   const promoted = promoteNextSession(state.sessions, session.vpa);
   if (promoted.promoted) {
@@ -571,6 +615,31 @@ async function confirmEvidence(id) {
   }
   notify("Aurelia UPI payment verified and posted.");
   state.view = "overview";
+  rerender();
+}
+
+async function retryPendingPosting(sessionId) {
+  const session = state.sessions.find(row => row.id === sessionId);
+  const payment = state.payments.find(row => row.sessionId === sessionId && row.status === "CONFIRMED_PENDING_PMS");
+  if (!session || session.status !== SESSION_STATUS.CONFIRMED || !payment) {
+    throw new Error("No verified Aurelia UPI payment is waiting for PMS posting.");
+  }
+  if (!repository.isNative) throw new Error("Unlock encrypted Android PMS storage before retrying posting.");
+  if (session.kind === "folio" && session.bookingId) {
+    if (typeof context?.applyFolioPayment !== "function") throw new Error("Aurelia folio posting bridge is unavailable.");
+    await context.applyFolioPayment(session, payment.transactionReference || "");
+    payment.status = "APPLIED_TO_PMS";
+  } else if (session.kind === "restaurant" && session.tableId) {
+    if (typeof context?.applyRestaurantPayment !== "function") throw new Error("Aurelia dining posting bridge is unavailable.");
+    await context.applyRestaurantPayment(session, payment.transactionReference || "");
+    payment.status = "APPLIED_TO_PMS";
+  } else {
+    payment.status = "CONFIRMED";
+  }
+  await repository.savePayment(payment, "AURELIA_UPI_PMS_POSTING_RETRIED");
+  state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
+  audit("PMS posting recovered", session.reference);
+  notify("The verified Aurelia UPI payment is now posted to the PMS ledger.");
   rerender();
 }
 
@@ -652,6 +721,10 @@ async function completeRefund(id) {
   if (!refund) throw new Error("Refund record was not found.");
   const verified = document.getElementById("au-refund-verify-" + id)?.checked === true;
   const transferReference = String(document.getElementById("au-refund-utr-" + id)?.value || "").trim().toUpperCase();
+  if (state.refunds.some(row => row.id !== id &&
+      String(row.transferReference || "").toUpperCase() === transferReference)) {
+    throw new Error("This refund transfer UTR is already recorded against another refund.");
+  }
   const completed = completeRefundRecord(refund, { transferReference, manualVerified: verified });
   await repository.saveRefund(completed, "AURELIA_UPI_REFUND_TRANSFER_RECORDED");
   state.refunds = state.refunds.map(row => row.id === id ? completed : row);
@@ -665,10 +738,14 @@ async function createRefund(id) {
   if (!payment) throw new Error("Only a confirmed Aurelia UPI payment can be refunded.");
   const amount = parseMoneyToPaise(document.getElementById("au-refund-amount")?.value || "");
   const reason = String(document.getElementById("au-refund-reason")?.value || "").trim();
+  const alreadyRefundedPaise = state.refunds
+    .filter(row => row.paymentId === payment.id)
+    .reduce((sum, row) => sum + Number(row.amountPaise || 0), 0);
   const refund = createRefundRecord({
     paymentId: payment.id,
     amountPaise: amount,
     capturedPaise: payment.amountPaise,
+    alreadyRefundedPaise,
     reason
   });
   await repository.saveRefund(refund);
@@ -784,6 +861,7 @@ function onActionClick(event) {
       return;
     }
     if (action === "complete-refund") { await completeRefund(id); return; }
+    if (action === "retry-posting") { await retryPendingPosting(id); return; }
   };
   run().catch(error => notify(error?.message || "Aurelia UPI action failed."));
 }
