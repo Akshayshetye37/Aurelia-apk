@@ -98,6 +98,36 @@ export function createPhotoArchive({
       if (stored !== value) throw new Error("Legacy photo migration read-back mismatch; source photo was retained.");
     }
     deleteLegacyPhotoFallbackEntries(entries);
+    return entries.length;
+  }
+
+  async function migrateLegacyPhotosNative() {
+    if (sandboxed()) return 0;
+    const entries = readLegacyPhotoFallbackEntries();
+    if (!Array.isArray(entries) || entries.length === 0) return 0;
+    for (const [key, value] of entries) {
+      await native("photoStore", { key, data: value });
+      const stored = await native("photoLoad", { key });
+      if (stored !== value) throw new Error("Native legacy photo migration read-back mismatch; source photo was retained.");
+    }
+    deleteLegacyPhotoFallbackEntries(entries);
+    return entries.length;
+  }
+
+  async function migrateLegacyPhotosNow() {
+    if (nativeWindow?.AureliaNative) {
+      if (!legacyMigration) {
+        legacyMigration = migrateLegacyPhotosNative().catch(error => {
+          legacyMigration = null;
+          throw error;
+        });
+      }
+      return legacyMigration;
+    }
+    if (sandboxed()) return 0;
+    const db = await database();
+    try { return await legacyMigration; }
+    finally { db.close(); }
   }
 
   async function database() {
@@ -113,7 +143,13 @@ export function createPhotoArchive({
   }
 
   async function put(key, data) {
-    if (nativeWindow?.AureliaNative) return native("photoStore", { key, data }).then(() => true);
+    if (!key || typeof data !== "string" || !/^data:image\//i.test(data)) throw new TypeError("Photo archive requires a stable key and image data URL.");
+    await migrateLegacyPhotosNow();
+    if (nativeWindow?.AureliaNative) {
+      await native("photoStore", { key, data });
+      if (await native("photoLoad", { key }) !== data) throw new Error("Native photo write failed exact read-back verification.");
+      return true;
+    }
     if (sandboxed()) throw new Error("Photo persistence is disabled in sandboxed preview; use the installed app to save originals.");
     let db;
     try {
@@ -133,7 +169,8 @@ export function createPhotoArchive({
 
   async function get(key) {
     if (!key) return null;
-    if (nativeWindow?.AureliaNative) return native("photoLoad", { key }).catch(() => null);
+    await migrateLegacyPhotosNow();
+    if (nativeWindow?.AureliaNative) return native("photoLoad", { key });
     if (sandboxed()) return null;
     const db = await database();
     try {
@@ -146,6 +183,7 @@ export function createPhotoArchive({
   }
 
   async function archive() {
+    await migrateLegacyPhotosNow();
     if (nativeWindow?.AureliaNative) return native("photoArchive");
     if (sandboxed()) return {};
     const output = {};
@@ -168,12 +206,18 @@ export function createPhotoArchive({
 
   async function restore(archive) {
     if (!archive || typeof archive !== "object" || Array.isArray(archive)) throw new Error("Backup photo archive is invalid");
+    await migrateLegacyPhotosNow();
     const entries = Object.entries(archive);
     for (const [key, value] of entries) {
       if (!key || typeof value !== "string" || !/^data:image\//i.test(value)) throw new Error("Photo archive contains an invalid original image");
     }
     if (nativeWindow?.AureliaNative) {
       await native("photoRestore", { archive });
+      const stored = await native("photoArchive");
+      if (!stored || entries.some(([key, value]) => stored[key] !== value) ||
+          Object.keys(stored).length !== entries.length) {
+        throw new Error("Native photo restore failed exact archive read-back verification.");
+      }
       return entries.length;
     }
     if (sandboxed()) throw new Error("Photo restore is disabled in sandboxed preview; restore from the installed app.");
@@ -201,5 +245,5 @@ export function createPhotoArchive({
     return entries.length;
   }
 
-  return Object.freeze({ put, get, archive, restore });
+  return Object.freeze({ put, get, archive, restore, migrateLegacyPhotos: migrateLegacyPhotosNow });
 }
