@@ -523,9 +523,7 @@ async function confirmEvidence(id) {
     throw new Error("This collection is not eligible for payment reconciliation.");
   }
   const existingPayment = state.payments.find(row => row.sessionId === session.id);
-  if (existingPayment && ["CONFIRMED", "APPLIED_TO_PMS"].includes(existingPayment.status)) {
-    throw new Error("This Aurelia UPI collection has already been posted.");
-  }
+  const alreadyApplied = ["CONFIRMED", "APPLIED_TO_PMS"].includes(existingPayment?.status);
   const now = new Date().toISOString();
   const alreadyConfirmed = session.status === SESSION_STATUS.CONFIRMED;
   let confirmedSession = session;
@@ -551,8 +549,8 @@ async function confirmEvidence(id) {
     amountPaise: session.amountPaise,
     currency: "INR",
     rail: "AURELIA_UPI",
-    status: "CONFIRMED_PENDING_PMS",
-    transactionReference: utr || null,
+    status: alreadyApplied ? existingPayment.status : "CONFIRMED_PENDING_PMS",
+    transactionReference: utr || existingPayment?.transactionReference || null,
     confirmedAt: existingPayment?.confirmedAt || now,
     confirmedBy: "LOCAL_OPERATOR",
     manualVerified: true
@@ -563,7 +561,7 @@ async function confirmEvidence(id) {
     : [payment, ...state.payments];
 
   try {
-    if (!["APPLIED_TO_PMS", "CONFIRMED"].includes(existingPayment?.status)) {
+    if (!alreadyApplied) {
       if (session.kind === "folio" && session.bookingId) {
         if (typeof context?.applyFolioPayment !== "function") throw new Error("Aurelia folio posting bridge is unavailable.");
         await context.applyFolioPayment(session, utr);
@@ -578,15 +576,28 @@ async function confirmEvidence(id) {
     } else {
       payment.status = existingPayment.status;
     }
+    }
+    if (!alreadyConfirmed) {
+      await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
+    }
   } catch (error) {
-    payment.status = "CONFIRMED_PENDING_PMS";
-    await repository.savePayment(payment, "AURELIA_UPI_PMS_APPLY_FAILED");
-    state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
-    throw new Error("Bank credit verified and recorded, but PMS posting needs retry: " + (error?.message || "unknown error"));
+    if (!alreadyApplied) {
+      payment.status = "CONFIRMED_PENDING_PMS";
+      await repository.savePayment(payment, "AURELIA_UPI_PMS_APPLY_FAILED");
+      state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
+    }
+    throw new Error("Bank credit verified and recorded, but PMS posting/finalization needs retry: " + (error?.message || "unknown error"));
   }
 
-  if (!alreadyConfirmed) {
-    await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
+  try {
+    await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
+    state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
+  } catch (error) {
+    if (!alreadyApplied) {
+      payment.status = "CONFIRMED_PENDING_PMS";
+      state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
+    }
+    throw new Error("PMS posting succeeded but Aurelia UPI finalization needs retry: " + (error?.message || "storage error"));
   }
   evidence.status = "CONFIRMED";
   evidence.matchDecision = "CONFIRMED";
@@ -603,7 +614,6 @@ async function confirmEvidence(id) {
     if (sibling.native) await repository.updateNativeNotificationEvidence(sibling.id, "DUPLICATE", "Aurelia UPI collection already settled");
     await repository.saveEvidence(sibling, "AURELIA_UPI_DUPLICATE_EVIDENCE_LINKED");
   }
-  await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
   state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
   state.evidence = state.evidence.map(row => row.id === evidence.id ? evidence : row);
   state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
