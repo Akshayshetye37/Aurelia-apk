@@ -576,7 +576,6 @@ async function confirmEvidence(id) {
     } else {
       payment.status = existingPayment.status;
     }
-    }
     if (!alreadyConfirmed) {
       await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
     }
