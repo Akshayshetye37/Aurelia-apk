@@ -245,11 +245,11 @@ export function parseIncomingUpiNotification(input = {}) {
   if (!text) return { ok: false, reason: "empty_alert" };
   const normalized = text.replace(/\s+/g, " ");
   const lower = normalized.toLowerCase();
-  const creditPattern = /\\b(?:credited|received(?:\\s+from)?|deposit(?:ed)?|payment\\s+received|money\\s+received|upi\\/cr|paid\\s+you|transferred\\s+to\\s+your\\s+(?:a\\/c|account|wallet)|added\\s+to\\s+your\\s+(?:account|wallet))\\b/i;
+  const creditPattern = /\b(?:credited|received(?:\s+from)?|deposit(?:ed)?|payment\s+received|money\s+received|upi\/cr|paid\s+you|transferred\s+to\s+your\s+(?:a\/c|account|wallet)|added\s+to\s+your\s+(?:account|wallet))\b/i;
   if (!creditPattern.test(normalized)) return { ok: false, reason: "credit_language_missing" };
   // Any explicit outgoing/failure wording makes the whole alert ineligible.
   // "Payment successful" is not a credit signal: debit alerts commonly use it.
-  const debitPattern = /\\b(?:debited|withdrawn|deducted|spent|paid\\s+to|sent\\s+to|money\\s+sent|you\\s+paid|payment\\s+failed|declined|reversed|refund|otp)\\b/i;
+  const debitPattern = /\b(?:debited|withdrawn|deducted|spent|paid\s+to|sent\s+to|money\s+sent|you\s+paid|payment\s+failed|declined|reversed|refund|otp)\b/i;
   if (debitPattern.test(normalized)) return { ok: false, reason: "debit_alert_rejected" };
 
   // Remove balance/limit clauses before amount extraction so an available balance is not mistaken for the credit.
