@@ -14,7 +14,7 @@
     "qrcode": "1.5.4"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.6.9",
+    "@capacitor/cli": "^8.6.2",
     "sharp": "^0.35.5",
     "esbuild": "0.28.1"
   },
