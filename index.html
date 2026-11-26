@@ -1728,7 +1728,7 @@ SUB.io=function(){
   box-shadow:0 8px 24px rgba(0,0,0,.35);animation:fx-rise .45s .08s both;
 }
 body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!important}
-@media(max-width:380px){#hor-book span{display:none}#hor-book{width:50px;padding:0;justify-content:center}} #hor-book{bottom:calc(var(--aurelia-booking-bottom,148px) + env(safe-area-inset-bottom,0px))!important}
+@media(max-width:380px){#hor-book span{display:none}#hor-book{width:50px;padding:0;justify-content:center}} #hor-book{bottom:var(--aurelia-booking-bottom,148px)!important}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
@@ -1758,23 +1758,37 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
       if(!dock)return;
       var rect=dock.getBoundingClientRect();
       if(!rect.height)return;
-      var viewport=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||document.documentElement.clientHeight;
-      var clearance=Math.max(96,Math.ceil(viewport-rect.top+12));
+      // Fixed-position elements use the layout viewport, not visualViewport.
+      // The dock rect already includes its safe-area offset; do not add it twice.
+      var viewport=window.innerHeight||document.documentElement.clientHeight;
+      var clearance=Math.max(12,Math.ceil(viewport-rect.top+12));
       document.documentElement.style.setProperty('--aurelia-booking-bottom',clearance+'px');
     }
-    function watchDock(){
-      positionBookingAction();
+    var observedDock=null, dockResizeObserver=null, dockMutationObserver=null;
+    function observeDock(){
       var dock=document.getElementById('dock');
-      if(window.ResizeObserver&&dock){
-        var observer=new ResizeObserver(positionBookingAction);
-        observer.observe(dock);
+      if(dock&&dock!==observedDock){
+        if(dockResizeObserver)dockResizeObserver.disconnect();
+        observedDock=dock;
+        if(window.ResizeObserver){
+          dockResizeObserver=new ResizeObserver(positionBookingAction);
+          dockResizeObserver.observe(dock);
+        }
       }
-      window.addEventListener('resize',positionBookingAction,{passive:true});
-      window.addEventListener('orientationchange',positionBookingAction,{passive:true});
-      if(window.visualViewport)window.visualViewport.addEventListener('resize',positionBookingAction,{passive:true});
-      requestAnimationFrame(positionBookingAction);
-      setTimeout(positionBookingAction,120);
-      setTimeout(positionBookingAction,500);
+      positionBookingAction();
+    }
+    function watchDock(){
+      observeDock();
+      if(window.MutationObserver&&document.body){
+        dockMutationObserver=new MutationObserver(observeDock);
+        dockMutationObserver.observe(document.body,{childList:true,subtree:true});
+      }
+      window.addEventListener('resize',observeDock,{passive:true});
+      window.addEventListener('orientationchange',observeDock,{passive:true});
+      if(window.visualViewport)window.visualViewport.addEventListener('resize',observeDock,{passive:true});
+      requestAnimationFrame(observeDock);
+      setTimeout(observeDock,120);
+      setTimeout(observeDock,500);
     }
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ensure();watchDock()});
     else{ensure();watchDock()}
