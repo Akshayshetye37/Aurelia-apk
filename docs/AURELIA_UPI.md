@@ -34,7 +34,7 @@ Terminal and review states are retained in the encrypted repository and audit tr
 
 - Payment, evidence, refund and audit identifiers require Web Crypto cryptographic randomness. There is no timestamp or `Math.random()` fallback; if a secure random source is unavailable, record creation fails closed.
 - Financial audit records are persisted through the encrypted native repository and transactional outbox before they are shown as durable in the UI. An audit persistence failure is surfaced as an error rather than silently ignored.
-- A bank UTR/reference is required before an operator can confirm a payment. The native SQLCipher database claims each reference in a dedicated table with a unique primary key and a unique (reference type, entity) constraint. A repeated claim for the same entity and amount is idempotent; reuse by another payment/refund or with altered details is rejected.
+- A bank UTR/reference is required before an operator can confirm a payment. The native SQLCipher database claims each reference in a dedicated table keyed by receiving VPA plus reference, with a unique (reference type, entity) constraint. A repeated claim for the same entity and amount is idempotent; reuse by another payment/refund or with altered details is rejected.
 - Payment and refund transfer references share the same uniqueness namespace for the configured receiving VPA. Claims are permanent audit identities; corrections require a reviewed financial adjustment, not silent release/reuse.
 - The native schema migration advances to version 9, creates the reference-claim table, and backfills existing manually verified payment/refund UTRs before the uniqueness rule is enabled. Conflicting legacy references fail the migration closed.
 
