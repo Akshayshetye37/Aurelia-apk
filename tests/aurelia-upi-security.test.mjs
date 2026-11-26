@@ -17,8 +17,8 @@ test('Aurelia UPI IDs never fall back to Math.random or timestamps', async () =>
   const repository = await read('src/aurelia-upi/repository.mjs');
   const app = await read('src/aurelia-upi/app.mjs');
   for (const source of [domain, repository, app]) {
-    assert.doesNotMatch(source, /Math\\.random\\s*\\(/);
-    assert.doesNotMatch(source, /Date\\.now\\(\\)\\s*\\+\\s*['"]_['"]/);
+    assert.doesNotMatch(source, /Math\.random\s*\(/);
+    assert.doesNotMatch(source, /Date\.now\(\)\s*\+\s*['"]_['"]/);
   }
   assert.match(domain, /secureRandomId/);
   assert.match(repository, /secureRandomId/);
@@ -28,11 +28,11 @@ test('Aurelia UPI IDs never fall back to Math.random or timestamps', async () =>
 test('financial audit writes are awaited before being reported as durable', async () => {
   const app = await read('src/aurelia-upi/app.mjs');
   const audit = app.slice(app.indexOf('async function audit'), app.indexOf('async function refreshData'));
-  assert.match(audit, /await repository\\.saveAudit/);
+  assert.match(audit, /await repository\.saveAudit/);
   assert.ok(audit.indexOf('await repository.saveAudit') < audit.indexOf('state.audit.unshift'));
-  const calls = app.split('\\n').filter(line => /\\baudit\\(/.test(line) && !/function audit/.test(line));
+  const calls = app.split('\n').filter(line => /\baudit\(/.test(line) && !/function audit/.test(line));
   assert.ok(calls.length >= 10);
-  for (const call of calls) assert.match(call, /await audit\\(/);
+  for (const call of calls) assert.match(call, /await audit\(/);
 });
 
 test('payment and refund references are claimed atomically by the encrypted native database', async () => {
@@ -40,13 +40,13 @@ test('payment and refund references are claimed atomically by the encrypted nati
   const plugin = await read('android/templates/CapacitorPmsStoragePlugin.java');
   const repository = await read('src/aurelia-upi/repository.mjs');
   const app = await read('src/aurelia-upi/app.mjs');
-  assert.match(schema, /VERSION\\s*=\\s*9/);
-  assert.match(schema, /aurelia_upi_reference_claims\\(reference TEXT PRIMARY KEY NOT NULL/);
-  assert.match(schema, /UNIQUE\\(reference_type,entity_id\\)/);
+  assert.match(schema, /VERSION\s*=\s*9/);
+  assert.match(schema, /aurelia_upi_reference_claims\(reference TEXT PRIMARY KEY NOT NULL/);
+  assert.match(schema, /UNIQUE\(reference_type,entity_id\)/);
   assert.match(schema, /claimUpiReference/);
   assert.match(plugin, /@PluginMethod public void claimUpiReference/);
   assert.match(repository, /claimReference/);
-  assert.match(app, /A bank UTR\\/reference is required/);
-  assert.match(app, /await repository\\.claimReference\\(utr, "PAYMENT"/);
-  assert.match(app, /await repository\\.claimReference\\(transferReference, "REFUND"/);
+  assert.match(app, /A bank UTR\/reference is required/);
+  assert.match(app, /await repository\.claimReference\(utr, "PAYMENT"/);
+  assert.match(app, /await repository\.claimReference\(transferReference, "REFUND"/);
 });
