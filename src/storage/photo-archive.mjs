@@ -21,7 +21,7 @@ export function createPhotoArchive({
   const pendingNative = new Map();
   let nativeSequence = 0;
   let legacyMigration = null;
-  const hasNativeBridge = () => Boolean(hasNativeBridge() || nativeWindow?.Capacitor?.Plugins?.AureliaNativeActions?.postMessage);
+  const hasNativeBridge = () => Boolean(nativeWindow?.AureliaNative || nativeWindow?.Capacitor?.Plugins?.AureliaNativeActions?.postMessage);
 
   if (nativeWindow) {
     nativeWindow.aureliaNativePhotoResult = (id, ok, payload) => {
