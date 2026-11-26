@@ -290,15 +290,15 @@ function renderCollect() {
     '<option value="folio" ' + (draft.kind === "folio" ? "selected" : "") + '>Guest folio</option>' +
     '<option value="restaurant" ' + (draft.kind === "restaurant" ? "selected" : "") + '>Dining bill</option>' +
     '<option value="general" ' + (!draft.kind || draft.kind === "general" ? "selected" : "") + '>General collection</option></select></label>' +
-    '<label id="au-booking-wrap"><span>Guest folio</span><select name="bookingId" id="au-booking"><option value="">Select a guest folio</option>' + bookingOptions + '</select></label>' +
-    '<label id="au-table-wrap"><span>Dining table</span><select name="tableId" id="au-table"><option value="">Select a table</option>' + tableOptions + '</select></label>' +
+    '<label id="au-booking-wrap" ' + ((draft.kind || "general") === "folio" ? "" : "hidden") + '><span>Guest folio</span><select name="bookingId" id="au-booking"><option value="">Select a guest folio</option>' + bookingOptions + '</select></label>' +
+    '<label id="au-table-wrap" ' + (draft.kind === "restaurant" ? "" : "hidden") + '><span>Dining table</span><select name="tableId" id="au-table"><option value="">Select a table</option>' + tableOptions + '</select></label>' +
     '<div class="au-form-grid"><label><span>Guest / payer name</span><input name="guestName" maxlength="100" value="' + esc(draft.guestName || "") + '" placeholder="Guest name"></label>' +
     '<label><span>Room / reference</span><input name="room" maxlength="64" value="' + esc(draft.room || "") + '" placeholder="Room or internal reference"></label></div>' +
     '<div class="au-amount-field"><label for="au-amount"><span>Amount to collect</span><div class="au-amount-input"><b>₹</b><input name="amount" id="au-amount" inputmode="decimal" type="text" required value="' + esc(draft.amount || "") + '" placeholder="0.00" autocomplete="off"></div></label><small>Enter the exact outstanding amount in Indian rupees.</small></div>' +
     '<label><span>Payment note <em>Optional</em></span><input name="note" maxlength="80" value="' + esc(draft.note || "Aurelia UPI payment") + '" placeholder="Booking or bill reference"></label>' +
     '<div class="au-receiving-card"><span class="au-receiving-icon">↗</span><div><small>RECEIVING ACCOUNT</small><strong>' + esc(currentVpa || "Configure UPI ID in More → Settings") + '</strong><em>' + esc(config.name || "Aurelia") + ' · INR only</em></div>' +
     (currentVpa ? '<button type="button" class="au-copy-vpa" data-upi-action="copy-vpa">Copy ID</button>' : '') + '</div>' +
-    '<button class="au-primary au-generate-button" type="submit">Generate payment QR <span aria-hidden="true">↗</span></button>' +
+    '<button class="au-primary au-generate-button" type="submit" ' + (!currentVpa ? "disabled" : "") + '>' + (currentVpa ? 'Generate payment QR <span aria-hidden="true">↗</span>' : 'Configure Aurelia UPI ID in Settings') + '</button>' +
     '<p class="au-hint au-form-hint">QR generation happens on this device. No payment gateway or hosted QR service is used.</p>' +
     '</form><aside class="au-collect-aside">' +
     '<section class="au-panel au-qr-preview-card"><div class="au-preview-top"><span class="au-kicker">YOUR PAYMENT QR</span><span class="au-preview-lock">LOCAL</span></div>' +
