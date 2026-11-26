@@ -100,7 +100,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       java.util.ArrayList<String[]> legacyClaims=new java.util.ArrayList<>();
       try(Cursor legacy=db.rawQuery("SELECT entity_type,entity_id,data_json FROM pms_entities WHERE entity_type IN ('upi_payment','upi_refund')",null)) {
         while(legacy.moveToNext()) {
-          JSONObject data=new JSONObject(legacy.getString(2));
+          JSONObject data;
+          try { data=new JSONObject(legacy.getString(2)); }
+          catch(Exception malformed) { throw new IllegalStateException("upi_reference_legacy_payload_invalid",malformed); }
           String entityType=legacy.getString(0),entityId=legacy.getString(1),reference=null,claimType=null;
           long amount=data.optLong("amountPaise",0L);
           if("upi_payment".equals(entityType)) {
