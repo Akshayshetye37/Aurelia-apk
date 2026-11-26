@@ -75,7 +75,7 @@ test('queue keeps unresolved review and pending PMS posting sessions from releas
 test('architecture decision record rejects gateway-only and observer-quorum settlement claims', async () => {
   const doc = await read('docs/AURELIA_UPI_ARCHITECTURE_REVIEW.md');
   assert.match(doc, /HMAC proves that a payload was produced/);
-  assert.match(doc, /No L1\/L2\/L3 tier can auto-confirm/);
+  assert.match(doc, /No L1\\/L2\\/L3 tier can transition a session to confirmed/);
   assert.match(doc, /Baileys \/ WhatsApp OTP/);
   assert.match(doc, /Cash on delivery, cash counter, card counter/);
   assert.match(doc, /SQLCipher canonical-store cutover/);
