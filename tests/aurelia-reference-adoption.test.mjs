@@ -31,7 +31,7 @@ test('secondary navigation delegates to the existing More subview state instead 
 
 test('desktop and mobile navigation are responsive, accessible and keep the six-item dock', () => {
   assert.match(css, /@media\s*\(max-width:\s*900px\)/);
-  assert.match(css, /\.aurelia-reference-sidebar/);
+  assert.match(css, /\.aurelia-design-sidebar/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(runtime, /mobile-dock|dock/);
