@@ -44,6 +44,8 @@ test('payment and refund references are claimed atomically by the encrypted nati
   assert.match(schema, /aurelia_upi_reference_claims\(reference TEXT PRIMARY KEY NOT NULL/);
   assert.match(schema, /UNIQUE\(reference_type,entity_id\)/);
   assert.match(schema, /claimUpiReference/);
+  assert.match(schema, /SELECT entity_type,entity_id,data_json FROM pms_entities WHERE entity_type IN/);
+  assert.match(schema, /upi_reference_legacy_backfill_conflict/);
   assert.match(plugin, /@PluginMethod public void claimUpiReference/);
   assert.match(repository, /claimReference/);
   assert.match(app, /A bank UTR\/reference is required/);
