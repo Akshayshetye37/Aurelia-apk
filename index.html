@@ -289,7 +289,7 @@ body[data-theme="light"] .aurelia-design-nav button.active{background:rgba(20,61
 .aurelia-status-row{display:flex;align-items:center;gap:8px;padding:8px 0 0;border:0}
 .aurelia-status-pill{padding:3px 9px;border:1px solid var(--ln);border-radius:99px;background:var(--s2);color:var(--mu);font-size:10.5px}
 .aurelia-status-pill.gold{color:var(--gold)}
-.aurelia-status-clock{margin-left:auto;color:var(--mu);font-size:12px;font-variant-numeric:tabular-nums}
+.aurelia-status-clock{margin-left:0;padding:5px 9px;border:1px solid var(--ln);border-radius:10px;background:var(--s2);color:var(--mu);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
 #v{width:100%;max-width:1220px;margin:0 auto;padding:22px 24px 48px;min-width:0}
 #v .view{animation:referenceViewIn .28s ease-out}
 @keyframes referenceViewIn{from{opacity:.82;transform:translateY(5px)}to{opacity:1;transform:none}}
@@ -358,6 +358,7 @@ body[data-theme="light"] .aurelia-design-nav button.active{background:rgba(20,61
  .aurelia-brand-copy strong{font-size:12px}
  .aurelia-page-crumb{display:none}
  .aurelia-status-row{display:none}
+ #aurelia-currency-button,#aurelia-language-button{display:none}
  #v{padding:16px 14px 112px}
  .dock{display:grid}
  #hor-book{display:flex!important}
@@ -4129,6 +4130,7 @@ window.printGuestPreview=function(){
  const workspace=document.createElement('div');workspace.className='aurelia-design-workspace';
  app.parentNode.insertBefore(shell,app);shell.append(sidebar,workspace);workspace.append(app,dock);
  const header=app.querySelector('.aurelia-shell-header'),actions=app.querySelector('.aurelia-header-actions');
+ const clock=app.querySelector('#aurelia-shell-clock');if(clock&&actions&&!actions.contains(clock))actions.append(clock);
  if(header&&actions&&!header.querySelector('.aurelia-page-crumb')){
   const crumb=document.createElement('div');crumb.className='aurelia-page-crumb';
   crumb.innerHTML='<h2 id="aurelia-design-page-title">Overview</h2><span class="rail"><i></i>INR · Aurelia UPI</span>';
