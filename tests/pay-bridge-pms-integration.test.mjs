@@ -41,6 +41,7 @@ test('protocol v1 advertises no payment or provider-management capability', () =
 test('settings page exposes connection controls without activating payment rails', () => {
   assert.match(html, /Aurelia Gateway connection/);
   assert.match(html, /Connect Aurelia Gateway/);
+  assert.match(html, /render\(\);refreshAureliaGateway\(\)/);
   assert.match(html, /Only Aurelia UPI is enabled/);
 });
 
