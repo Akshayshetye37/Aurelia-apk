@@ -34,7 +34,7 @@ Terminal and review states are retained in the encrypted repository and audit tr
 
 The optional `AureliaUPINotificationListener` is registered as an Android `NotificationListenerService`. The operator must enable Notification Access in Android settings.
 
-- Source packages are allowlisted and alerts are content-filtered for credit language plus UPI/VPA/UTR indicators.
+- Source packages are allowlisted and alerts are content-filtered for credit language plus UPI/VPA/UTR indicators. The Gmail Android app is an optional source when a bank-credit email notification is actually delivered to the device; Gmail OAuth, inbox API access and mailbox scraping are not enabled.
 - Amounts are parsed with decimal arithmetic and stored as integer paise.
 - UTR/RRN and sender VPA are extracted where present.
 - Duplicate UTRs and same-UTR/different-amount conflicts are flagged.
@@ -59,8 +59,8 @@ The upstream YouPI-PG repository is an experimental reference project and states
 
 The following are not enabled in Aurelia UPI:
 
-- WhatsApp OTP or WhatsApp session automation.
-- Gmail OAuth or Google Messages account/API access.
+- WhatsApp OTP or WhatsApp session automation; this requires a separate remote WhatsApp session service and is not part of the local-first PMS.
+- Gmail OAuth, Gmail API inbox access or Google Messages account/API access; Gmail bank-alert previews may be observed locally only when the Gmail app posts a notification.
 - SMS inbox permission or automatic SMS ingestion.
 - Remote observer API, HMAC webhook delivery, merchant API or payment-provider gateway.
 - Cash, card, COD or other non-UPI payment methods.
