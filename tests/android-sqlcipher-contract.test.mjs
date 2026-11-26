@@ -283,3 +283,14 @@ test('JSON handler encoder round-trips hostile strings without breaking inline J
   })[entity]);
   assert.equal(JSON.parse(decoded), input);
 });
+
+
+test('native invoice and receipt printing submits at most one print job per WebView document load', () => {
+  const start = patch.indexOf('private void printHtmlDocument');
+  const end = patch.indexOf('private void shareImageFile', start);
+  assert.ok(start >= 0 && end > start, 'native print helper is present');
+  const method = patch.slice(start, end);
+  assert.match(method, /final boolean\[\] printStarted = \{false\}/);
+  assert.match(method, /if \(printStarted\[0\]\) return;/);
+  assert.ok(method.indexOf('printStarted[0] = true;') < method.indexOf('manager.print('));
+});
