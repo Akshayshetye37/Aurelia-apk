@@ -3733,7 +3733,7 @@ window.printGuestPreview=function(){
     syncShell();
   });
   $id('aurelia-profile-button')?.addEventListener('click',()=>{
-    S.tab='more';S.sub='set';render();
+    S.tab='more';S.sub='set';render();refreshAureliaGateway();
   });
   $id('aurelia-currency-button')?.addEventListener('click',()=>{
     if(typeof toast==='function')toast('Aurelia UPI collection currency is fixed to INR.');
