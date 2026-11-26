@@ -60,7 +60,7 @@ test('Aurelia UPI uses one configured VPA and no demo receiving address', () => 
 
 test('Sovereign shell uses the supplied mobile navigation and local design assets', () => {
   assert.match(html, /aurelia-shell-header/);
-  assert.match(html, /AURELIA LOCAL NODE/);
+  assert.match(html, /AURELIA PMS/);
   assert.match(html, /INR · AURELIA UPI ONLY/);
   assert.match(html, /aurelia-theme-switch/);
   assert.match(html, /aurelia-profile-button/);
