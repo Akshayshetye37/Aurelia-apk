@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/aurelia-upi-sovereign-redesign-2026-11-26
+      - feature/aurelia-upi-financial-hardening-2026-11-26
   workflow_dispatch:
 
 concurrency:
