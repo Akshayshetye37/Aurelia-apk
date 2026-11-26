@@ -146,8 +146,8 @@ test('reference workspace applies emerald and champagne-gold visual tokens witho
 
 test('reference workspace preserves PMS app boot, local persistence and critical operations modules', () => {
   assert.match(html, /function render\(\)/);
-  assert.match(html, /function loadState\(\)/);
-  assert.match(html, /function saveState\(\)/);
+  assert.match(html, /function loadAll\(\)/);
+  assert.match(html, /function persist\(\)/);
   assert.match(html, /aurelia-persistence-and-stay-extension/);
   assert.match(html, /aurelia-upi-integration/);
   assert.match(html, /aurelia-modern-operations/);
