@@ -1,6 +1,13 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="theme-color" content="#071610"><meta name="mobile-web-app-capable" content="yes"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Aurelia PMS — an offline-first property management workspace for reservations, rooms, guest folios, dining and Aurelia UPI.">
+<meta name="application-name" content="Aurelia PMS">
+<meta name="apple-mobile-web-app-title" content="Aurelia PMS">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="referrer" content="no-referrer">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#071610">
 <title>Aurelia PMS</title>
 
 <style>
@@ -222,7 +229,13 @@ input[type=date]{max-width:100%;min-width:0}
 }
 </style><link rel="stylesheet" href="./assets/aurelia-upi.css">
 <link rel="stylesheet" href="./assets/aurelia-sovereign-theme.css">
+<style>
+.aurelia-skip-link{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:12px;z-index:1000;padding:10px 14px;border-radius:12px;background:#f2d99a;color:#172319;font:600 14px/1.2 system-ui,sans-serif;transform:translateY(-160%);transition:transform .18s ease}
+.aurelia-skip-link:focus{transform:translateY(0);outline:3px solid #fff;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.aurelia-skip-link{transition:none}}
+</style>
 </head><body>
+<a class="aurelia-skip-link" href="#v">Skip to main content</a>
 
 <script id="guest-contact-actions-early">
 /* Define guest contact markup before the first Stays render can run. */
@@ -383,9 +396,9 @@ window.AureliaAdsBridge = {
     <span class="aurelia-status-clock" id="aurelia-shell-clock" aria-live="off">--:--</span>
   </div>
 </header>
-<main id="v"></main>
+<main id="v" tabindex="-1" aria-label="Main content"></main>
 </div>
-<nav class="dock" id="dock" style="--i:0"></nav>
+<nav class="dock" id="dock" style="--i:0" aria-label="Primary navigation"></nav>
 <div class="sheet" id="sh"><div class="scrim" onclick="closeS()"></div><div class="pan" id="pan"></div></div><div id="toast"></div>
 <script>
 const $=(s,e=document)=>e.querySelector(s),$$=(s,e=document)=>[...e.querySelectorAll(s)];

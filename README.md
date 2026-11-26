@@ -89,6 +89,40 @@ A UPI intent/QR is a payment request, not independent proof of settlement. Staff
 
 The Aurelia UPI collection, notification evidence, FIFO queue, manual reconciliation, refund register and local QR implementation are documented in [docs/AURELIA_UPI.md](docs/AURELIA_UPI.md). The Aurelia PMS shell uses Overview, Chambers, Stays, Dining, Vault and Aurelia UPI as primary navigation. The supplied HTML is used as the visual reference; its static demo data and simulated payment confirmation are not used as production settlement logic.
 
+## Frontend, interface system and runtime contract
+
+The maintained frontend is the complete, data-driven [index.html](index.html) application. Its existing renderers, application state, persistence adapters, booking lifecycle, folios, dining/POS and Aurelia UPI workflows are the source of truth. Do not replace this application with a static mockup or add hard-coded sample properties, guests, reservations, occupancy, revenue, balances or payment outcomes.
+
+The visual system is maintained in [assets/aurelia-sovereign-theme.css](assets/aurelia-sovereign-theme.css) and [assets/aurelia-upi.css](assets/aurelia-upi.css). The current design direction is deep forest emerald, muted champagne gold, warm ivory and restrained translucent surfaces, with responsive cards, editorial headings, mobile-safe spacing, keyboard focus states and reduced-motion support. Typography uses local/system font stacks; no Google Fonts, remote icon font, Tailwind CDN or external stylesheet is required. The theme is presentation-only and must not change domain calculations, storage, authorization or payment state.
+
+### Frontend security and data integrity
+
+- Keep the Content Security Policy in the document head synchronized with actual runtime dependencies. It blocks frames, child frames and objects, restricts base/form targets, and limits script execution to the application plus the explicitly pinned invoice-rendering dependency.
+- Invoice capture loads `html2canvas@1.4.1` only when that feature is invoked, from its exact jsDelivr URL with a fixed SHA-256 Subresource Integrity hash and anonymous CORS. If the dependency is upgraded, update the URL, integrity hash, CSP allowlist and relevant tests together. Do not load arbitrary script URLs.
+- Inline scripts and inline event handlers remain in the legacy application, so the current CSP still requires `'unsafe-inline'`. This is a known hardening boundary, not a claim of strict nonce/hash-based CSP. Migrate inline code in a separately tested security change before removing that directive.
+- Keep all business values sourced from the existing application state and durable storage. A failed or unavailable storage write must remain visible and fail closed; never fall back silently to volatile in-memory data or report an unsaved mutation as successful.
+- A UPI QR/intent, customer claim, notification or client-side response is not proof of settlement. Keep payment posting behind the existing Aurelia UPI evidence-review and manual-confirmation flow.
+- The HTML shell exposes a skip link, a named main landmark and a labelled primary navigation landmark. Preserve keyboard access, semantic controls, focus visibility and reduced-motion behavior when changing the interface.
+
+### Build and verification
+
+Use Node.js 22 or later:
+
+```sh
+npm install
+npm test
+npm run build
+```
+
+The build prepares the deployable web application under `www/`, copies the local CSS and application modules, bundles the QR engine locally, and performs an SVG QR smoke test. To inspect the prepared web app in a browser, serve that directory over HTTP rather than opening the source HTML through a `file://` URL:
+
+```sh
+python3 -m http.server 8080 --directory www
+```
+
+Then open `http://localhost:8080`. Android-specific capabilities still require the Capacitor/native wrapper; browser preview does not qualify native storage, permissions, payment collection or device security.
+
+
 ## Branch audit and adoption policy — 24 November 2026
 
 A branch inventory identified 73 branches. Many feature, integration, backup and release branches are deeply diverged from `main`; branch commit counts and compare totals are not evidence that all changes are complete. GitHub compare responses for several large branches were capped at 300 changed files.
@@ -116,7 +150,7 @@ The maintained application name, package name, app title, and Capacitor app name
 
 ## Run locally
 
-Open `index.html` in a modern browser for an initial inspection. Android-specific features require a compatible Capacitor/native wrapper and its implemented bridge.
+Follow the [build and verification instructions](#build-and-verification) above. Android-specific features require a compatible Capacitor/native wrapper and its implemented bridge.
 
 ## Architecture and security baseline
 
