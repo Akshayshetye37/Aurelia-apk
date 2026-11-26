@@ -1,0 +1,48 @@
+name: Aurelia Gateway native compile check
+
+on:
+  push:
+    branches:
+      - gateway-provider-files
+    paths:
+      - 'gateway-app/**'
+      - 'tests/gateway-app-connection-contract.test.mjs'
+      - '.github/workflows/gateway-native-compile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-gateway-native-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile Gateway Java sources only
+        run: gradle --no-daemon -p gateway-app compileDebugJavaWithJavac
+      - name: Assert no APK was assembled
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find gateway-app/build/outputs -type f -name '*.apk' -print -quit 2>/dev/null | grep -q .; then
+            echo "Unexpected APK output in compile-only workflow"
+            exit 1
+          fi
+          echo "Gateway native compilation completed without producing an APK."
