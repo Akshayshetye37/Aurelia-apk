@@ -1,6 +1,6 @@
-# PMS-side Pay Bridge integration boundary
+# PMS-side Aurelia Gateway integration boundary
 
-Status: PMS-side integration foundation only. This document describes what the PMS project owns; it does not claim that the separate Pay Bridge APK or payment backend exists.
+Status: PMS-side integration foundation only. This document describes what the PMS project owns; it does not claim that the separate Aurelia Gateway APK or payment backend exists.
 
 ## What is implemented in the PMS project
 
@@ -19,11 +19,11 @@ Status: PMS-side integration foundation only. This document describes what the P
 
 The PMS client currently supports connection and handshake only. It does not send payment creation, refund, reconciliation or provider configuration IPC messages. Reserved message identifiers are not executable features.
 
-Do not add gateway SDK dependencies to the PMS APK. Native provider SDKs belong in the separate Pay Bridge Android application. Merchant API secrets, webhook secrets, signing salts and private keys belong only in the trusted payment backend.
+Do not add gateway SDK dependencies to the PMS APK. Native provider SDKs belong in the separate Aurelia Gateway Android application. Merchant API secrets, webhook secrets, signing salts and private keys belong only in the trusted payment backend.
 
 ## Runtime rules
 
-1. Manual PMS payment recording remains usable when Pay Bridge is missing, disconnected or incompatible.
+1. Manual PMS payment recording remains usable when Aurelia Gateway is missing, disconnected or incompatible.
 2. A successful package handshake authenticates the companion application; it does not authenticate a hotel merchant account.
 3. Provider configuration must remain unavailable until the bridge explicitly advertises and implements `provider.management`.
 4. Payment execution must remain unavailable until both applications negotiate the relevant payment capability and the backend has implemented the provider workflow.
@@ -33,14 +33,14 @@ Do not add gateway SDK dependencies to the PMS APK. Native provider SDKs belong 
 
 ## Build/deployment boundary
 
-The PMS CI generates the Capacitor Android project and copies the native templates into it. The PMS build does not build or publish Pay Bridge. The companion application must be created, signed with the controlled Aurelia signing identity, released and installed separately.
+The PMS CI generates the Capacitor Android project and copies the native templates into it. The PMS build does not build or publish Aurelia Gateway. The companion application must be created, signed with the controlled Aurelia signing identity, released and installed separately.
 
-A PMS APK build passing proves only the PMS build and its tests. It does not prove that Pay Bridge is installed, that provider SDKs work, or that live payments are enabled.
+A PMS APK build passing proves only the PMS build and its tests. It does not prove that Aurelia Gateway is installed, that provider SDKs work, or that live payments are enabled.
 
 
 ## Why an installed companion can still show disconnected
 
-The connection is intentionally fail-closed. PMS checks package visibility, the installed package, the SHA-256 certificate and Android's signature permission before it sends a nonce handshake. Pay Bridge independently checks the Binder caller UID/package and matching signer. If the two APKs were built separately with default debug signing, their certificates differ even though their package IDs and service names are correct. PMS reports `untrusted_signer` or a signature permission failure in that case.
+The connection is intentionally fail-closed. PMS checks package visibility, the installed package, the SHA-256 certificate and Android's signature permission before it sends a nonce handshake. Aurelia Gateway independently checks the Binder caller UID/package and matching signer. If the two APKs were built separately with default debug signing, their certificates differ even though their package IDs and service names are correct. PMS reports `untrusted_signer` or a signature permission failure in that case.
 
 Build both release APKs with the same owner-controlled keystore configured under the same four GitHub Actions secret names in both repositories. Compare the SHA-256 certificate fingerprints from both build outputs; they must be identical. Remove older/debug installs and install the matching release pair. Never bypass signer verification or downgrade the signature-level service permission.
 
