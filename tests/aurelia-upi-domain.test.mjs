@@ -293,3 +293,15 @@ test('bank statement CSV date parsing treats slash dates as Indian day-first dat
   const invalid = 'Date,Description,UTR,Credit\n31/02/2026,"UPI/CR/123456789012",123456789012,10.00';
   assert.equal(parseBankStatementCsv(invalid).rows.length, 0);
 });
+
+test('statement evidence cannot match a session belonging to another receiving VPA', () => {
+  const session = { ...base, id: 'session-vpa-scope' };
+  const evidence = {
+    amountPaise: base.amountPaise,
+    receivedAt: base.createdAt,
+    receivingVpa: 'different@okaxis'
+  };
+  assert.equal(matchEvidenceToSessions(evidence, [session]).decision, 'UNMATCHED');
+  evidence.receivingVpa = base.vpa;
+  assert.equal(matchEvidenceToSessions(evidence, [session]).decision, 'REVIEW_REQUIRED');
+});

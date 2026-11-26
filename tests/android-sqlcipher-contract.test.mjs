@@ -98,7 +98,7 @@ test('native compile uses SQLCipher cursors and avoids generated BuildConfig ass
 });
 
 test('outbox retry scheduling uses integer epoch milliseconds and migrates legacy ISO timestamps', () => {
-  assert.match(repository, /VERSION = 8/);
+  assert.match(repository, /VERSION = 9/);
   assert.match(repository, /ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT/);
   assert.match(repository, /retry_at_ms INTEGER/);
   assert.match(repository, /retry_at_ms<=\?/);
@@ -282,4 +282,15 @@ test('JSON handler encoder round-trips hostile strings without breaking inline J
     quot: '"', lt: '<', gt: '>', amp: '&'
   })[entity]);
   assert.equal(JSON.parse(decoded), input);
+});
+
+
+test('native invoice and receipt printing submits at most one print job per WebView document load', () => {
+  const start = patch.indexOf('private void printHtmlDocument');
+  const end = patch.indexOf('private void shareImageFile', start);
+  assert.ok(start >= 0 && end > start, 'native print helper is present');
+  const method = patch.slice(start, end);
+  assert.match(method, /final boolean\[\] printStarted = \{false\}/);
+  assert.match(method, /if \(printStarted\[0\]\) return;/);
+  assert.ok(method.indexOf('printStarted[0] = true;') < method.indexOf('manager.print('));
 });

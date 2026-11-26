@@ -11,6 +11,9 @@ test('Aurelia UPI reconciliation revalidates exact amount, UTR uniqueness and op
   assert.match(app, /This UTR is already linked to another Aurelia UPI payment/);
   assert.match(app, /CONFIRMED_PENDING_PMS/);
   assert.match(app, /retryPendingPosting/);
+  assert.match(app, /au-statement-account-verified/);
+  assert.match(app, /configured Aurelia UPI receiving account/);
+  assert.match(app, /receivingVpa/);
   assert.match(app, /AURELIA_UPI_PAYMENT_APPLIED/);
 });
 
@@ -99,4 +102,40 @@ test('successful folio and restaurant posting close the legacy overlay before re
   const html = await read('index.html');
   assert.match(html, /The PMS folio did not accept the payment[\s\S]{0,260}closeS\(\)/);
   assert.match(html, /aureliaUpiSessionId=session\.id;\}[\s\S]{0,120}closeS\(\)/);
+});
+
+
+test('Aurelia UPI collection and active QR views expose the redesigned payment workspace without changing settlement controls', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  const css = await read('assets/aurelia-upi.css');
+  const collect = app.slice(app.indexOf('function renderCollect'), app.indexOf('function renderActivity'));
+  const activeStart = app.indexOf('function renderActiveSession');
+  const activeEnd = app.indexOf('function renderOverview', activeStart);
+  const active = app.slice(activeStart, activeEnd);
+  assert.match(collect, /au-collect-layout/);
+  assert.match(collect, /au-amount-input/);
+  assert.match(collect, /au-receiving-card/);
+  assert.match(collect, /data-upi-action="copy-vpa"/);
+  assert.match(collect, /Generate payment QR/);
+  assert.match(collect, /QR appears after generation/);
+  assert.match(active, /au-payment-workspace/);
+  assert.match(active, /data-aurelia-upi-qr/);
+  assert.match(active, /data-upi-action="customer-paid"/);
+  assert.match(active, /not proof of bank credit/);
+  assert.match(active, /data-upi-view="review"/);
+  assert.match(css, /\.au-qr-stage/);
+  assert.match(css, /@media\(max-width:760px\)/);
+  assert.match(css, /prefers-reduced-motion/);
+});
+
+
+test('invoice and restaurant receipt share one debounced print action instead of firing duplicate routes', async () => {
+  const html = await read('index.html');
+  assert.match(html, /let invoicePrintBusy=false/);
+  assert.match(html, /function printInvoiceOnce\(elementId,title\)/);
+  assert.match(html, /if\(invoicePrintBusy\)return false/);
+  assert.match(html, /requestId:'print-'\+Date\.now\(\)/);
+  assert.match(html, /printInvoiceOnce\('invd','Aurelia invoice'\)/);
+  assert.match(html, /printInvoiceOnce\('rest-receipt','Aurelia restaurant receipt'\)/);
+  assert.doesNotMatch(html, /nat\(\{type:'printInvoice',html:\$\('#(?:invd|rest-receipt)'\)\.outerHTML\}\)\|\|window\.print\(\)/);
 });

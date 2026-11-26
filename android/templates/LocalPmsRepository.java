@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms.db";
-  private static final int VERSION = 8;
+  private static final int VERSION = 9;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final byte[] databaseKey;
@@ -54,6 +54,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE aurelia_upi_evidence(evidence_id TEXT PRIMARY KEY NOT NULL,source_package TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),utr TEXT,sender_vpa TEXT,raw_text TEXT NOT NULL,received_at INTEGER NOT NULL,fingerprint TEXT NOT NULL UNIQUE,status TEXT NOT NULL CHECK(status IN ('OBSERVED','CONFIRMED','REJECTED','DUPLICATE','CONFLICT')),review_note TEXT,reviewed_by TEXT,reviewed_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)");
     db.execSQL("CREATE INDEX aurelia_upi_evidence_time_idx ON aurelia_upi_evidence(received_at DESC)");
     db.execSQL("CREATE INDEX aurelia_upi_evidence_utr_idx ON aurelia_upi_evidence(utr,amount_paise)");
+    db.execSQL("CREATE TABLE aurelia_upi_reference_claims(receiving_vpa TEXT NOT NULL,reference TEXT NOT NULL CHECK(length(reference) BETWEEN 8 AND 30),reference_type TEXT NOT NULL CHECK(reference_type IN ('PAYMENT','REFUND')),entity_id TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),claimed_at INTEGER NOT NULL,PRIMARY KEY(receiving_vpa,reference),UNIQUE(reference_type,entity_id))");
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
@@ -91,6 +92,63 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("CREATE INDEX IF NOT EXISTS aurelia_upi_evidence_utr_idx ON aurelia_upi_evidence(utr,amount_paise)");
     }
     if(oldVersion<8) db.execSQL("ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT");
+    if(oldVersion<9) {
+      db.execSQL("CREATE TABLE IF NOT EXISTS aurelia_upi_reference_claims(receiving_vpa TEXT NOT NULL,reference TEXT NOT NULL CHECK(length(reference) BETWEEN 8 AND 30),reference_type TEXT NOT NULL CHECK(reference_type IN ('PAYMENT','REFUND')),entity_id TEXT NOT NULL,amount_paise INTEGER NOT NULL CHECK(amount_paise>0),claimed_at INTEGER NOT NULL,PRIMARY KEY(receiving_vpa,reference),UNIQUE(reference_type,entity_id))");
+      // Backfill every previously confirmed payment/refund reference before
+      // enabling the new uniqueness rule. A conflicting legacy ledger blocks
+      // the migration instead of silently permitting reference replay.
+      java.util.HashMap<String,String> sessionVpas=new java.util.HashMap<>();
+      java.util.HashMap<String,String> paymentSessions=new java.util.HashMap<>();
+      try(Cursor sessions=db.rawQuery("SELECT entity_id,data_json FROM pms_entities WHERE entity_type='upi_session'",null)) {
+        while(sessions.moveToNext()) {
+          try { String vpa=new JSONObject(sessions.getString(1)).optString("vpa","").trim();
+            if(vpa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}"))sessionVpas.put(sessions.getString(0),vpa.toLowerCase(java.util.Locale.ROOT));
+          } catch(Exception malformed) { throw new IllegalStateException("upi_reference_legacy_session_invalid",malformed); }
+        }
+      }
+      try(Cursor payments=db.rawQuery("SELECT entity_id,data_json FROM pms_entities WHERE entity_type='upi_payment'",null)) {
+        while(payments.moveToNext()) {
+          try { paymentSessions.put(payments.getString(0),new JSONObject(payments.getString(1)).optString("sessionId","")); }
+          catch(Exception malformed) { throw new IllegalStateException("upi_reference_legacy_payment_invalid",malformed); }
+        }
+      }
+      java.util.ArrayList<String[]> legacyClaims=new java.util.ArrayList<>();
+      try(Cursor legacy=db.rawQuery("SELECT entity_type,entity_id,data_json FROM pms_entities WHERE entity_type IN ('upi_payment','upi_refund')",null)) {
+        while(legacy.moveToNext()) {
+          JSONObject data;
+          try { data=new JSONObject(legacy.getString(2)); }
+          catch(Exception malformed) { throw new IllegalStateException("upi_reference_legacy_payload_invalid",malformed); }
+          String entityType=legacy.getString(0),entityId=legacy.getString(1),reference=null,claimType=null,sessionId=null;
+          long amount=data.optLong("amountPaise",0L);
+          if("upi_payment".equals(entityType)) {
+            String status=data.optString("status","");
+            boolean verified=data.optBoolean("manualVerified",false);
+            if(verified&&("CONFIRMED_PENDING_PMS".equals(status)||"CONFIRMED".equals(status)||"APPLIED_TO_PMS".equals(status))) {
+              reference=data.optString("transactionReference",null);claimType="PAYMENT";sessionId=data.optString("sessionId","");
+            }
+          } else if("upi_refund".equals(entityType)&&"REFUND_RECORDED".equals(data.optString("status",""))) {
+            reference=data.optString("transferReference",null);claimType="REFUND";
+            sessionId=paymentSessions.get(data.optString("paymentId",""));
+          }
+          if(reference!=null&&reference.matches("[A-Za-z0-9]{8,30}")&&amount>0L&&amount<=100000000000L) {
+            String vpa=sessionVpas.get(sessionId);
+            if(vpa==null)throw new IllegalStateException("upi_reference_legacy_vpa_missing");
+            legacyClaims.add(new String[]{reference.toUpperCase(java.util.Locale.ROOT),claimType,entityId,String.valueOf(amount),vpa});
+          }
+        }
+      }
+      for(String[] claim:legacyClaims) {
+        ContentValues row=new ContentValues();row.put("receiving_vpa",claim[4]);row.put("reference",claim[0]);row.put("reference_type",claim[1]);
+        row.put("entity_id",claim[2]);row.put("amount_paise",Long.parseLong(claim[3]));row.put("claimed_at",System.currentTimeMillis());
+        long inserted=db.insertWithOnConflict("aurelia_upi_reference_claims",null,row,SQLiteDatabase.CONFLICT_IGNORE);
+        if(inserted<0L) {
+          try(Cursor existing=db.rawQuery("SELECT reference_type,entity_id,amount_paise,receiving_vpa FROM aurelia_upi_reference_claims WHERE receiving_vpa=? AND reference=?",new String[]{claim[4],claim[0]})) {
+            if(!existing.moveToFirst()||!claim[1].equals(existing.getString(0))||!claim[2].equals(existing.getString(1))||Long.parseLong(claim[3])!=existing.getLong(2)||!claim[4].equals(existing.getString(3)))
+              throw new IllegalStateException("upi_reference_legacy_backfill_conflict");
+          }
+        }
+      }
+    }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -386,6 +444,42 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       JSONObject result=readUpiEvidence(db,evidenceId);db.setTransactionSuccessful();return result;
     } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("upi_evidence_review_failed",e);}
     finally{db.endTransaction();}
+  }
+
+  /** A bank reference is single-use within its receiving VPA. */
+  synchronized JSONObject claimUpiReference(String reference,String referenceType,String entityId,String receivingVpa,long amountPaise) {
+    String clean=reference==null?"":reference.trim().toUpperCase(java.util.Locale.ROOT);
+    String cleanVpa=receivingVpa==null?"":receivingVpa.trim().toLowerCase(java.util.Locale.ROOT);
+    if(!clean.matches("[A-Z0-9]{8,30}")||!("PAYMENT".equals(referenceType)||"REFUND".equals(referenceType))||
+        entityId==null||entityId.trim().isEmpty()||entityId.length()>180||
+        !cleanVpa.matches("[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}")||
+        amountPaise<=0L||amountPaise>100000000000L) {
+      throw new IllegalArgumentException("invalid_upi_reference_claim");
+    }
+    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    try {
+      try(Cursor existing=db.rawQuery("SELECT reference,amount_paise,receiving_vpa FROM aurelia_upi_reference_claims WHERE reference_type=? AND entity_id=?",
+          new String[]{referenceType,entityId})) {
+        if(existing.moveToFirst()) {
+          if(clean.equals(existing.getString(0))&&amountPaise==existing.getLong(1)&&cleanVpa.equals(existing.getString(2))) {
+            JSONObject same=new JSONObject();same.put("claimed",true);same.put("idempotent",true);same.put("reference",clean);
+            db.setTransactionSuccessful();return same;
+          }
+          throw new IllegalStateException("upi_entity_reference_already_claimed");
+        }
+      }
+      try(Cursor existing=db.rawQuery("SELECT reference_type,entity_id,amount_paise FROM aurelia_upi_reference_claims WHERE receiving_vpa=? AND reference=?",
+          new String[]{cleanVpa,clean})) {
+        if(existing.moveToFirst()) throw new IllegalStateException("upi_reference_already_claimed");
+      }
+      ContentValues row=new ContentValues();row.put("receiving_vpa",cleanVpa);row.put("reference",clean);
+      row.put("reference_type",referenceType);row.put("entity_id",entityId);row.put("amount_paise",amountPaise);
+      row.put("claimed_at",System.currentTimeMillis());db.insertOrThrow("aurelia_upi_reference_claims",null,row);
+      JSONObject result=new JSONObject();result.put("claimed",true);result.put("idempotent",false);result.put("reference",clean);
+      db.setTransactionSuccessful();return result;
+    } catch(Exception error) {
+      throw error instanceof RuntimeException?(RuntimeException)error:failure("upi_reference_claim_failed",error);
+    } finally { db.endTransaction(); }
   }
 
   private static JSONObject readUpiEvidence(SQLiteDatabase db,String id) throws Exception {

@@ -16,6 +16,7 @@ import {
   markCustomerPaid
 } from "./domain.mjs";
 import { createAureliaUPIRepository } from "./repository.mjs";
+import { secureRandomId } from "./security.mjs";
 
 const repository = createAureliaUPIRepository();
 const state = {
@@ -67,17 +68,23 @@ const statusLabel = status => ({
 }[status] || status);
 const badge = status => '<span class="au-badge au-' + esc(String(status || "").toLowerCase()) + '">' + esc(statusLabel(status)) + '</span>';
 
-function audit(action, detail) {
+async function audit(action, detail) {
   const entry = {
-    id: "audit_" + (globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2)),
+    id: secureRandomId("audit"),
     action,
     detail: String(detail || "").slice(0, 300),
     at: new Date().toISOString(),
     rail: "AURELIA_UPI"
   };
+  try {
+    // Persist the audit entity and its outbox event before exposing it as durable.
+    await repository.saveAudit(entry);
+  } catch (error) {
+    state.storageError = error?.message || "Financial audit storage unavailable.";
+    throw new Error("Aurelia UPI could not persist the required financial audit record.", { cause: error });
+  }
   state.audit.unshift(entry);
   state.audit = state.audit.slice(0, 500);
-  repository.saveAudit(entry).catch(error => { state.storageError = error.message || "Audit storage unavailable"; });
 }
 
 async function refreshData() {
@@ -241,20 +248,29 @@ function renderActiveSession(session) {
   const target = session.status === SESSION_STATUS.ACTIVE ? dateMs(session.expiresAt) :
     session.status === SESSION_STATUS.PROCESSING ? dateMs(session.verificationExpiresAt) : 0;
   const remaining = target ? Math.max(0, Math.ceil((target - Date.now()) / 1000)) : 0;
-  const timerLabel = session.status === SESSION_STATUS.ACTIVE ? "Payment window" :
-    session.status === SESSION_STATUS.PROCESSING ? "Verification window" : "Next action";
+  const timerLabel = session.status === SESSION_STATUS.ACTIVE ? "PAYMENT WINDOW" :
+    session.status === SESSION_STATUS.PROCESSING ? "VERIFICATION WINDOW" : "OPERATOR REVIEW";
   const timerText = session.status === SESSION_STATUS.ACTIVE || session.status === SESSION_STATUS.PROCESSING
     ? (remaining ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : "Elapsed")
-    : "Operator review";
-  return '<div class="au-active"><div class="au-active-top"><div><span class="au-kicker">REQUEST ' + esc(session.reference) + '</span><h4>' + esc(formatPaise(session.amountPaise)) + '</h4><p>' + esc(session.guestName || "Guest payment") + '</p></div>' +
-    badge(session.status) + '</div>' +
-    '<div class="au-active-bottom"><div><small>Receiving UPI ID</small><strong>' + esc(session.vpa) + '</strong></div>' +
-    '<div><small>' + timerLabel + '</small><strong id="au-countdown" data-status="' + esc(session.status) + '" data-expires="' + target + '">' + timerText + '</strong></div></div>' +
-    (session.status === SESSION_STATUS.ACTIVE ? '<div class="au-active-qr"><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
-      '<button class="au-secondary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button>' +
-      '<button class="au-link au-wide" type="button" data-upi-action="customer-paid" data-id="' + esc(session.id) + '">Customer says payment sent</button>' :
-      '<div class="au-warning">Payment is not settled. Verify the actual credit in the receiving bank account before posting it to a folio.</div>') +
-    '</div>';
+    : "Review required";
+  const isActive = session.status === SESSION_STATUS.ACTIVE;
+  return '<section class="au-payment-workspace" aria-label="Active Aurelia UPI payment">' +
+    '<div class="au-payment-details"><div class="au-payment-topline"><span class="au-kicker">ACTIVE COLLECTION · ' + esc(session.reference) + '</span>' + badge(session.status) + '</div>' +
+    '<p class="au-payment-eyebrow">AMOUNT TO COLLECT</p><h4 class="au-payment-amount">' + esc(formatPaise(session.amountPaise)) + '</h4>' +
+    '<div class="au-payment-recipient"><span class="au-recipient-avatar">A</span><span><small>PAYING TO</small><strong>' + esc(payeeName()) + '</strong><em>' + esc(session.vpa) + '</em></span>' +
+    '<button class="au-copy-vpa" type="button" data-upi-action="copy-vpa" aria-label="Copy receiving UPI ID">Copy</button></div>' +
+    '<div class="au-payment-meta"><div><small>COLLECTION FOR</small><strong>' + esc(session.guestName || (session.kind === "restaurant" ? "Dining bill" : "General collection")) + '</strong></div>' +
+    '<div><small>' + timerLabel + '</small><strong class="au-countdown" id="au-countdown" data-status="' + esc(session.status) + '" data-expires="' + target + '">' + timerText + '</strong></div></div>' +
+    (isActive ? '<div class="au-payment-actions"><button class="au-primary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app <span aria-hidden="true">↗</span></button>' +
+      '<button class="au-secondary au-wide" type="button" data-upi-action="customer-paid" data-id="' + esc(session.id) + '">Customer says payment sent</button></div>' :
+      '<div class="au-warning">This request is not settled. Check the receiving bank account and verify the UTR before posting any payment.</div>') +
+    '<p class="au-payment-footnote">A customer claim, QR scan, UPI app return or notification is not proof of bank credit.</p></div>' +
+    (isActive ? '<div class="au-qr-stage"><div class="au-qr-stage-head"><span class="au-kicker">SCAN TO PAY</span><span class="au-qr-live"><i></i> READY</span></div>' +
+      '<div class="au-qr-frame"><img alt="Exact amount Aurelia UPI QR code" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
+      '<strong class="au-qr-amount">' + esc(formatPaise(session.amountPaise)) + '</strong><p>Scan with any UPI app</p>' +
+      '<div class="au-qr-instruction"><span>01</span> Open your preferred UPI app <span>02</span> Scan and review the payee and amount</div></div>' :
+      '<div class="au-qr-stage au-qr-review-stage"><span class="au-review-symbol">✓</span><strong>Verification required</strong><p>Review the incoming bank evidence before confirming this collection.</p><button class="au-secondary" type="button" data-upi-view="review">Open reconciliation desk</button></div>') +
+    '</section>';
 }
 
 function renderCollect() {
@@ -267,24 +283,32 @@ function renderCollect() {
     esc(row.guestName) + ' · Room ' + esc(row.room) + ' · ' + esc(formatPaise(row.balancePaise)) + ' due</option>').join("");
   const tableOptions = tables.map(row => '<option value="' + esc(row.id) + '" ' + (String(draft.tableId) === String(row.id) ? "selected" : "") + '>' +
     'Table ' + esc(row.id) + ' · ' + esc(formatPaise(row.amountPaise)) + '</option>').join("");
-  return '<section class="au-page-heading"><div><span class="au-kicker">NEW REQUEST</span><h3>Create Aurelia UPI collection</h3><p>One active request per receiving VPA. Additional requests wait in FIFO order.</p></div></section>' +
-    '<div class="au-collect-grid"><form class="au-panel au-form" id="au-collect-form">' +
-    '<label><span>Collection source</span><select name="kind" id="au-kind">' +
+  return '<section class="au-page-heading au-collect-heading"><div><span class="au-kicker">PAYMENT WORKSPACE / NEW REQUEST</span><h3>Create a payment request</h3><p>Generate a unique, exact-amount QR for a guest folio, dining bill or direct collection.</p></div><span class="au-heading-rail">AURELIA UPI <i></i> INR</span></section>' +
+    '<div class="au-collect-layout"><form class="au-panel au-form au-collect-form" id="au-collect-form">' +
+    '<div class="au-form-section-head"><span class="au-step">01</span><div><strong>Collection details</strong><small>Choose where this payment belongs.</small></div></div>' +
+    '<label><span>Collect for</span><select name="kind" id="au-kind">' +
     '<option value="folio" ' + (draft.kind === "folio" ? "selected" : "") + '>Guest folio</option>' +
-    '<option value="restaurant" ' + (draft.kind === "restaurant" ? "selected" : "") + '>Dining / POS</option>' +
+    '<option value="restaurant" ' + (draft.kind === "restaurant" ? "selected" : "") + '>Dining bill</option>' +
     '<option value="general" ' + (!draft.kind || draft.kind === "general" ? "selected" : "") + '>General collection</option></select></label>' +
-    '<label id="au-booking-wrap"><span>Guest folio</span><select name="bookingId" id="au-booking"><option value="">Select a guest folio</option>' + bookingOptions + '</select></label>' +
-    '<label id="au-table-wrap"><span>Dining table</span><select name="tableId" id="au-table"><option value="">Select a table</option>' + tableOptions + '</select></label>' +
+    '<label id="au-booking-wrap" ' + ((draft.kind || "general") === "folio" ? "" : "hidden") + '><span>Guest folio</span><select name="bookingId" id="au-booking"><option value="">Select a guest folio</option>' + bookingOptions + '</select></label>' +
+    '<label id="au-table-wrap" ' + (draft.kind === "restaurant" ? "" : "hidden") + '><span>Dining table</span><select name="tableId" id="au-table"><option value="">Select a table</option>' + tableOptions + '</select></label>' +
     '<div class="au-form-grid"><label><span>Guest / payer name</span><input name="guestName" maxlength="100" value="' + esc(draft.guestName || "") + '" placeholder="Guest name"></label>' +
     '<label><span>Room / reference</span><input name="room" maxlength="64" value="' + esc(draft.room || "") + '" placeholder="Room or internal reference"></label></div>' +
-    '<label><span>Amount (INR)</span><input name="amount" id="au-amount" inputmode="decimal" type="text" required value="' + esc(draft.amount || "") + '" placeholder="0.00"></label>' +
-    '<label><span>Payment note</span><input name="note" maxlength="80" value="' + esc(draft.note || "Aurelia UPI payment") + '" placeholder="Booking or bill reference"></label>' +
-    '<div class="au-config-preview"><span>Receiving account</span><strong>' + esc(currentVpa || "Configure UPI ID in More → Settings") + '</strong><small>' + esc(config.name || "Aurelia") + ' · INR only</small></div>' +
-    '<button class="au-primary au-wide" type="submit">Generate Aurelia UPI request</button>' +
-    '<p class="au-hint">The QR and UPI intent are generated on this device. No payment gateway or QR-generation website is called.</p>' +
-    '</form><aside class="au-panel au-side-note"><span class="au-kicker">PAYMENT SAFETY</span><h3>Evidence is not settlement.</h3>' +
-    '<ul><li>Customer scans the exact-amount QR.</li><li>Incoming alerts are stored as unverified evidence.</li><li>Staff checks the receiving bank account and UTR.</li><li>Only an explicit staff decision can post a folio payment.</li></ul>' +
-    '<div class="au-warning">Never mark a payment paid because a QR was scanned, an app opened, or a notification appeared.</div></aside></div>';
+    '<div class="au-amount-field"><label for="au-amount"><span>Amount to collect</span><div class="au-amount-input"><b>₹</b><input name="amount" id="au-amount" inputmode="decimal" type="text" required value="' + esc(draft.amount || "") + '" placeholder="0.00" autocomplete="off"></div></label><small>Enter the exact outstanding amount in Indian rupees.</small></div>' +
+    '<label><span>Payment note <em>Optional</em></span><input name="note" maxlength="80" value="' + esc(draft.note || "Aurelia UPI payment") + '" placeholder="Booking or bill reference"></label>' +
+    '<div class="au-receiving-card"><span class="au-receiving-icon">↗</span><div><small>RECEIVING ACCOUNT</small><strong>' + esc(currentVpa || "Configure UPI ID in More → Settings") + '</strong><em>' + esc(config.name || "Aurelia") + ' · INR only</em></div>' +
+    (currentVpa ? '<button type="button" class="au-copy-vpa" data-upi-action="copy-vpa">Copy ID</button>' : '') + '</div>' +
+    '<button class="au-primary au-generate-button" type="submit" ' + (!currentVpa ? "disabled" : "") + '>' + (currentVpa ? 'Generate payment QR <span aria-hidden="true">↗</span>' : 'Configure Aurelia UPI ID in Settings') + '</button>' +
+    '<p class="au-hint au-form-hint">QR generation happens on this device. No payment gateway or hosted QR service is used.</p>' +
+    '</form><aside class="au-collect-aside">' +
+    '<section class="au-panel au-qr-preview-card"><div class="au-preview-top"><span class="au-kicker">YOUR PAYMENT QR</span><span class="au-preview-lock">LOCAL</span></div>' +
+    '<div class="au-qr-placeholder" aria-hidden="true"><svg viewBox="0 0 96 96" fill="none"><rect x="9" y="9" width="29" height="29" rx="4" stroke="currentColor" stroke-width="5"/><rect x="17" y="17" width="13" height="13" rx="1" fill="currentColor"/><rect x="58" y="9" width="29" height="29" rx="4" stroke="currentColor" stroke-width="5"/><rect x="66" y="17" width="13" height="13" rx="1" fill="currentColor"/><rect x="9" y="58" width="29" height="29" rx="4" stroke="currentColor" stroke-width="5"/><rect x="17" y="66" width="13" height="13" rx="1" fill="currentColor"/><path d="M49 9v8m0 8v5m9 12h8m8 0h13M49 49h8v8h-8zm16 8h8v8h-8zm-16 8h8v8h-8zm16 8h8v8h-8zm16-16h8v8h-8z" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg></div>' +
+    '<strong>QR appears after generation</strong><p>Each request gets its own amount and reference. The QR is ready to scan as soon as the request becomes active.</p>' +
+    '<div class="au-preview-divider"></div><div class="au-preview-feature"><span>01</span><div><b>Exact amount</b><small>Customer sees the requested total.</small></div></div>' +
+    '<div class="au-preview-feature"><span>02</span><div><b>Direct to your UPI ID</b><small>No gateway account or intermediary.</small></div></div>' +
+    '<div class="au-preview-feature"><span>03</span><div><b>Manual bank verification</b><small>Only verified credit reaches the PMS ledger.</small></div></div></section>' +
+    '<div class="au-safety-note"><span aria-hidden="true">ⓘ</span><p><strong>Payment safety</strong> A QR scan, app launch, customer claim or notification is not proof of payment. Verify the credit in your receiving bank account.</p></div>' +
+    '</aside></div>';
 }
 
 function renderActivity() {
@@ -310,7 +334,7 @@ function renderReviewCard(evidence) {
     '<div class="au-evidence-grid"><div><small>UTR / RRN</small><strong>' + esc(evidence.utr || "Not detected") + '</strong></div><div><small>Sender VPA</small><strong>' + esc(evidence.senderVpa || "Not detected") + '</strong></div><div><small>Suggested session</small><strong>' + esc(candidateLabel) + '</strong></div></div>' +
     (evidence.matchReason ? '<p class="au-hint">Match result: ' + esc(evidence.matchReason) + '. Matching is a suggestion only.</p>' : '') +
     (canReview ? '<label class="au-review-check"><input type="checkbox" id="au-verify-' + esc(evidence.id) + '"><span>I checked the credit in the receiving bank account and verified this transaction.</span></label>' +
-      '<label class="au-review-utr"><span>Verified UTR / bank reference</span><input id="au-utr-' + esc(evidence.id) + '" value="' + esc(evidence.utr || "") + '" maxlength="30" placeholder="Enter UTR if available"></label>' +
+      '<label class="au-review-utr"><span>Verified UTR / bank reference</span><input id="au-utr-' + esc(evidence.id) + '" value="' + esc(evidence.utr || "") + '" maxlength="30" required placeholder="Enter bank UTR / reference (required)"></label>' +
       (session ? '<button class="au-primary au-wide" type="button" data-upi-action="confirm" data-id="' + esc(evidence.id) + '">Verify and apply payment</button>' :
       '<label><span>Assign exact-amount collection</span><select id="au-assign-' + esc(evidence.id) + '"><option value="">Select request</option>' +
       state.sessions.filter(row => Number(row.amountPaise) === Number(evidence.amountPaise) && ["ACTIVE", "EXPIRED", "CANCELLED", "REVIEW_REQUIRED"].includes(row.status)).map(row => '<option value="' + esc(row.id) + '">' + esc(row.reference + " · " + (row.guestName || row.kind)) + '</option>').join("") +
@@ -326,7 +350,9 @@ function renderReview() {
   return '<section class="au-page-heading"><div><span class="au-kicker">EVIDENCE & RECONCILIATION</span><h3>Review incoming payment alerts</h3><p>Import a bank alert or review an Android notification. An alert never marks a folio paid by itself.</p></div></section>' +
     '<section class="au-panel au-import"><label><span>Paste incoming UPI credit alert</span><textarea id="au-alert-text" rows="4" maxlength="4000" placeholder="Paste the notification text exactly as received. Do not paste OTPs or unrelated messages."></textarea></label>' +
     '<button class="au-primary" type="button" data-upi-action="import-evidence">Add evidence for review</button><p class="au-hint">Aurelia parses amount and UTR locally. Raw alert text is stored only in encrypted on-device storage when available.</p>' +
-    '<div class="au-statement-import"><label><span>Import bank statement CSV</span><input id="au-statement-file" type="file" accept=".csv,text/csv"></label><p class="au-hint">Only dated UPI credit rows with an exact amount and UTR/RRN are imported. The original file is not retained. CSV rows remain unverified evidence and never settle a payment automatically.</p></div></section>' +
+    '<div class="au-statement-import"><label class="au-review-check"><input type="checkbox" id="au-statement-account-verified"><span>I confirm this statement belongs to the configured receiving Aurelia UPI ID: ' + esc(vpa() || "not configured") + '.</span></label>' +
+    '<label><span>Import bank statement CSV</span><input id="au-statement-file" type="file" accept=".csv,text/csv"></label>' +
+    '<p class="au-hint">Only dated UPI credit rows with an exact amount and UTR/RRN are imported. The original file is not retained. The account confirmation is an operator attestation; CSV rows remain unverified evidence and never settle a payment automatically.</p></div></section>' +
     '<section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">REVIEW QUEUE</span><h3>' + rows.length + ' evidence record(s)</h3></div><button class="au-link" type="button" data-upi-action="refresh">Refresh</button></div>' +
     (rows.length ? '<div class="au-evidence-list">' + rows.map(renderReviewCard).join("") + '</div>' : '<div class="au-empty"><strong>No payment alerts yet</strong><p>Incoming credits will appear here after manual import or Android notification access is enabled.</p></div>') +
     '</section>';
@@ -400,7 +426,7 @@ async function createCollection(form) {
   await persistSessionChanges(before, after, "AURELIA_UPI_SESSION_QUEUED");
   state.sessions = after;
   const committedSession = after.find(row => row.id === session.id) || session;
-  audit("Collection created", session.reference + " · " + formatPaise(amountPaise) + " · " + committedSession.status);
+  await audit("Collection created", session.reference + " · " + formatPaise(amountPaise) + " · " + committedSession.status);
   state.draft = null;
   state.view = "overview";
   notify(committedSession.status === "ACTIVE" ? "Aurelia UPI request is active." : "Request added to the Aurelia UPI FIFO queue.");
@@ -449,7 +475,7 @@ async function importEvidence() {
       state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
     }
   }
-  audit("Incoming evidence imported", (evidence.utr || "No UTR") + " · " + formatPaise(evidence.amountPaise));
+  await audit("Incoming evidence imported", (evidence.utr || "No UTR") + " · " + formatPaise(evidence.amountPaise));
   notify("Payment alert added for manual review. No settlement was made.");
   state.view = "review";
   rerender();
@@ -473,7 +499,7 @@ async function assignEvidence(id) {
     state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
   }
   await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_MANUALLY_ASSIGNED");
-  audit("Evidence assigned for review", evidence.id + " → " + session.reference);
+  await audit("Evidence assigned for review", evidence.id + " → " + session.reference);
   rerender();
 }
 
@@ -488,6 +514,10 @@ async function importStatementFile(file) {
     reader.onerror = () => reject(new Error("Could not read the selected CSV file."));
     reader.readAsText(file);
   });
+  if (document.getElementById("au-statement-account-verified")?.checked !== true) {
+    throw new Error("Confirm that this bank statement belongs to the configured Aurelia UPI receiving account.");
+  }
+  const receivingVpa = normalizeVpa(vpa());
   const parsed = parseBankStatementCsv(csvText);
   if (!parsed.rows.length) throw new Error("No dated UPI credit rows with a valid amount and UTR were found.");
   let duplicates = 0, conflicts = 0, matched = 0;
@@ -495,8 +525,9 @@ async function importStatementFile(file) {
     const row = parsed.rows[index];
     const evidence = {
       ...row,
-      id: "statement_" + (globalThis.crypto?.randomUUID?.() || (Date.now() + "_" + index)),
+      id: secureRandomId("statement"),
       sourcePackage: "LOCAL_BANK_STATEMENT_CSV",
+      receivingVpa,
       fingerprint: [row.amountPaise, row.utr || "", row.receivedAt, row.rawText].join("|").slice(0, 1200),
       status: "UNMATCHED",
       matchDecision: "UNMATCHED",
@@ -536,7 +567,7 @@ async function importStatementFile(file) {
       }
     }
   }
-  audit("Bank statement CSV imported", parsed.rows.length + " UPI row(s) · " + duplicates + " duplicate(s) · " + conflicts + " conflict(s)");
+  await audit("Bank statement CSV imported", parsed.rows.length + " UPI row(s) · " + duplicates + " duplicate(s) · " + conflicts + " conflict(s)");
   notify("Imported " + parsed.rows.length + " UPI statement row(s). " + matched + " matched for review; none were settled automatically.");
   state.view = "review";
   rerender();
@@ -546,7 +577,7 @@ async function importSignal(signal = {}) {
   const amountPaise = Number(signal.amountPaise);
   if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) throw new Error("Legacy UPI signal has an invalid amount.");
   const evidence = {
-    id: "legacy_" + String(signal.id || globalThis.crypto?.randomUUID?.() || Date.now()).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100),
+    id: "legacy_" + String(signal.id || secureRandomId("signal")).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100),
     source: "LEGACY_NOTIFICATION",
     sourcePackage: String(signal.source || "AURELIA_LEGACY_SIGNAL").slice(0, 160),
     amountPaise,
@@ -581,7 +612,7 @@ async function importSignal(signal = {}) {
       state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
     }
   }
-  audit("Legacy payment signal imported for review", evidence.utr || evidence.id);
+  await audit("Legacy payment signal imported for review", evidence.utr || evidence.id);
   state.view = "review";
   context?.go?.("upi");
   rerender();
@@ -605,7 +636,9 @@ async function confirmEvidence(id) {
   if (!verified) throw new Error("Confirm that you checked the credit in the receiving bank account.");
   if (!repository.isNative) throw new Error("Preview mode cannot confirm or post payments. Unlock the Android PMS storage first.");
   const utr = String(document.getElementById("au-utr-" + id)?.value || evidence.utr || "").trim().toUpperCase();
-  if (utr && !/^[A-Z0-9]{8,30}$/.test(utr)) throw new Error("Enter a valid 8–30 character bank UTR / reference.");
+  if (!/^[A-Z0-9]{8,30}$/.test(utr)) {
+    throw new Error("A bank UTR/reference is required. Verify the transaction reference in the receiving bank account before confirming.");
+  }
   if (utr && state.payments.some(row => row.sessionId !== session.id &&
       String(row.transactionReference || "").toUpperCase() === utr &&
       ["CONFIRMED_PENDING_PMS", "CONFIRMED", "APPLIED_TO_PMS"].includes(row.status))) {
@@ -619,6 +652,10 @@ async function confirmEvidence(id) {
   if (!["ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED", "EXPIRED", "CANCELLED", "CONFIRMED"].includes(session.status)) {
     throw new Error("This collection is not eligible for payment reconciliation.");
   }
+
+  // The encrypted database enforces UTR uniqueness within each receiving VPA across payment and refund records.
+  // Repeating the same claim for the same payment is idempotent after a crash/retry.
+  await repository.claimReference(utr, "PAYMENT", "payment_" + session.id, session.vpa, session.amountPaise);
 
   const existingPayment = state.payments.find(row => row.sessionId === session.id);
   const alreadyApplied = ["CONFIRMED", "APPLIED_TO_PMS"].includes(existingPayment?.status);
@@ -646,6 +683,7 @@ async function confirmEvidence(id) {
     amountPaise: session.amountPaise,
     currency: "INR",
     rail: "AURELIA_UPI",
+    vpa: session.vpa,
     status: alreadyApplied ? existingPayment.status : "CONFIRMED_PENDING_PMS",
     transactionReference: utr || existingPayment?.transactionReference || null,
     confirmedAt: existingPayment?.confirmedAt || now,
@@ -713,7 +751,7 @@ async function confirmEvidence(id) {
   state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
   state.evidence = state.evidence.map(row => row.id === evidence.id ? evidence : row);
   state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
-  audit("Payment verified", session.reference + " · " + formatPaise(session.amountPaise));
+  await audit("Payment verified", session.reference + " · " + formatPaise(session.amountPaise));
   const promoted = promoteNextSession(state.sessions, session.vpa);
   if (promoted.promoted) {
     await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
@@ -765,7 +803,7 @@ async function retryPendingPosting(sessionId) {
   await repository.savePayment(payment, "AURELIA_UPI_PMS_POSTING_RETRIED");
   state.payments = state.payments.map(row => row.id === payment.id ? payment : row);
 
-  audit("PMS posting recovered", session.reference);
+  await audit("PMS posting recovered", session.reference);
   const promoted = promoteNextSession(state.sessions, session.vpa);
   if (promoted.promoted) {
     await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
@@ -796,7 +834,7 @@ async function rejectEvidence(id) {
       state.sessions = promoted.sessions;
     }
   }
-  audit("Evidence rejected", evidence.utr || evidence.id);
+  await audit("Evidence rejected", evidence.utr || evidence.id);
   await refreshData();
   state.view = "review";
   rerender();
@@ -826,7 +864,7 @@ async function markCustomerReportedPaid(id) {
   if (!existingClaim) await repository.saveEvidence(claim, "AURELIA_UPI_CUSTOMER_CLAIM_RECORDED");
   state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
   if (!existingClaim) state.evidence.unshift(claim);
-  audit("Customer reported payment sent", session.reference + " · awaiting bank verification");
+  await audit("Customer reported payment sent", session.reference + " · awaiting bank verification");
   notify("Customer claim recorded. Check the receiving bank account; no payment has been settled.");
   rerender();
 }
@@ -844,7 +882,7 @@ async function cancelSession(id) {
       state.sessions = promoted.sessions;
     }
   }
-  audit("Collection cancelled", session.reference);
+  await audit("Collection cancelled", session.reference);
   rerender();
 }
 
@@ -858,9 +896,13 @@ async function completeRefund(id) {
     throw new Error("This refund transfer UTR is already recorded against another refund.");
   }
   const completed = completeRefundRecord(refund, { transferReference, manualVerified: verified });
+  const sourcePayment = state.payments.find(row => row.id === refund.paymentId);
+  const sourceSession = state.sessions.find(row => row.id === sourcePayment?.sessionId);
+  if (!sourceSession?.vpa) throw new Error("The original receiving VPA is unavailable; refund reference cannot be safely claimed.");
+  await repository.claimReference(transferReference, "REFUND", refund.id, sourceSession.vpa, refund.amountPaise);
   await repository.saveRefund(completed, "AURELIA_UPI_REFUND_TRANSFER_RECORDED");
   state.refunds = state.refunds.map(row => row.id === id ? completed : row);
-  audit("Refund transfer recorded", refund.paymentId + " · " + transferReference);
+  await audit("Refund transfer recorded", refund.paymentId + " · " + transferReference);
   notify("Refund transfer recorded with its bank reference. Aurelia did not initiate the transfer.");
   rerender();
 }
@@ -882,7 +924,7 @@ async function createRefund(id) {
   });
   await repository.saveRefund(refund);
   state.refunds.unshift(refund);
-  audit("Refund requested", refund.id + " · " + formatPaise(amount) + " · manual bank transfer required");
+  await audit("Refund requested", refund.id + " · " + formatPaise(amount) + " · manual bank transfer required");
   notify("Refund request recorded. Complete the transfer in your bank app and record its reference.");
   state.view = "refunds";
   rerender();
@@ -1083,7 +1125,7 @@ function startTicker() {
           await persistSessionChanges(state.sessions, promoted.sessions, "AURELIA_UPI_QUEUE_PROMOTED");
           state.sessions = promoted.sessions;
         }
-        audit("Collection expired", active.reference);
+        await audit("Collection expired", active.reference);
         rerender();
       } catch (error) { state.storageError = error?.message || "Could not update the Aurelia UPI queue."; }
       return;
@@ -1098,7 +1140,7 @@ function startTicker() {
         });
         await repository.saveSession(review, "AURELIA_UPI_VERIFICATION_WINDOW_ELAPSED");
         state.sessions = state.sessions.map(row => row.id === review.id ? review : row);
-        audit("Verification window elapsed", active.reference + " · manual bank review required");
+        await audit("Verification window elapsed", active.reference + " · manual bank review required");
         rerender();
       } catch (error) { state.storageError = error?.message || "Could not move the payment into manual review."; }
     }

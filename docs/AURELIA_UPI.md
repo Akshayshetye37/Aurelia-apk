@@ -30,6 +30,17 @@ The responsive header carries the property identity, fixed INR currency, languag
 
 Terminal and review states are retained in the encrypted repository and audit trail. A notification, UPI app return, customer claim, or QR scan can never settle a payment by itself.
 
+## Financial integrity hardening
+
+- Payment, evidence, refund and audit identifiers require Web Crypto cryptographic randomness. There is no timestamp or `Math.random()` fallback; if a secure random source is unavailable, record creation fails closed.
+- Financial audit records are persisted through the encrypted native repository and transactional outbox before they are shown as durable in the UI. An audit persistence failure is surfaced as an error rather than silently ignored.
+- A bank UTR/reference is required before an operator can confirm a payment.
+- Bank-statement CSV import requires an explicit operator attestation that the file belongs to the configured receiving Aurelia UPI VPA. The selected VPA is attached to imported evidence; the attestation does not itself verify settlement. The native SQLCipher database claims each reference in a dedicated table keyed by receiving VPA plus reference, with a unique (reference type, entity) constraint. A repeated claim for the same entity and amount is idempotent; reuse by another payment/refund or with altered details is rejected.
+- Payment and refund transfer references share the same uniqueness namespace for the configured receiving VPA. Claims are permanent audit identities; corrections require a reviewed financial adjustment, not silent release/reuse.
+- The native schema migration advances to version 9, creates the reference-claim table, and backfills existing manually verified payment/refund UTRs before the uniqueness rule is enabled. Conflicting legacy references fail the migration closed.
+
+These controls strengthen the local device's financial ledger. They do not make notification text authoritative, prove bank settlement, or replace receiving-account verification.
+
 ## Android notification observer
 
 The optional `AureliaUPINotificationListener` is registered as an Android `NotificationListenerService`. The operator must enable Notification Access in Android settings.
