@@ -103,3 +103,25 @@ test('successful folio and restaurant posting close the legacy overlay before re
   assert.match(html, /The PMS folio did not accept the payment[\s\S]{0,260}closeS\(\)/);
   assert.match(html, /aureliaUpiSessionId=session\.id;\}[\s\S]{0,120}closeS\(\)/);
 });
+
+
+test('Aurelia UPI collection and active QR views expose the redesigned payment workspace without changing settlement controls', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  const css = await read('assets/aurelia-upi.css');
+  const collect = app.slice(app.indexOf('function renderCollect'), app.indexOf('function renderActivity'));
+  const active = app.slice(app.indexOf('function renderActiveSession'), app.indexOf('function renderMetric'));
+  assert.match(collect, /au-collect-layout/);
+  assert.match(collect, /au-amount-input/);
+  assert.match(collect, /au-receiving-card/);
+  assert.match(collect, /data-upi-action="copy-vpa"/);
+  assert.match(collect, /Generate payment QR/);
+  assert.match(collect, /QR appears after generation/);
+  assert.match(active, /au-payment-workspace/);
+  assert.match(active, /data-aurelia-upi-qr/);
+  assert.match(active, /data-upi-action="customer-paid"/);
+  assert.match(active, /not proof of bank credit/);
+  assert.match(active, /data-upi-view="review"/);
+  assert.match(css, /\.au-qr-stage/);
+  assert.match(css, /@media\(max-width:760px\)/);
+  assert.match(css, /prefers-reduced-motion/);
+});
