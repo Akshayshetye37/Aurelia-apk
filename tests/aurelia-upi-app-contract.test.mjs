@@ -86,3 +86,17 @@ test('restaurant settlement sheet exposes Aurelia UPI only', async () => {
   assert.match(sheet, /Aurelia UPI/);
   assert.doesNotMatch(sheet, /data-pay="Cash"|Cash/);
 });
+
+
+test('VPA changes validate the address and fail closed until encrypted payment history is loaded', async () => {
+  const html = await read('index.html');
+  assert.match(html, /Enter a valid Aurelia UPI ID in name@bank format/);
+  assert.match(html, /!upiState\?\.loaded\|\|upiState\?\.storageError/);
+  assert.match(html, /Resolve all active and queued Aurelia UPI requests before changing the receiving VPA/);
+});
+
+test('successful folio and restaurant posting close the legacy overlay before returning to Aurelia UPI', async () => {
+  const html = await read('index.html');
+  assert.match(html, /The PMS folio did not accept the payment[\s\S]{0,260}closeS\(\)/);
+  assert.match(html, /aureliaUpiSessionId=session\.id;\}[\s\S]{0,120}closeS\(\)/);
+});

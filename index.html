@@ -3383,7 +3383,10 @@ window.printGuestPreview=function(){
   const guardedSettingsSave=function(){
    const input=document.querySelector('[data-s="upi"]');
    const next=String(input?.value||'').trim(),current=String(S.set?.upi||'').trim();
-   const sessions=window.AureliaUPI?.getState?.().sessions||[];
+   if(next&&!/^[A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64}$/.test(next)){toast('Enter a valid Aurelia UPI ID in name@bank format.');return false;}
+   const upiState=window.AureliaUPI?.getState?.();
+   if(next!==current&&(!upiState?.loaded||upiState?.storageError)){toast('Open Aurelia UPI and refresh encrypted payment storage before changing the receiving UPI ID.');return false;}
+   const sessions=upiState?.sessions||[];
    const hasOpen=sessions.some(row=>['CREATED','QUEUED','ACTIVE','PROCESSING','OBSERVED','REVIEW_REQUIRED'].includes(row.status));
    if(next!==current&&hasOpen){toast('Resolve all active and queued Aurelia UPI requests before changing the receiving VPA.');return false;}
    return originalSettingsSave.apply(this,arguments);
@@ -3553,6 +3556,7 @@ window.printGuestPreview=function(){
    try{if(typeof window.pay!=='function')throw new Error('Aurelia folio payment action is unavailable.');window.pay(id)}
    finally{window.__aureliaUpiApplying=false}
    if(Number(booking.p||0)<before+amount-0.009)throw new Error('The PMS folio did not accept the payment. The Aurelia UPI record remains pending PMS posting.');
+   if(typeof closeS==='function')closeS();
    if(typeof persist==='function')persist();
    return true;
   },
@@ -3575,6 +3579,7 @@ window.printGuestPreview=function(){
     const before=(S.sales||[]).length;window.recordRestPay();
     if((S.sales||[]).length!==before+1)throw new Error('The dining payment was not posted to the sales ledger.');
     const sale=S.sales[S.sales.length-1];if(sale){sale.m='Aurelia UPI';sale.paymentRail='AURELIA_UPI';sale.paymentReference=String(utr||session.reference||'');sale.aureliaUpiSessionId=session.id;}
+    if(typeof closeS==='function')closeS();
    }finally{window.__aureliaUpiApplying=false}
    if(typeof persist==='function')persist();
    return true;
