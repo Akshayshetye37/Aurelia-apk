@@ -24,8 +24,8 @@
     {label:'Governance',items:[
       ['rep','Finance & Reports','M4 19V5m0 14h16M8 15l3-4 3 2 5-7'],
       ['aud','Audit Log','M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'],
-      ['io','Import & Export','M12 3v12m0-12 4 4m-4-4-4 4M4 15v5h16v-5'],
-      ['set','Settings & Backup','M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-6v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2']
+      ['io','Data & Backup','M12 3v12m0-12 4 4m-4-4-4 4M4 15v5h16v-5'],
+      ['set','Settings','M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-6v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2']
     ]}
   ];
   const primary=new Set(['home','rooms','stays','dining','upi']);
