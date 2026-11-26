@@ -202,6 +202,7 @@ export class PmsBootstrapCoordinator {
     const finalMigration=Object.freeze({...migrationSummary,legacyKeyPreserved:this.storage.getItem(AURELIA_LEGACY_STATE_KEY)!=null});
     return Object.freeze({
       success:true,environment:this.environment,storageEngine:this.storageEngine,
+      persistenceDurability:this.storageEngine==="ANDROID_SQLITE"?"SQLCIPHER":(this.repository.durabilityMode||"unknown"),
       persistentStorage:Object.freeze({requested:Boolean(this.persistenceRequested),granted:this.persistenceGranted}),
       uiCutover:false,authority,recovery:recoverySummary,migration:finalMigration,domainProjection,
       repository:this.repository,identity,bridge,settingsRepository,restaurantTableRepository,restaurantSaleRepository,inventoryRepository,expenseRepository
