@@ -235,32 +235,40 @@ function guestContactActions(name,phone){
 </script>
 <script id="aurelia-safe-storage">
 (function(){
-  var mem = {};
-  function canLS(){
-    try{
-      var k="__aurelia_ls_test__";
-      window.localStorage.setItem(k,"1");
-      window.localStorage.removeItem(k);
-      return true;
-    }catch(e){return false}
+  function canReadLS(){
+    try{window.localStorage.getItem("__aurelia_ls_test__");return true}
+    catch(e){return false}
   }
-  var ok = canLS();
-  window.__aureliaStorage = {
-    getItem: function(k){
-      try{ if(ok) return localStorage.getItem(k); }catch(e){}
-      return mem[k] != null ? mem[k] : null;
+  function canWriteLS(){
+    var k="__aurelia_ls_test__";
+    try{
+      window.localStorage.setItem(k,"1");
+      var verified=window.localStorage.getItem(k)==="1";
+      window.localStorage.removeItem(k);
+      return verified;
+    }catch(e){try{window.localStorage.removeItem(k)}catch(_){}return false}
+  }
+  var readable=canReadLS(),writable=canWriteLS();
+  function unavailable(cause){
+    var error=new Error("Persistent device storage is unavailable. This change cannot survive closing the app.");
+    error.code="AURELIA_PERSISTENCE_UNAVAILABLE";
+    if(cause)error.cause=cause;
+    return error;
+  }
+  window.__aureliaStorage={
+    getItem:function(k){if(!readable)throw unavailable();try{return window.localStorage.getItem(k)}catch(e){throw unavailable(e)}},
+    setItem:function(k,v){
+      if(!writable)throw unavailable();
+      var value=String(v);
+      try{
+        window.localStorage.setItem(k,value);
+        if(window.localStorage.getItem(k)!==value)throw new Error("Persistent storage read-back did not match the saved value.");
+      }catch(e){throw unavailable(e)}
     },
-    setItem: function(k,v){
-      try{ if(ok){ localStorage.setItem(k,v); return; } }catch(e){}
-      mem[k]=String(v);
-    },
-    removeItem: function(k){
-      try{ if(ok) localStorage.removeItem(k); }catch(e){}
-      delete mem[k];
-    },
-    memoryOnly: !ok
+    removeItem:function(k){if(!readable)throw unavailable();try{window.localStorage.removeItem(k)}catch(e){throw unavailable(e)}},
+    memoryOnly:false,
+    isAvailable:function(){return writable}
   };
-  /* localStorage fallback is silent */
 })();
 </script>
 
@@ -803,7 +811,17 @@ function sv(){$$('[data-s]').forEach(e=>S.set[e.dataset.s]=e.value);S.set.name=S
 function demoRm(){ask('Remove demo data','Deletes the sample rooms, guests, bookings, stock, dishes, expenses and takings. Anything you added yourself stays.','Remove demo data','demoGo()')}
 function demoGo(){S.b=S.b.filter(x=>!x.demo);S.g=S.g.filter(x=>!x.demo);S.rooms=S.rooms.filter(x=>!x.demo);S.exp=S.exp.filter(x=>!x.demo);S.inv=S.inv.filter(x=>!x.demo);Object.keys(MENU).forEach(c=>{MENU[c]=MENU[c].filter(m=>!m[3]);if(!MENU[c].length)delete MENU[c]});S.t.forEach(t=>{if(t.demo){t.o=[];t.demo=0}});S.hist=[0,0,0,0,0,0];S.today=0;S.aud=[];aud('Demo data removed','');render();toast('Demo data removed')}
 function confirmResetAll(){if(!confirm('Erase all data on this device? A backup will be attempted first.'))return;try{if(typeof runBackup==='function')runBackup(true)}catch(e){}resetAll()}
-function resetAll(){try{(window.__aureliaStorage||localStorage).removeItem(SK)}catch(e){}location.reload()}
+function resetAll(){
+ const storage=window.__aureliaStorage||localStorage;
+ try{
+  storage.removeItem(SK);
+  if(storage.getItem(SK)!==null)throw new Error('Application state remained after reset.');
+  location.reload();
+ }catch(error){
+  console.error('Aurelia reset could not be verified.',error);
+  toast('Reset failed: device storage could not be cleared. Existing records were retained.');
+ }
+}
 /* backup engine */
 const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],SK='aurelia_lodge_v2',hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
 const curHash=()=>hashS(JSON.stringify(DK.map(k=>S[k])));
@@ -1104,7 +1122,7 @@ async function restoreGo(){
   DK.forEach(k=>{if(restored[k]!==undefined)S[k]=restored[k]});
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
-  persist();
+  if(!persist())throw new Error('Restored records could not be saved to durable device storage.');
   const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
   S.rst=null;S.rstMode=null;location.reload();return true;
@@ -1112,15 +1130,38 @@ async function restoreGo(){
   console.error('Transactional restore failed',e);
   try{if(oldPhotos)await photoRestore(oldPhotos)}catch(photoRollbackError){console.error('Photo rollback failed',photoRollbackError)}
   DK.forEach(k=>{if(liveBefore[k]!==undefined)S[k]=liveBefore[k]});id=oldId;
-  try{persist()}catch(rollbackError){console.error('State rollback failed',rollbackError)}
+  if(!persist())console.error('State rollback could not be verified after restore failure.');
   toast('Restore failed and rollback was attempted. Do not clear app data; check the backup and device storage.');return false;
  }
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
-function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o))}catch(e){if(!S.qw){S.qw=1;toast('Device storage is full. Back up, then remove old items.')}}}
+function persist(){
+ if(RECOVERY_CHECK_PENDING){LOCAL_STATE_STATUS='recovery-pending';return false}
+ if(LOCAL_STATE_STATUS==='invalid'){console.error('Persistence blocked until saved data is recovered.');return false}
+ const storage=window.__aureliaStorage||localStorage;
+ let previous=null,previousRead=false;
+ try{
+  previous=storage.getItem(SK);previousRead=true;
+  const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);
+  const serialized=JSON.stringify(o);
+  storage.setItem(SK,serialized);
+  if(storage.getItem(SK)!==serialized)throw new Error('Application state read-back verification failed.');
+  S.qw=0;LOCAL_STATE_STATUS='valid';
+  return true;
+ }catch(error){
+  if(previousRead){
+   try{if(previous===null)storage.removeItem(SK);else storage.setItem(SK,previous)}
+   catch(rollbackError){console.error('Application-state rollback could not be verified.',rollbackError)}
+  }
+  LOCAL_STATE_STATUS='write-failed';
+  console.error('Aurelia state could not be saved and verified.',error);
+  if(!S.qw){S.qw=1;toast('NOT SAVED: device storage failed. Do not close the app; check storage and restore a verified backup.')}
+  return false;
+ } 
+}
 let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
 function loadAll(){
- let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}
+ let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='unavailable';console.error('Persistent app storage could not be read.',e);return}
  if(!raw){LOCAL_STATE_STATUS='missing';return}
  try{
   const o=JSON.parse(raw);
@@ -1133,7 +1174,6 @@ function loadAll(){
   console.warn('Saved application state failed validation; recovery will be attempted.',e);
  }
 }
-/* autopilot */
 
 function openGlobalSearch(){
   openS('<h2 class="foil">Search guests</h2><label class="fld"><span>Name, phone, email or ID</span><input id="gsq" oninput="renderGuestHits(this.value)" placeholder="Type to search…" autofocus></label><div id="gsh" class="list"></div>');
@@ -3701,5 +3741,177 @@ window.printGuestPreview=function(){
   syncShell();tickClock();window.setInterval(tickClock,30000);
 })();
 </script>
+<script src="scripts/stay-extension.js"></script>
+<script id="aurelia-persistence-and-stay-extension">
+(function(){
+  function storageNotice(){
+    const target=document.getElementById('v');
+    if(!target)return;
+    let message='';
+    if(RECOVERY_CHECK_PENDING||LOCAL_STATE_STATUS==='recovery-pending'){
+      message='RECOVERY CHECK IN PROGRESS — Keep the app open. New changes are not saved until recovery finishes.';
+    }else if(LOCAL_STATE_STATUS==='invalid'){
+      message='SAVED DATA NEEDS RECOVERY — Do not clear app data. Restore a verified backup before continuing.';
+    }else if(LOCAL_STATE_STATUS==='idb-pending'){
+      message='SAVING TO DEVICE DATABASE — Keep the app open until the save finishes.';
+    }else if(LOCAL_STATE_STATUS==='unavailable'||LOCAL_STATE_STATUS==='write-failed'){
+      message='STORAGE ERROR — Changes are not saved permanently. Do not close the app. Check device storage and restore a backup.';
+    }
+    let banner=document.getElementById('aurelia-storage-warning');
+    if(!message){if(banner)banner.remove();return}
+    if(!banner){
+      banner=document.createElement('div');
+      banner.id='aurelia-storage-warning';
+      banner.setAttribute('role','alert');
+      banner.style.cssText='margin:0 0 14px;padding:12px 14px;border:1px solid #df7c70;border-radius:14px;background:#3b1c18;color:#ffe5df;font:500 13px/1.45 system-ui,sans-serif';
+      target.prepend(banner);
+    }
+    banner.textContent=message;
+  }
+  window.aureliaRefreshStorageNotice=storageNotice;
+
+  const originalRender=render;
+  render=function(){
+    const result=originalRender.apply(this,arguments);
+    storageNotice();
+    return result;
+  };
+
+  function extensionConflictMessage(error){
+    const conflict=error&&error.conflict;
+    if(!conflict)return error&&error.message?error.message:'Stay extension could not be saved.';
+    return 'Cannot extend room '+conflict.room+': '+(conflict.g||'another guest')+' is booked from '+fd(conflict.in)+' to '+fd(conflict.out)+'. Assign another room or offer an alternative.';
+  }
+
+  window.extendStay=function(id){
+    const booking=bk(Number(id));
+    if(!booking||!['in','res'].includes(booking.st)){
+      toast('Only arriving or in-house bookings can be extended.');
+      return;
+    }
+    const room=rm(booking.room);
+    if(!room){toast('The booked room could not be found.');return}
+    const nextDate=ymd(Math.max(Number(booking.out)+1,0));
+    const title=booking.st==='in'?'Extend stay':'Change departure before check-in';
+    openS(`<h2 class="foil">${title}</h2>
+      <div class="lab">${esc(booking.g)} · Room ${esc(String(booking.room))}<br>
+      Current checkout: ${esc(ymd(booking.out))} at ${esc(booking.checkOutTime||defCheckOutTime())}<br>
+      Rate: ${K(room.r)} per additional night</div>
+      <label class="fld"><span>New checkout date</span><input id="stay-extension-date" type="date" min="${nextDate}" value="${nextDate}" onchange="previewStayExtension(${booking.id})" required></label>
+      <label class="fld"><span>New checkout time</span><input id="stay-extension-time" type="time" value="${esc(booking.checkOutTime||defCheckOutTime())}" onchange="previewStayExtension(${booking.id})" required></label>
+      <div id="stay-extension-preview" class="card" style="margin:12px 0;padding:12px"></div>
+      <p class="lab">The existing booking is updated; no duplicate booking is created. The actual arrival and check-in time remain unchanged. The additional room charge is added to the same folio.</p>
+      <button id="confirm-stay-extension" class="btn" style="width:100%" onclick="confirmStayExtension(${booking.id})">Confirm stay extension</button>
+      <button class="btn ghost" style="width:100%;margin-top:8px" onclick="closeS()">Cancel</button>`);
+    previewStayExtension(booking.id);
+  };
+
+  window.previewStayExtension=function(id){
+    const booking=bk(Number(id)),date=document.getElementById('stay-extension-date'),box=document.getElementById('stay-extension-preview');
+    if(!booking||!date||!box)return;
+    const confirm=document.getElementById('confirm-stay-extension');
+    const reject=message=>{box.textContent=message;if(confirm)confirm.disabled=true};
+    if(confirm)confirm.disabled=true;
+    if(!date.value){reject('Select the new checkout date.');return}
+    const newOut=offOf(date.value),nights=newOut-Number(booking.out),room=rm(booking.room);
+    if(!Number.isInteger(newOut)||nights<1||newOut<0){reject('Choose a checkout date later than '+ymd(booking.out)+' and not in the past.');return}
+    const conflict=AureliaStayExtension.findStayExtensionConflict(booking,newOut,S.b);
+    if(conflict){reject('Unavailable: room '+booking.room+' is already booked for '+conflict.g+' from '+fd(conflict.in)+' to '+fd(conflict.out)+'.');return}
+    const rate=Number(room&&room.r)||0;
+    if(!(rate>0)){reject('Set a valid nightly rate for this room before extending the stay.');return}
+    box.textContent=nights+' additional night'+(nights===1?'':'s')+' · Additional room charge: '+K(nights*rate)+'. No overlapping booking found.';
+    if(confirm)confirm.disabled=false;
+  };
+
+  window.confirmStayExtension=async function(id){
+    const booking=bk(Number(id)),date=document.getElementById('stay-extension-date')?.value||'',time=document.getElementById('stay-extension-time')?.value||'';
+    if(!booking||!['in','res'].includes(booking.st)){toast('This booking can no longer be extended.');return}
+    const room=rm(booking.room);
+    let oldBooking=null,oldAudit=null,committed=false;
+    try{
+      const result=AureliaStayExtension.buildStayExtension(booking,{
+        newOut:offOf(date),newCheckoutDate:date,newCheckoutTime:time,
+        previousCheckoutDate:ymd(booking.out),roomRate:Number(room&&room.r),
+        bookings:S.b,now:new Date().toISOString()
+      });
+      oldBooking={...booking,extensionHistory:Array.isArray(booking.extensionHistory)?booking.extensionHistory.slice():[]};
+      oldAudit=S.aud.slice();
+      Object.assign(booking,result.booking);
+      aud('Stay extended',booking.g+' · Room '+booking.room+' · '+result.addedNights+' night(s) · '+K(result.addedCharge)+' · checkout '+date+' '+time);
+      if(!persist()){
+        Object.keys(booking).forEach(key=>delete booking[key]);
+        Object.assign(booking,oldBooking);
+        S.aud=oldAudit;
+        persist();
+        toast('Extension NOT saved. The original booking was retained. Check device storage.');
+        storageNotice();
+        return;
+      }
+      committed=true;
+      closeS();
+      render();
+      if(booking.st==='in')folio(booking.id);
+      toast('Stay extended by '+result.addedNights+' night(s). Additional charge: '+K(result.addedCharge)+'.');
+    }catch(error){
+      if(!committed&&oldBooking&&booking){
+        Object.keys(booking).forEach(key=>delete booking[key]);
+        Object.assign(booking,oldBooking);
+        if(oldAudit)S.aud=oldAudit;
+        persist();
+      }
+      toast(extensionConflictMessage(error));
+    }
+  };
+
+  const originalStays=V.stays;
+  V.stays=function(){
+    let html=originalStays.apply(this,arguments);
+    html=html.replace(/<button class="btn sm" onclick="cin\((\d+)\)">Check in<\/button>/g,
+      (match,id)=>match+'<button class="btn sm ghost" onclick="extendStay('+id+')">Change departure</button>');
+    html=html.replace(/<button class="btn sm ghost" onclick="folio\((\d+)\)">Open folio<\/button>/g,
+      (match,id)=>match+'<button class="btn sm ghost" onclick="extendStay('+id+')">Extend stay</button>');
+    return html;
+  };
+
+  const originalFolio=folio;
+  folio=function(id){
+    originalFolio.apply(this,arguments);
+    const booking=bk(Number(id)),panel=document.getElementById('pan');
+    if(!booking||!panel||booking.st!=='in')return;
+    const actions=document.createElement('div');
+    actions.style.cssText='display:grid;gap:8px;margin-top:12px';
+    const button=document.createElement('button');
+    button.type='button';button.className='btn ghost';button.textContent='Extend stay';
+    button.onclick=()=>extendStay(booking.id);
+    actions.appendChild(button);
+    panel.appendChild(actions);
+    if(Array.isArray(booking.extensionHistory)&&booking.extensionHistory.length){
+      const history=document.createElement('div');
+      history.className='card';history.style.cssText='margin-top:12px;padding:12px';
+      const heading=document.createElement('h3');heading.textContent='Stay extension history';history.appendChild(heading);
+      booking.extensionHistory.forEach(item=>{
+        const line=document.createElement('div');line.className='lab';line.style.marginTop='8px';
+        line.textContent=item.previousCheckoutDate+' → '+item.newCheckoutDate+' · '+item.nightsAdded+' night(s) · '+K(item.addedCharge)+' · '+item.newCheckoutTime;
+        history.appendChild(line);
+      });
+      panel.appendChild(history);
+    }
+  };
+
+  const originalCheckIn=cin;
+  cin=function(id){
+    originalCheckIn.apply(this,arguments);
+    const booking=bk(Number(id)),panel=document.getElementById('pan');
+    if(!booking||!panel||booking.st!=='res')return;
+    const button=document.createElement('button');
+    button.type='button';button.className='btn ghost';button.style.cssText='width:100%;margin-top:8px';
+    button.textContent='Change departure before check-in';
+    button.onclick=()=>extendStay(booking.id);
+    panel.appendChild(button);
+  };
+})();
+</script>
+
+
 </body>
 </html>
