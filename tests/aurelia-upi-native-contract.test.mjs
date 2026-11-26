@@ -6,7 +6,7 @@ const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
 test('encrypted native evidence schema stores sender VPA and migrates existing PMS databases', async () => {
   const source = await read('android/templates/LocalPmsRepository.java');
-  assert.match(source, /VERSION\s*=\s*8/);
+  assert.match(source, /VERSION\s*=\s*9/);
   assert.match(source, /aurelia_upi_evidence\([^"]*sender_vpa TEXT/);
   assert.match(source, /ALTER TABLE aurelia_upi_evidence ADD COLUMN sender_vpa TEXT/);
   assert.match(source, /enqueueUpiEvidence\([^)]*String senderVpa/);
@@ -17,9 +17,9 @@ test('encrypted native evidence schema stores sender VPA and migrates existing P
 test('native database enforces one-time UTR claims across payment and refund references', async () => {
   const repository = await read('android/templates/LocalPmsRepository.java');
   const plugin = await read('android/templates/CapacitorPmsStoragePlugin.java');
-  assert.match(repository, /VERSION\\s*=\\s*9/);
+  assert.match(repository, /VERSION\s*=\s*9/);
   assert.match(repository, /reference TEXT PRIMARY KEY NOT NULL/);
-  assert.match(repository, /UNIQUE\\(reference_type,entity_id\\)/);
+  assert.match(repository, /UNIQUE\(reference_type,entity_id\)/);
   assert.match(repository, /upi_reference_already_claimed/);
   assert.match(repository, /upi_entity_reference_already_claimed/);
   assert.match(plugin, /@PluginMethod public void claimUpiReference/);
