@@ -377,7 +377,7 @@ test("bootstrap refuses to start the legacy UI after canonical authority is pers
   const app = coordinator("authority-cutover-block", storage, { repository });
   await assert.rejects(app.initializeApplication(), error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED");
   assert.equal(app.status, "FAILED_CLOSED");
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(state), "unverified legacy source is retained when startup is blocked before migration");
 });
 
 
