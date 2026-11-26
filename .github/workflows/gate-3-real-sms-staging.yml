@@ -58,7 +58,7 @@ jobs:
           test "$STAGING_PROJECT" != "$PRODUCTION_PROJECT"
           test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
       - name: Download APKs from the trusted reusable staging deployment
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: aurelia-recovery-staging-apk-${{ inputs.candidate_sha }}
           path: staging-artifacts
