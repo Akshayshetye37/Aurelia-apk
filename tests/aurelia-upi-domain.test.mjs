@@ -214,3 +214,50 @@ test('refunds are records for manual bank transfer, not an API transfer', () => 
   assert.equal(completed.status, 'REFUND_RECORDED');
   assert.equal(completed.transferReference, '123456789012');
 });
+
+test('new requests cannot jump ahead of an older FIFO queue when the slot is temporarily empty', () => {
+  const now = Date.parse(base.createdAt);
+  const first = createPaymentSession({ ...base, id: 'fifo-first' }, now);
+  const second = createPaymentSession({ ...base, id: 'fifo-second', reference: 'AUR-FIFO-2' }, now + 1000);
+  const third = createPaymentSession({ ...base, id: 'fifo-third', reference: 'AUR-FIFO-3' }, now + 2000);
+  const rows = enqueueSession(enqueueSession([], first, { nowMs: now }), second, { nowMs: now + 1000 });
+  const released = rows.map(row => row.id === first.id ? { ...row, status: SESSION_STATUS.CANCELLED } : row);
+  const after = enqueueSession(released, third, { nowMs: now + 2000 });
+  assert.equal(after.find(row => row.id === second.id).status, SESSION_STATUS.ACTIVE);
+  assert.equal(after.find(row => row.id === third.id).status, SESSION_STATUS.QUEUED);
+});
+
+test('incoming notification parser rejects outgoing-success alerts even when debit wording follows success wording', () => {
+  const parsed = parseIncomingUpiNotification({
+    text: 'UPI payment successful. Rs 250.00 paid to merchant@okaxis. UTR: 123456789012',
+    receivedAt: base.createdAt
+  });
+  assert.equal(parsed.ok, false);
+});
+
+test('refund reservations cannot cumulatively exceed the original confirmed payment', () => {
+  const refund = createRefundRecord({
+    paymentId: 'payment-1',
+    amountPaise: 30000,
+    capturedPaise: 125050,
+    alreadyRefundedPaise: 90000,
+    reason: 'Second partial refund'
+  }, Date.parse(base.createdAt));
+  assert.equal(refund.amountPaise, 30000);
+  assert.throws(() => createRefundRecord({
+    paymentId: 'payment-1',
+    amountPaise: 40000,
+    capturedPaise: 125050,
+    alreadyRefundedPaise: 90000
+  }), /cumulative refund amount/);
+});
+
+test('session collection identity fields cannot be rewritten during a status transition', () => {
+  const now = Date.parse(base.createdAt);
+  const active = enqueueSession([], createPaymentSession({
+    ...base, id: 'immutable', kind: 'folio', bookingId: 'booking-7'
+  }, now), { nowMs: now })[0];
+  assert.throws(() => transitionSession(active, SESSION_STATUS.REVIEW_REQUIRED, {
+    bookingId: 'booking-8'
+  }), /Immutable Aurelia UPI field/);
+});
