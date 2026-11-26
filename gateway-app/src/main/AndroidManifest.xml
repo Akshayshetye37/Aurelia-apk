@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <permission
+        android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE"
+        android:protectionLevel="signature" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Aurelia Gateway"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity
+            android:name="com.aurelia.paybridge.GatewayHomeActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name="com.aurelia.paybridge.ipc.PayBridgeService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />
+    </application>
+</manifest>
