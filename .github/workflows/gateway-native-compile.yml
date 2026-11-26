@@ -23,6 +23,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install root Node dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run Gateway and repository contract tests
+        run: npm test
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
