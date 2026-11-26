@@ -1,0 +1,149 @@
+/* Aurelia reference adoption — shared brand, navigation and component tokens.
+   Local-only styles: preserve the offline-first runtime and native WebView boundary. */
+:root{
+  --bg:#07120e;--s1:#0c1d16;--s2:#10241c;--s3:#152e24;
+  --ln:rgba(223,192,123,.18);--ln-strong:rgba(223,192,123,.34);
+  --gold:#dfc07b;--gold-bright:#f2da9c;--gold2:#9c7a3c;
+  --tx:#f5f0e6;--mu:#9ab0a4;--em:#3ec48d;--rb:#e06d60;--am:#eab354;--sky:#6ea8fe;
+  --serif:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --radius-sm:8px;--radius-md:12px;--radius-lg:18px;--radius-xl:24px;
+  --shadow-card:0 12px 32px rgba(0,0,0,.18);
+}
+body[data-theme="light"]{
+  --bg:#f5f2ea;--s1:#fff;--s2:#faf7f0;--s3:#f1eee5;
+  --ln:rgba(20,61,45,.12);--ln-strong:rgba(20,61,45,.25);
+  --gold:#9a742c;--gold-bright:#7d5b1c;--gold2:#b58d43;
+  --tx:#15231c;--mu:#52665c;--em:#177d56;--rb:#b83b31;--am:#b37412;--sky:#2563eb;
+  --shadow-card:0 10px 28px rgba(17,36,27,.08);
+}
+html,body{min-height:100%;background:var(--bg);color:var(--tx)}
+body{font-family:var(--sans);font-weight:400}
+h1,h2,h3,h4{font-family:var(--serif);letter-spacing:-.012em}
+button,input,select,textarea{font-family:var(--sans)}
+/* Desktop shell */
+.aurelia-design-shell{display:flex;min-height:100vh;width:100%;background:var(--bg)}
+.aurelia-design-sidebar{
+  width:256px;flex:0 0 256px;position:sticky;top:0;height:100vh;z-index:45;
+  display:flex;flex-direction:column;padding:20px 14px 16px;
+  background:var(--s1);border-right:1px solid var(--ln);
+}
+.aurelia-design-brand{display:flex;align-items:center;gap:12px;padding:4px 8px 18px;margin-bottom:12px;border-bottom:1px solid var(--ln)}
+.aurelia-design-mark{width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:12px;color:#161105;background:linear-gradient(135deg,var(--gold-bright),var(--gold2));box-shadow:0 6px 18px rgba(223,192,123,.22)}
+.aurelia-design-mark svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.aurelia-design-brand-copy{min-width:0}
+.aurelia-design-brand-copy strong{display:block;color:var(--gold);font:700 13px/1.2 var(--sans);letter-spacing:.14em}
+.aurelia-design-brand-copy small{display:block;margin-top:3px;color:var(--mu);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aurelia-design-nav{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 2px 8px 0;scrollbar-width:thin;scrollbar-color:var(--ln-strong) transparent}
+.aurelia-design-nav-group{padding:8px 0 4px}
+.aurelia-design-nav-label{padding:10px 10px 7px;color:var(--mu);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.78}
+.aurelia-design-nav button{width:100%;min-height:40px;display:flex;align-items:center;gap:11px;margin:2px 0;padding:9px 11px;border:1px solid transparent;border-radius:11px;background:transparent;color:var(--mu);font-size:13px;font-weight:550;text-align:left;transition:background .18s,color .18s,border-color .18s}
+.aurelia-design-nav button svg{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.aurelia-design-nav button:hover{background:rgba(223,192,123,.08);color:var(--tx)}
+.aurelia-design-nav button.active{background:linear-gradient(135deg,rgba(223,192,123,.19),rgba(223,192,123,.055));border-color:rgba(223,192,123,.22);color:var(--gold);box-shadow:inset 0 0 0 1px rgba(223,192,123,.08)}
+body[data-theme="light"] .aurelia-design-nav button.active{background:rgba(20,61,45,.08);border-color:rgba(20,61,45,.15);color:#143d2d;box-shadow:none}
+.aurelia-nav-badge{margin-left:auto;min-width:20px;padding:2px 6px;border-radius:99px;background:rgba(223,192,123,.12);color:var(--gold);font:700 10px/1.3 var(--sans);text-align:center}
+.aurelia-nav-badge.alert{background:rgba(224,109,96,.14);color:var(--rb)}
+.aurelia-design-sidebar-footer{padding-top:12px;border-top:1px solid var(--ln)}
+.aurelia-design-sidebar-footer .btn{width:100%;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:12px}
+.aurelia-design-sidebar-footer svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.aurelia-design-workspace{flex:1;min-width:0;display:flex;flex-direction:column}
+.aurelia-design-workspace>.app{width:100%;max-width:none;margin:0;padding:0;min-width:0}
+/* Topbar and content hierarchy */
+.aurelia-shell-header{position:sticky;top:0;z-index:35;padding:12px 24px 10px;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--ln)}
+.aurelia-header-main{min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.aurelia-brand{display:none;align-items:center;gap:10px;min-width:0}
+.aurelia-brand-mark{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;border:1px solid rgba(223,192,123,.36);border-radius:11px;background:linear-gradient(145deg,rgba(223,192,123,.16),rgba(62,196,141,.06))}
+.aurelia-brand-mark svg{width:22px;height:22px;fill:none;stroke:var(--gold);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.aurelia-brand-copy{min-width:0;display:grid;gap:2px}
+.aurelia-brand-copy strong{font:700 12px/1.1 var(--sans);letter-spacing:.13em;color:var(--gold);white-space:nowrap}
+.aurelia-brand-copy small{font:500 10px/1.2 var(--sans);color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:36vw}
+.aurelia-page-crumb{display:flex;align-items:center;gap:10px;min-width:0;margin-right:auto}
+.aurelia-page-crumb h2{font:600 23px/1.1 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aurelia-page-crumb .rail{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:1px solid var(--ln);border-radius:99px;background:var(--s2);color:var(--mu);font-size:10px;letter-spacing:.04em;white-space:nowrap}
+.aurelia-page-crumb .rail i{width:7px;height:7px;border-radius:50%;background:var(--em);box-shadow:0 0 0 3px rgba(62,196,141,.12)}
+.aurelia-header-actions{display:flex;align-items:center;gap:7px}
+.aurelia-header-action{height:36px;min-width:36px;padding:0 10px;border:1px solid var(--ln);border-radius:10px;background:var(--s2);color:var(--mu)}
+.aurelia-header-action:hover{border-color:var(--ln-strong);color:var(--tx)}
+.aurelia-header-action svg{width:16px;height:16px}
+.aurelia-status-row{display:flex;align-items:center;gap:8px;padding:8px 0 0;border:0}
+.aurelia-status-pill{padding:4px 9px;border:1px solid var(--ln);border-radius:99px;background:var(--s2);color:var(--mu);font-size:9px;font-weight:650;letter-spacing:.08em}
+.aurelia-status-pill.gold{color:var(--gold)}
+.aurelia-status-clock{margin-left:auto;padding:5px 9px;border:1px solid var(--ln);border-radius:9px;background:var(--s2);color:var(--mu);font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+#v{width:100%;max-width:1220px;margin:0 auto;padding:24px 26px 52px;min-width:0}
+#v .view{animation:aureliaReferenceEnter .24s ease-out}
+@keyframes aureliaReferenceEnter{from{opacity:.86;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* Dashboard hero and availability controls */
+#v .hero{position:relative;min-height:292px;height:auto;margin:0 0 18px;padding:0;border-radius:24px;overflow:hidden;border:1px solid rgba(223,192,123,.32);background:radial-gradient(850px 390px at 84% 10%,#294a38 0%,#10261c 48%,#07130e 100%);box-shadow:0 20px 46px rgba(0,0,0,.24)}
+#v .hero canvas{opacity:.46}
+#v .hero .tx{position:relative;z-index:2;max-width:680px;padding:30px 30px 20px}
+#v .hero small{display:inline-flex;color:var(--gold-bright);font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+#v .hero h1{font:600 clamp(38px,4.5vw,54px)/.98 var(--serif);margin:10px 0 8px;color:#fbf7ee}
+#v .hero p{font:italic 500 18px/1.35 var(--serif);color:#e6d7b5}
+#v .avail{position:relative;left:auto;right:auto;bottom:auto;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(130px,auto);gap:10px;margin:20px 14px 14px;padding:12px;border:1px solid rgba(223,192,123,.26);border-radius:16px;background:rgba(7,20,15,.82);backdrop-filter:blur(12px)}
+#v .avail label{display:block;color:#b8cabf;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+#v .avail input{width:100%;padding:8px 10px;border:1px solid rgba(255,255,255,.13);border-radius:9px;background:rgba(255,255,255,.06);color:#fff;font-size:13px}
+#v .avail .btn{min-height:42px;align-self:end;border-radius:10px}
+#v .btn{border-radius:11px;font-weight:650;box-shadow:0 7px 18px rgba(203,160,79,.16)}
+#v .btn::after{display:none}
+#v .btn.ghost{background:transparent;color:var(--tx);border:1px solid var(--ln-strong);box-shadow:none}
+#v .card{padding:19px;border:1px solid var(--ln);border-radius:18px;background:linear-gradient(155deg,var(--s2),var(--s1));box-shadow:var(--shadow-card);transform:none}
+#v .card::before{opacity:0}
+#v .grid{gap:15px;margin-top:16px}
+#v .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+#v .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+#v .g2>.card{min-width:0}
+#v .k{font:600 36px/1.04 var(--serif);margin:8px 0 4px;color:var(--tx)}
+#v .lab{color:var(--mu);font-size:12px}
+#v .up{color:var(--em)}
+#v .tag{padding:4px 9px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.025em}
+#v .tag.ready{background:rgba(62,196,141,.14);color:var(--em);border:0}
+#v .tag.occ{background:rgba(223,192,123,.13);color:var(--gold);border:0}
+#v .tag.clean{background:rgba(234,179,84,.14);color:var(--am);border:0}
+#v .tag.out{background:rgba(224,109,96,.14);color:var(--rb);border:0}
+#v .chips{gap:8px}
+#v .chip{padding:7px 13px;border-radius:99px;border:1px solid var(--ln);background:var(--s2);color:var(--mu);font-size:12px}
+#v .chip.on{background:var(--gold);border-color:var(--gold);color:#181205;font-weight:700}
+#v .item{padding:12px 0}
+#v .av{border-radius:12px;border:1px solid var(--ln);background:rgba(223,192,123,.11);color:var(--gold)}
+#v .room .n{font:600 33px/1 var(--serif)}
+#v .tb{border-radius:13px;min-height:82px;background:var(--s1);font:600 22px/1 var(--serif)}
+#v .tb.seat{background:rgba(223,192,123,.11);color:var(--gold)}
+#v .mi{padding:11px 0;border-bottom:1px dashed var(--ln)}
+#v .mi b{font:600 17px/1.2 var(--serif)}
+#v .mi span{font-weight:700;color:var(--gold)}
+#v .bar{height:7px;border-radius:99px;background:rgba(255,255,255,.06)}
+#v .bar i{background:linear-gradient(90deg,var(--gold2),var(--gold))}
+.pan{background:var(--s1);border:1px solid var(--ln-strong)}
+#v .fld input,#v .fld select,#v .fld textarea,.pan .fld input,.pan .fld select,.pan .fld textarea{border:1px solid var(--ln);border-radius:10px;background:rgba(255,255,255,.04);color:var(--tx)}
+#v .fld input:focus,#v .fld select:focus,#v .fld textarea:focus,.pan .fld input:focus,.pan .fld select:focus,.pan .fld textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(223,192,123,.12)}
+#v .empty{font:italic 500 18px var(--serif);color:var(--mu)}
+/* Keep the original mobile dock and floating booking action independent. */
+.aurelia-design-sidebar button:focus-visible,.aurelia-design-sidebar-footer button:focus-visible,.aurelia-header-action:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(max-width:1100px){#v .g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){
+  .aurelia-design-sidebar{display:none}
+  .aurelia-design-workspace{width:100%}
+  .aurelia-shell-header{padding:9px 14px 8px}
+  .aurelia-brand{display:flex}
+  .aurelia-page-crumb{display:none}
+  .aurelia-status-row{display:none}
+  #v{padding:16px 14px 116px}
+  .dock{display:grid}
+  #hor-book{display:flex!important}
+  #toast{bottom:94px}
+}
+@media(max-width:640px){
+  #v .g2{grid-template-columns:1fr}
+  #v .hero{min-height:248px;border-radius:20px}
+  #v .hero .tx{padding:21px 20px 13px}
+  #v .hero h1{font-size:clamp(35px,9.5vw,46px)}
+  #v .avail{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px;margin:16px 10px 10px;padding:10px}
+  #v .avail .btn{grid-column:1/-1;width:100%}
+  #v .card{padding:16px}
+}
+@media(prefers-reduced-motion:reduce){#v .view{animation:none!important}.aurelia-design-nav button{transition:none!important}}
+@media print{
+  .aurelia-design-sidebar,.aurelia-shell-header,.dock,#hor-book{display:none!important}
+  .aurelia-design-workspace,.app,#v{display:block!important;width:100%!important;max-width:none!important;padding:0!important}
+}
