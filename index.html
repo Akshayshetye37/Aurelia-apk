@@ -3813,9 +3813,10 @@ try{
  window.AureliaPreferences=createPreferenceStorage({mode:window.AURELIA_PRODUCTION===true?"production":"strict"});
  window.AureliaPhotoArchive=createPhotoArchive({readLegacyPhotoFallbackEntries,deleteLegacyPhotoFallbackEntries});
  window.AureliaBackupVaultStore=createBackupVaultStore();
- window.AureliaStorageDiagnostics=Object.freeze({persistent:legacyStorage.persistent,mode:legacyStorage.persistent?"legacy-migration-storage":"unavailable",reason:legacyStorage.memoryOnlyReason||null,embeddedPreview:false});
+ window.AureliaStorageDiagnostics=Object.freeze({persistent:false,mode:"canonical-bootstrap-in-progress",reason:legacyStorage.memoryOnlyReason||null,embeddedPreview:false});
  const boot=await new PmsBootstrapCoordinator({storage:legacyStorage}).initializeApplication();
  if(!boot||boot.success!==true||!boot.repository)throw new Error("Canonical PMS storage bootstrap did not return a verified repository");
+ window.AureliaStorageDiagnostics=Object.freeze({persistent:true,mode:boot.storageEngine,durability:boot.persistenceDurability,legacyBusinessCache:"purged",reason:null,embeddedPreview:false});
  storageBridge.bindActiveEngine(boot.repository,boot.identity);
  window.AureliaFolioInvoice=Object.freeze({build:buildFolioInvoice,formatMinor:formatFolioMinor});
  window.AureliaFolioAccounting=Object.freeze({issueInvoice:options=>issueFolioInvoice({bridge:boot.bridge,...options}),createSplit:options=>createSplitFolio({bridge:boot.bridge,...options}),buildSplitInvoice:buildSplitFolioInvoice,buildRemainingInvoice:buildRemainingFolioInvoice,getFolio:folioId=>boot.bridge.fetchEntity("folio",folioId),listFolios:()=>boot.bridge.listEntities("folio"),recordSplitPayment:options=>recordSplitFolioPayment({bridge:boot.bridge,...options})});
