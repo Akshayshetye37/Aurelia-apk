@@ -241,7 +241,14 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
       for (const row of batch) {
         const stored = await bridge.fetchEntity(row.entityType, row.entityId);
         if (!stored || stored.version !== 1 || !sameProjectedEntity(stored.data, row.data)) {
-          throw Object.assign(new Error("Domain projection read-back failed for " + row.entityType + ":" + row.entityId), {
+          const diagnostic = {
+            storedVersion: stored?.version ?? null,
+            expectedVersion: 1,
+            dataMatches: Boolean(stored && sameProjectedEntity(stored.data, row.data)),
+            expectedKeys: Object.keys(row.data || {}).sort(),
+            storedKeys: Object.keys(stored?.data || {}).sort()
+          };
+          throw Object.assign(new Error("Domain projection read-back failed for " + row.entityType + ":" + row.entityId + " (" + JSON.stringify(diagnostic) + ")"), {
             code: "LEGACY_DOMAIN_PROJECTION_READBACK_FAILED"
           });
         }
