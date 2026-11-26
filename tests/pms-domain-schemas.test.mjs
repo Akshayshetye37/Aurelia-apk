@@ -9,7 +9,10 @@ import {
 
 test("PMS schemas accept supported operational entities without stripping legacy fields", () => {
   const booking = { id: 12, st: "res", g: "Guest", p: 1200, pays: [{ a: 300 }] };
-  assert.equal(validatePmsDomainEntity("booking", booking), booking);
+  const validated = validatePmsDomainEntity("booking", booking);
+  assert.notEqual(validated, booking, "validation returns an isolated entity snapshot");
+  assert.notEqual(validated.pays, booking.pays, "nested business data is also isolated");
+  assert.deepEqual(validated, booking);
   assert.equal(booking.pays[0].a, 300);
   assert.equal(PMS_DOMAIN_SCHEMAS.room.safeParse({ id: "101", s: "ready", n: "101" }).success, true);
 });
