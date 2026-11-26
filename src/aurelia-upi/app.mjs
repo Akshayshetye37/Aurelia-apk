@@ -248,20 +248,29 @@ function renderActiveSession(session) {
   const target = session.status === SESSION_STATUS.ACTIVE ? dateMs(session.expiresAt) :
     session.status === SESSION_STATUS.PROCESSING ? dateMs(session.verificationExpiresAt) : 0;
   const remaining = target ? Math.max(0, Math.ceil((target - Date.now()) / 1000)) : 0;
-  const timerLabel = session.status === SESSION_STATUS.ACTIVE ? "Payment window" :
-    session.status === SESSION_STATUS.PROCESSING ? "Verification window" : "Next action";
+  const timerLabel = session.status === SESSION_STATUS.ACTIVE ? "PAYMENT WINDOW" :
+    session.status === SESSION_STATUS.PROCESSING ? "VERIFICATION WINDOW" : "OPERATOR REVIEW";
   const timerText = session.status === SESSION_STATUS.ACTIVE || session.status === SESSION_STATUS.PROCESSING
     ? (remaining ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : "Elapsed")
-    : "Operator review";
-  return '<div class="au-active"><div class="au-active-top"><div><span class="au-kicker">REQUEST ' + esc(session.reference) + '</span><h4>' + esc(formatPaise(session.amountPaise)) + '</h4><p>' + esc(session.guestName || "Guest payment") + '</p></div>' +
-    badge(session.status) + '</div>' +
-    '<div class="au-active-bottom"><div><small>Receiving UPI ID</small><strong>' + esc(session.vpa) + '</strong></div>' +
-    '<div><small>' + timerLabel + '</small><strong id="au-countdown" data-status="' + esc(session.status) + '" data-expires="' + target + '">' + timerText + '</strong></div></div>' +
-    (session.status === SESSION_STATUS.ACTIVE ? '<div class="au-active-qr"><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
-      '<button class="au-secondary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button>' +
-      '<button class="au-link au-wide" type="button" data-upi-action="customer-paid" data-id="' + esc(session.id) + '">Customer says payment sent</button>' :
-      '<div class="au-warning">Payment is not settled. Verify the actual credit in the receiving bank account before posting it to a folio.</div>') +
-    '</div>';
+    : "Review required";
+  const isActive = session.status === SESSION_STATUS.ACTIVE;
+  return '<section class="au-payment-workspace" aria-label="Active Aurelia UPI payment">' +
+    '<div class="au-payment-details"><div class="au-payment-topline"><span class="au-kicker">ACTIVE COLLECTION · ' + esc(session.reference) + '</span>' + badge(session.status) + '</div>' +
+    '<p class="au-payment-eyebrow">AMOUNT TO COLLECT</p><h4 class="au-payment-amount">' + esc(formatPaise(session.amountPaise)) + '</h4>' +
+    '<div class="au-payment-recipient"><span class="au-recipient-avatar">A</span><span><small>PAYING TO</small><strong>' + esc(payeeName()) + '</strong><em>' + esc(session.vpa) + '</em></span>' +
+    '<button class="au-copy-vpa" type="button" data-upi-action="copy-vpa" aria-label="Copy receiving UPI ID">Copy</button></div>' +
+    '<div class="au-payment-meta"><div><small>COLLECTION FOR</small><strong>' + esc(session.guestName || (session.kind === "restaurant" ? "Dining bill" : "General collection")) + '</strong></div>' +
+    '<div><small>' + timerLabel + '</small><strong class="au-countdown" id="au-countdown" data-status="' + esc(session.status) + '" data-expires="' + target + '">' + timerText + '</strong></div></div>' +
+    (isActive ? '<div class="au-payment-actions"><button class="au-primary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app <span aria-hidden="true">↗</span></button>' +
+      '<button class="au-secondary au-wide" type="button" data-upi-action="customer-paid" data-id="' + esc(session.id) + '">Customer says payment sent</button></div>' :
+      '<div class="au-warning">This request is not settled. Check the receiving bank account and verify the UTR before posting any payment.</div>') +
+    '<p class="au-payment-footnote">A customer claim, QR scan, UPI app return or notification is not proof of bank credit.</p></div>' +
+    (isActive ? '<div class="au-qr-stage"><div class="au-qr-stage-head"><span class="au-kicker">SCAN TO PAY</span><span class="au-qr-live"><i></i> READY</span></div>' +
+      '<div class="au-qr-frame"><img alt="Exact amount Aurelia UPI QR code" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
+      '<strong class="au-qr-amount">' + esc(formatPaise(session.amountPaise)) + '</strong><p>Scan with any UPI app</p>' +
+      '<div class="au-qr-instruction"><span>01</span> Open your preferred UPI app <span>02</span> Scan and review the payee and amount</div></div>' :
+      '<div class="au-qr-stage au-qr-review-stage"><span class="au-review-symbol">✓</span><strong>Verification required</strong><p>Review the incoming bank evidence before confirming this collection.</p><button class="au-secondary" type="button" data-upi-view="review">Open reconciliation desk</button></div>') +
+    '</section>';
 }
 
 function renderCollect() {
@@ -274,24 +283,32 @@ function renderCollect() {
     esc(row.guestName) + ' · Room ' + esc(row.room) + ' · ' + esc(formatPaise(row.balancePaise)) + ' due</option>').join("");
   const tableOptions = tables.map(row => '<option value="' + esc(row.id) + '" ' + (String(draft.tableId) === String(row.id) ? "selected" : "") + '>' +
     'Table ' + esc(row.id) + ' · ' + esc(formatPaise(row.amountPaise)) + '</option>').join("");
-  return '<section class="au-page-heading"><div><span class="au-kicker">NEW REQUEST</span><h3>Create Aurelia UPI collection</h3><p>One active request per receiving VPA. Additional requests wait in FIFO order.</p></div></section>' +
-    '<div class="au-collect-grid"><form class="au-panel au-form" id="au-collect-form">' +
-    '<label><span>Collection source</span><select name="kind" id="au-kind">' +
+  return '<section class="au-page-heading au-collect-heading"><div><span class="au-kicker">PAYMENT WORKSPACE / NEW REQUEST</span><h3>Create a payment request</h3><p>Generate a unique, exact-amount QR for a guest folio, dining bill or direct collection.</p></div><span class="au-heading-rail">AURELIA UPI <i></i> INR</span></section>' +
+    '<div class="au-collect-layout"><form class="au-panel au-form au-collect-form" id="au-collect-form">' +
+    '<div class="au-form-section-head"><span class="au-step">01</span><div><strong>Collection details</strong><small>Choose where this payment belongs.</small></div></div>' +
+    '<label><span>Collect for</span><select name="kind" id="au-kind">' +
     '<option value="folio" ' + (draft.kind === "folio" ? "selected" : "") + '>Guest folio</option>' +
-    '<option value="restaurant" ' + (draft.kind === "restaurant" ? "selected" : "") + '>Dining / POS</option>' +
+    '<option value="restaurant" ' + (draft.kind === "restaurant" ? "selected" : "") + '>Dining bill</option>' +
     '<option value="general" ' + (!draft.kind || draft.kind === "general" ? "selected" : "") + '>General collection</option></select></label>' +
     '<label id="au-booking-wrap"><span>Guest folio</span><select name="bookingId" id="au-booking"><option value="">Select a guest folio</option>' + bookingOptions + '</select></label>' +
     '<label id="au-table-wrap"><span>Dining table</span><select name="tableId" id="au-table"><option value="">Select a table</option>' + tableOptions + '</select></label>' +
     '<div class="au-form-grid"><label><span>Guest / payer name</span><input name="guestName" maxlength="100" value="' + esc(draft.guestName || "") + '" placeholder="Guest name"></label>' +
     '<label><span>Room / reference</span><input name="room" maxlength="64" value="' + esc(draft.room || "") + '" placeholder="Room or internal reference"></label></div>' +
-    '<label><span>Amount (INR)</span><input name="amount" id="au-amount" inputmode="decimal" type="text" required value="' + esc(draft.amount || "") + '" placeholder="0.00"></label>' +
-    '<label><span>Payment note</span><input name="note" maxlength="80" value="' + esc(draft.note || "Aurelia UPI payment") + '" placeholder="Booking or bill reference"></label>' +
-    '<div class="au-config-preview"><span>Receiving account</span><strong>' + esc(currentVpa || "Configure UPI ID in More → Settings") + '</strong><small>' + esc(config.name || "Aurelia") + ' · INR only</small></div>' +
-    '<button class="au-primary au-wide" type="submit">Generate Aurelia UPI request</button>' +
-    '<p class="au-hint">The QR and UPI intent are generated on this device. No payment gateway or QR-generation website is called.</p>' +
-    '</form><aside class="au-panel au-side-note"><span class="au-kicker">PAYMENT SAFETY</span><h3>Evidence is not settlement.</h3>' +
-    '<ul><li>Customer scans the exact-amount QR.</li><li>Incoming alerts are stored as unverified evidence.</li><li>Staff checks the receiving bank account and UTR.</li><li>Only an explicit staff decision can post a folio payment.</li></ul>' +
-    '<div class="au-warning">Never mark a payment paid because a QR was scanned, an app opened, or a notification appeared.</div></aside></div>';
+    '<div class="au-amount-field"><label for="au-amount"><span>Amount to collect</span><div class="au-amount-input"><b>₹</b><input name="amount" id="au-amount" inputmode="decimal" type="text" required value="' + esc(draft.amount || "") + '" placeholder="0.00" autocomplete="off"></div></label><small>Enter the exact outstanding amount in Indian rupees.</small></div>' +
+    '<label><span>Payment note <em>Optional</em></span><input name="note" maxlength="80" value="' + esc(draft.note || "Aurelia UPI payment") + '" placeholder="Booking or bill reference"></label>' +
+    '<div class="au-receiving-card"><span class="au-receiving-icon">↗</span><div><small>RECEIVING ACCOUNT</small><strong>' + esc(currentVpa || "Configure UPI ID in More → Settings") + '</strong><em>' + esc(config.name || "Aurelia") + ' · INR only</em></div>' +
+    (currentVpa ? '<button type="button" class="au-copy-vpa" data-upi-action="copy-vpa">Copy ID</button>' : '') + '</div>' +
+    '<button class="au-primary au-generate-button" type="submit">Generate payment QR <span aria-hidden="true">↗</span></button>' +
+    '<p class="au-hint au-form-hint">QR generation happens on this device. No payment gateway or hosted QR service is used.</p>' +
+    '</form><aside class="au-collect-aside">' +
+    '<section class="au-panel au-qr-preview-card"><div class="au-preview-top"><span class="au-kicker">YOUR PAYMENT QR</span><span class="au-preview-lock">LOCAL</span></div>' +
+    '<div class="au-qr-placeholder" aria-hidden="true"><svg viewBox="0 0 96 96" fill="none"><rect x="9" y="9" width="29" height="29" rx="4" stroke="currentColor" stroke-width="5"/><rect x="17" y="17" width="13" height="13" rx="1" fill="currentColor"/><rect x="58" y="9" width="29" height="29" rx="4" stroke="currentColor" stroke-width="5"/><rect x="66" y="17" width="13" height="13" rx="1" fill="currentColor"/><rect x="9" y="58" width="29" height="29" rx="4" stroke="currentColor" stroke-width="5"/><rect x="17" y="66" width="13" height="13" rx="1" fill="currentColor"/><path d="M49 9v8m0 8v5m9 12h8m8 0h13M49 49h8v8h-8zm16 8h8v8h-8zm-16 8h8v8h-8zm16 8h8v8h-8zm16-16h8v8h-8z" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg></div>' +
+    '<strong>QR appears after generation</strong><p>Each request gets its own amount and reference. The QR is ready to scan as soon as the request becomes active.</p>' +
+    '<div class="au-preview-divider"></div><div class="au-preview-feature"><span>01</span><div><b>Exact amount</b><small>Customer sees the requested total.</small></div></div>' +
+    '<div class="au-preview-feature"><span>02</span><div><b>Direct to your UPI ID</b><small>No gateway account or intermediary.</small></div></div>' +
+    '<div class="au-preview-feature"><span>03</span><div><b>Manual bank verification</b><small>Only verified credit reaches the PMS ledger.</small></div></div></section>' +
+    '<div class="au-safety-note"><span aria-hidden="true">ⓘ</span><p><strong>Payment safety</strong> A QR scan, app launch, customer claim or notification is not proof of payment. Verify the credit in your receiving bank account.</p></div>' +
+    '</aside></div>';
 }
 
 function renderActivity() {
