@@ -73,3 +73,28 @@ test('legacy main-branch state is migrated without deleting the original source 
   assert.match(html, /legacyInventoryLedger/);
   assert.doesNotMatch(html, /removeItem\("aurelia_lodge_v2"\)/);
 });
+
+
+test('changing the receiving VPA refreshes and verifies native encrypted UPI storage before saving', async () => {
+  const save = html.slice(html.indexOf('if (act === "save-settings")'), html.indexOf('if (act === "save-rest-settings")'));
+  assert.match(save, /await upiModule\.refresh\(\)/);
+  assert.match(save, /upiModule\.isNativeStorageAvailable\(\)/);
+  assert.match(save, /upiState\?\.storageError/);
+  assert.match(save, /hasOpenUpiRequests/);
+  assert.match(save, /await persistMutation\(\)/);
+  assert.match(save, /HTML preview changes are not saved/);
+});
+
+test('Folios renders one shared payment workspace and does not duplicate the open-balance panel', () => {
+  const folios = html.slice(html.indexOf('upi() {'), html.indexOf('guests() {'));
+  assert.match(folios, /id="aurelia-upi-root"/);
+  assert.doesNotMatch(folios, /Open Balances Ready to Collect/);
+  assert.doesNotMatch(folios, /const folioRows/);
+});
+
+test('UPI workspace inherits the PMS content width and card surfaces', async () => {
+  const css = await readFile(new URL('../assets/aurelia-upi.css', import.meta.url), 'utf8');
+  assert.match(css, /\.au-shell\{[^}]*width:100%;max-width:none/);
+  assert.match(css, /\.pms-upi-content\{width:100%;min-width:0\}/);
+  assert.match(css, /background:var\(--bg-card\)/);
+});
