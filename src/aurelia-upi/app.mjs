@@ -961,7 +961,7 @@ async function openSession(session) {
 }
 
 function normalizeWhatsAppNumber(value) {
-  const digits = String(value || "").replace(/\\D/g, "");
+  const digits = String(value || "").replace(/\D/g, "");
   return digits.length >= 10 && digits.length <= 15 ? digits : "";
 }
 
@@ -979,7 +979,7 @@ async function shareSessionOnWhatsApp(sessionId) {
     "UPI payment link: " + session.upiUri,
     "Tap this link on your phone, choose your preferred UPI app, and approve the exact amount.",
     "Payment is confirmed only after the receiving bank credit is verified."
-  ].join("\\n");
+  ].join("\n");
   if (!phone) {
     if (typeof navigator !== "undefined" && navigator.share) {
       await navigator.share({ title: "Aurelia PMS · Aurelia UPI", text: message });
