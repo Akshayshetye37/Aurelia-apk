@@ -96,7 +96,7 @@ test('open room and dining balances expose cash/bank actions next to the Aurelia
 test('receiving VPA changes fail closed until encrypted payment history is loaded and open sessions are resolved', async () => {
   const html = await read('index.html');
   assert.match(html, /Enter a valid UPI ID/);
-  assert.match(html, /Open Aurelia UPI and verify encrypted payment storage/);
+  assert.match(html, /installed Aurelia Android app after encrypted payment storage is available/);
   assert.match(html, /Resolve all active and queued Aurelia UPI requests/);
 });
 
@@ -132,4 +132,14 @@ test('notification matching only proposes uniquely timed exact-amount named gues
   assert.match(domain, /session\.bookingId == null/);
   assert.match(domain, /session\.amountPaise !== evidence\.amountPaise/);
   assert.match(domain, /candidates\.length > 1/);
+});
+
+
+test('Aurelia UPI shares a guest-owned payment link and never launches the operator phone UPI app', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  assert.match(app, /data-upi-action="copy-link"/);
+  assert.match(app, /async function copySessionPaymentLink\(/);
+  assert.match(app, /Send exact-amount link to guest on WhatsApp/);
+  assert.doesNotMatch(app, /data-upi-action="open"/);
+  assert.doesNotMatch(app, /Open UPI app/);
 });
