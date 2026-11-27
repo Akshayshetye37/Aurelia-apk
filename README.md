@@ -201,7 +201,7 @@ The following product decisions define the intended authentication, local-operat
 
 ### App screen lock
 
-- The **Use Screen Lock** control is available from the Dashboard and Settings.
+- The optional app-entry **Use Screen Lock** control is a separate UI requirement and is not wired by this native database-key change. The SQLCipher database itself requires Android device authentication at each new app process.
 - When enabled, Aurelia uses Android's native device-credential authentication prompt (PIN, pattern or password, with supported biometric options where configured). Aurelia does not create, store or compare a separate copy of the device passcode.
 - Authenticate when a new Aurelia app process starts after the previous process was killed while in the background.
 - After one successful authentication, keep the app unlocked for the lifetime of that process. Do not prompt again for ordinary navigation, temporary backgrounding, notification-shade use, app switching or activity recreation while the process remains alive.
@@ -209,6 +209,16 @@ The following product decisions define the intended authentication, local-operat
 - Use the device's currently configured screen-lock credential. Do not cache an old PIN, pattern or password.
 - Device credential removal, Keystore key invalidation, biometric enrollment changes and authentication failures must be handled explicitly and fail safely without silently destroying or resetting property data.
 - App screen lock is an app-entry/session control. Database encryption and database-key protection remain independent storage-security requirements; a screen-lock prompt alone does not make browser storage encrypted.
+
+### Native SQLCipher key and workspace authority
+
+- The Android native PMS path uses a random 256-bit SQLCipher DEK. The DEK is wrapped by an AES-256-GCM key held in Android Keystore and configured for per-use authentication with `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`.
+- The native unlock prompt uses AndroidX `BiometricPrompt`; it accepts the current Android device PIN, pattern or password and supported strong biometrics. Aurelia does not create or store an application PIN, passphrase, OTP or user-held recovery key.
+- This auth-per-use CryptoObject combination requires Android 11 (API 30) or later. Unsupported Android versions and devices without a secure screen lock fail closed rather than falling back to an app-managed secret.
+- The DEK is held only in native process memory after authentication. The SQLCipher repository closes on bridge/activity destruction, but the process-scoped DEK remains available across ordinary activity recreation; process death clears it and requires a new Android authentication. Explicit `lockDatabase()` clears it sooner.
+- Existing legacy PIN/recovery envelopes or an existing SQLCipher database without the v2 device-auth envelope are detected and are not overwritten. They remain a migration/recovery gate; the new key is never silently substituted for an existing database key.
+- The live native workspace is stored as a versioned `workspace/current` entity in SQLCipher. First migration stores the exact source snapshot and SHA-256 in the native legacy-backup and migration-snapshot tables, writes the canonical workspace, verifies read-back and SQLite/SQLCipher integrity, and promotes authority in one transaction. The browser source is retained; it is not deleted after migration.
+- After canonical cutover, all PMS saves go to SQLCipher with optimistic version checks and exact read-back verification. Browser storage fallback is disabled. If the native workspace disappears after a previous cutover, the app blocks automatic re-import from a potentially stale browser copy.
 
 ### Cloud provider authorization and backup
 
@@ -340,4 +350,4 @@ A Keystore key protected by the original device's screen lock is device-bound. A
 
 ### Implementation status and release gates
 
-These are accepted requirements, not claims of implementation. The inspected main branch does not yet have Credential Manager/Firebase Google Sign-In wired into the app, the native SQLCipher repository is not yet the live canonical PMS store, and the prior PIN/recovery unlock implementation must be replaced through a data-preserving migration. Before release, verify Google sign-in and owner authorization, device-credential prompt behavior, Keystore key invalidation, process lifecycle, SQLCipher live read/write cutover, browser-data migration/rollback, encrypted SAF backup, cross-device restore key recovery, redacted error handling and physical-device behavior. No production-ready claim is permitted before these gates pass.
+The `fix/native-device-auth-sqlcipher-cutover` implementation branch contains the Android device-authenticated DEK path and the SQLCipher canonical workspace read/write and copy-first browser migration path. It is not yet merged into `main` or production-qualified. Existing legacy PIN/recovery envelopes and pre-existing SQLCipher databases are deliberately blocked from automatic key replacement pending a verified migration path. Google Credential Manager/Firebase owner authorization, encrypted SAF backup, cross-device key recovery and physical-device qualification remain separate release gates. The current engineering sandbox has no Android SDK/JDK/Gradle toolchain, so Android compilation and physical-device behavior have not been verified here. No production-ready claim is permitted before those gates pass.

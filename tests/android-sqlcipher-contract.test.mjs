@@ -19,37 +19,34 @@ test('native repository uses SQLCipher classes, not platform SQLite classes', ()
   assert.match(repository, /super\(context\.getApplicationContext\(\), NAME, key, null, VERSION, 0, null, null, true\)/);
 });
 
-test('PIN, biometric and recovery envelopes independently unlock the same random 256-bit DEK', () => {
+test('database DEK is random 256-bit and wrapped only by an auth-per-use Android Keystore key', () => {
   assert.match(unlockManager, /DEK_BYTES = 32/);
   assert.match(unlockManager, /SecureRandom/);
-  assert.match(unlockManager, /PBKDF2WithHmacSHA256/);
-  assert.match(unlockManager, /ITERATIONS = 600000/);
-  assert.match(unlockManager, /PIN_ENVELOPE/);
-  assert.match(unlockManager, /RECOVERY_ENVELOPE/);
-  assert.match(unlockManager, /BIO_ENVELOPE/);
   assert.match(unlockManager, /setUserAuthenticationRequired\(true\)/);
-  assert.match(unlockManager, /setUserAuthenticationValidityDurationSeconds\(-1\)/);
-  assert.match(unlockManager, /KeyPermanentlyInvalidatedException/);
-  assert.match(unlockManager, /MessageDigest\.isEqual/);
-  assert.match(unlockManager, /databaseArtifactsExist\(context\)/);
-  assert.match(unlockManager, /refusing to replace the DEK/);
+  assert.match(unlockManager, /setUserAuthenticationParameters\(0,/);
+  assert.match(unlockManager, /AUTH_BIOMETRIC_STRONG \| KeyProperties\.AUTH_DEVICE_CREDENTIAL/);
+  assert.match(unlockManager, /setInvalidatedByBiometricEnrollment\(false\)/);
+  assert.match(unlockManager, /prepareSetupCipher/);
+  assert.match(unlockManager, /prepareDeviceUnlockCipher/);
+  assert.match(unlockManager, /finishDeviceUnlock/);
+  assert.match(unlockManager, /refusing to replace its key/);
+  assert.match(unlockManager, /hasLegacyState/);
   assert.match(unlockManager, /PMS database is locked/);
-  assert.match(unlockManager, /lockout_until_ms/);
+  assert.doesNotMatch(unlockManager, /PBKDF2|PIN_ENVELOPE|RECOVERY_ENVELOPE|unlockWithPin|unlockWithRecovery/);
   assert.match(keyManager, /PmsUnlockManager\.getUnlockedDatabaseKey/);
   assert.doesNotMatch(keyManager, /requireUnlockedDatabaseKey.*SecureRandom/s);
-  assert.doesNotMatch(unlockManager, /database\.dek\.wrap/);
 });
 
-test('unlock secrets are entered in native dialogs and never passed through WebView arguments', () => {
-  assert.match(plugin, /setupDatabaseUnlock/);
-  assert.match(plugin, /promptUnlockSecret/);
-  assert.match(plugin, /new AlertDialog\.Builder/);
-  assert.match(plugin, /recoveryKeyDisplayed/);
-  assert.doesNotMatch(plugin, /call\.getString\("(?:pin|recoveryKey)"/);
-  assert.doesNotMatch(plugin, /sms|otp|one.time.password/i);
+test('native unlock requires Android device credential and never asks for an Aurelia PIN or recovery key', () => {
+  assert.match(plugin, /ensureDatabaseUnlocked/);
+  assert.match(plugin, /authenticateDeviceCredential/);
+  assert.match(plugin, /BIOMETRIC_STRONG[\s\S]*DEVICE_CREDENTIAL/);
+  assert.match(plugin, /new BiometricPrompt\.CryptoObject\(cipher\)/);
+  assert.match(plugin, /PMS_DEVICE_AUTH_CRYPTO_FAILED/);
+  assert.doesNotMatch(plugin, /setupDatabaseUnlock|unlockDatabaseWithPin|unlockDatabaseWithRecovery|promptUnlockSecret|recoveryKeyDisplayed/);
   assert.doesNotMatch(unlockManager, /unlockWithOtp|deriveOtp|otpToDek/i);
+  assert.match(plugin, /PmsUnlockManager\.lock\(\)/);
 });
-
 test('database initialization checks SQLCipher encryption state and page authentication', () => {
   assert.match(repository, /PRAGMA cipher_status/);
   assert.match(repository, /cipherStatus!=1/);
@@ -109,7 +106,7 @@ test('outbox retry scheduling uses integer epoch milliseconds and migrates legac
 test('plugin reports encrypted storage contract and never advertises plain SQLite', () => {
   assert.match(plugin, /android-sqlcipher/);
   assert.match(plugin, /contractVersion",2/);
-  assert.match(plugin, /user-unlock-envelopes/);
+  assert.match(plugin, /android-keystore-auth-per-use-device-credential/);
   assert.doesNotMatch(plugin, /android-sqlite/);
 });
 

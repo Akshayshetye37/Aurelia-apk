@@ -2557,6 +2557,11 @@ module.exports = QRCode;
   let persistenceLoadBlocked = false;
   let persistentStorageGranted = null;
   let pendingWrite = Promise.resolve();
+  let nativeStorageRequired = false;
+  let nativeStorageActive = false;
+  let nativeStorageMigrationPending = false;
+  let nativeWorkspaceVersion = 0;
+  let nativePmsPlugin = null;
 
   function setPersistenceState(state, message) {
     persistenceState = state;
@@ -2802,7 +2807,75 @@ module.exports = QRCode;
     };
   }
 
+
+  async function prepareNativeWorkspace() {
+    const capacitor = window.Capacitor;
+    if (!capacitor || typeof capacitor.isNativePlatform !== "function" || !capacitor.isNativePlatform()) return "browser";
+    nativeStorageRequired = true;
+    nativePmsPlugin = capacitor.Plugins && capacitor.Plugins.CapacitorPmsStorage;
+    if (!nativePmsPlugin || typeof nativePmsPlugin.ensureDatabaseUnlocked !== "function"
+        || typeof nativePmsPlugin.initializeStorage !== "function"
+        || typeof nativePmsPlugin.getWorkspaceState !== "function") {
+      throw new Error("NATIVE_SQLCIPHER — the authenticated native PMS storage bridge is unavailable.");
+    }
+    await nativePmsPlugin.ensureDatabaseUnlocked();
+    const initialized = await nativePmsPlugin.initializeStorage();
+    if (!initialized || initialized.success !== true || !initialized.integrity || initialized.integrity.ok !== true) {
+      throw new Error("NATIVE_SQLCIPHER — encrypted database integrity could not be verified.");
+    }
+    const result = await nativePmsPlugin.getWorkspaceState();
+    const workspace = result && result.workspace;
+    if (workspace && typeof workspace.raw === "string") {
+      const version = Number(workspace.version);
+      if (!Number.isSafeInteger(version) || version < 1 || !workspace.sha256) {
+        throw new Error("NATIVE_SQLCIPHER — canonical workspace metadata is invalid.");
+      }
+      normalizeLoadedState(JSON.parse(workspace.raw));
+      nativeWorkspaceVersion = version;
+      nativeStorageActive = true;
+      markDeviceSaved();
+      return "loaded";
+    }
+    if ((initialized.authority && initialized.authority.state === "canonical") || initialized.workspaceEverCanonical === true) {
+      throw new Error("NATIVE_SQLCIPHER — the canonical workspace is missing after a previous cutover; automatic re-import from stale browser data is blocked.");
+    }
+    nativeStorageMigrationPending = true;
+    return "migration";
+  }
+
+  async function migrateNativeWorkspace() {
+    if (!nativeStorageMigrationPending || !nativePmsPlugin) return true;
+    const raw = JSON.stringify(S);
+    const migrationId = "aurelia-workspace-v1";
+    const result = await nativePmsPlugin.migrateWorkspace({
+      migrationId,
+      sourceKey: DB_NAME + "/" + DB_STORE + "/" + DB_KEY,
+      sourceTimestamp: new Date().toISOString(),
+      raw
+    });
+    const verified = await nativePmsPlugin.getWorkspaceState();
+    const workspace = verified && verified.workspace;
+    if (!workspace || workspace.raw !== raw || workspace.sha256 !== result.sha256
+        || Number(workspace.version) !== Number(result.version) || Number(result.version) !== 1) {
+      throw new Error("NATIVE_SQLCIPHER — migrated workspace failed exact read-back verification.");
+    }
+    nativeWorkspaceVersion = 1;
+    nativeStorageActive = true;
+    nativeStorageMigrationPending = false;
+    if (persistenceDb) { persistenceDb.close(); persistenceDb = null; }
+    markDeviceSaved();
+    return true;
+  }
+
   async function loadState() {
+    try {
+      const nativeStatus = await prepareNativeWorkspace();
+      if (nativeStatus === "loaded") return true;
+    } catch (nativeError) {
+      persistenceLoadBlocked = true;
+      setPersistenceState("unavailable", "NATIVE_SQLCIPHER — encrypted PMS storage could not be unlocked or verified. Existing browser records were not modified. " + String(nativeError.message || "Native storage unavailable").slice(0, 160));
+      return false;
+    }
     const legacy = readLegacyStorage();
     let projectLegacy = { raw: null, error: null };
     try { projectLegacy.raw = (window.__aureliaStorage || window.localStorage).getItem("aurelia_lodge_v2"); }
@@ -2862,6 +2935,13 @@ module.exports = QRCode;
       return true;
     } catch (error) {
       const deviceDbWasOpened = !!persistenceDb;
+      if (nativeStorageRequired && (!deviceDbWasOpened || !deviceDbReadCompleted || deviceRecordPresent)) {
+        if (persistenceDb) { try { persistenceDb.close(); } catch (_) {} }
+        persistenceDb = null;
+        persistenceLoadBlocked = true;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER — IndexedDB did not provide a complete, readable source snapshot. Browser mirrors may be stale; migration and writes are blocked to protect existing PMS records.");
+        return false;
+      }
       persistenceDb = null;
       if (legacy.raw) {
         try {
@@ -2895,6 +2975,11 @@ module.exports = QRCode;
         setPersistenceState("unavailable", "PERSISTENCE UNAVAILABLE — the previous Aurelia PMS data key could not be read. New writes are blocked to protect existing records.");
         return false;
       }
+      if (nativeStorageRequired && !deviceDbWasOpened) {
+        persistenceLoadBlocked = true;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER — browser source storage could not be read safely; migration was not started and no empty workspace was created.");
+        return false;
+      }
       if (!legacy.error && !deviceRecordPresent && (!deviceDbWasOpened || deviceDbReadCompleted)) {
         try {
           const raw = JSON.stringify(S);
@@ -2913,6 +2998,10 @@ module.exports = QRCode;
   }
 
   function saveState(forceAfterValidatedRestore = false) {
+    if (nativeStorageRequired && !nativeStorageActive) {
+      setPersistenceState("unavailable", "NATIVE_SQLCIPHER — PMS writes are blocked until the encrypted native workspace has been migrated and verified.");
+      return Promise.resolve(false);
+    }
     if (persistenceLoadBlocked && !forceAfterValidatedRestore) {
       // Preserve the original load/migration failure so render() cannot hide the
       // actionable storage diagnostic behind a generic save-blocked message.
@@ -2922,6 +3011,24 @@ module.exports = QRCode;
       return Promise.resolve(false);
     }
     const serialized = JSON.stringify(S);
+    if (nativeStorageActive) {
+      pendingWrite = pendingWrite.catch(() => false).then(async () => {
+        try {
+          const result = await nativePmsPlugin.saveWorkspace({ raw: serialized, expectedVersion: nativeWorkspaceVersion });
+          const nextVersion = Number(result && result.version);
+          if (!Number.isSafeInteger(nextVersion) || nextVersion !== nativeWorkspaceVersion + 1 || !result.sha256) {
+            throw new Error("SQLCipher workspace write returned invalid version metadata.");
+          }
+          nativeWorkspaceVersion = nextVersion;
+          markDeviceSaved();
+          return true;
+        } catch (error) {
+          setPersistenceState("unavailable", "NOT SAVED — SQLCipher rejected the workspace write. Browser storage fallback is disabled to prevent split-brain PMS data.");
+          return false;
+        }
+      });
+      return pendingWrite;
+    }
     let legacyMirrorError = null;
     try {
       (window.__aureliaStorage || window.localStorage).setItem(STORAGE_KEY, serialized);
@@ -6631,7 +6738,16 @@ module.exports = QRCode;
   }
 
   /* Boot only after the durable store has been checked and any legacy data migrated. */
-  loadState().finally(() => {
+  loadState().then(async loaded => {
+    if (!loaded || !nativeStorageMigrationPending) return loaded;
+    try { await migrateNativeWorkspace(); return true; }
+    catch (migrationError) {
+      persistenceLoadBlocked = true;
+      nativeStorageActive = false;
+      setPersistenceState("unavailable", "NATIVE_SQLCIPHER MIGRATION BLOCKED — original browser records were retained and no canonical cutover was accepted. " + String(migrationError.message || "Migration verification failed").slice(0, 160));
+      return false;
+    }
+  }).finally(() => {
     S.deviceBackup = S.deviceBackup && typeof S.deviceBackup === "object" ? S.deviceBackup : { folder: false, verified: false, last: null };
     render();
     updateClock();
