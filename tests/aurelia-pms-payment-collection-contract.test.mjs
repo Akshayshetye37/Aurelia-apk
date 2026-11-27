@@ -23,7 +23,7 @@ test('dining settlement offers cash and a shareable Aurelia UPI session', async 
   assert.match(html, /function selectRestPay\(method\)/);
   assert.match(html, /function recordRestPay\(\)/);
   assert.match(html, /if\(p\.method==='UPI'&&!document\.getElementById\('rest-pay-confirm'\)\?\.checked\)/);
-  assert.match(html, /enabledMethods:Object\.freeze\(\['UPI','CASH'\]\)/);
+  assert.match(html, /enabledMethods:Object\.freeze\(\['AURELIA_UPI','CASH'\]\)/);
 });
 
 test('cash and UPI remain the only supported collection methods; no card or gateway rail is enabled', async () => {
