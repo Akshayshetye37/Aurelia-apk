@@ -9,7 +9,7 @@ const domain = await readFile(new URL('../src/aurelia-upi/domain.mjs', import.me
 test('uploaded PMS Folios destination mounts the project Aurelia UPI payment desk', () => {
   assert.match(html, /MOBILE_TABS/);
   assert.match(html, /\["upi", "Folios"/);
-  assert.match(html, /window\.AureliaUPI \? window\.AureliaUPI\.render\(window\.AureliaPmsContext\)/);
+  assert.match(html, /window\.AureliaUPI\s*\?\s*window\.AureliaUPI\.render\(window\.AureliaPmsContext\)/);
   assert.match(html, /id="aurelia-upi-root"/);
 });
 
@@ -54,7 +54,7 @@ test('incoming alerts are routed into review evidence and never posted automatic
 });
 
 test('VPA changes fail closed until encrypted payment history is loaded and open sessions are resolved', () => {
-  assert.match(html, /Open Aurelia UPI and verify encrypted payment storage/);
+  assert.match(html, /installed Aurelia Android app after encrypted payment storage is available/);
   assert.match(html, /Resolve all active and queued Aurelia UPI requests/);
   assert.match(html, /Enter a valid UPI ID/);
 });
@@ -73,3 +73,55 @@ test('legacy main-branch state is migrated without deleting the original source 
   assert.match(html, /legacyInventoryLedger/);
   assert.doesNotMatch(html, /removeItem\("aurelia_lodge_v2"\)/);
 });
+
+
+test('changing the receiving VPA refreshes and verifies native encrypted UPI storage before saving', async () => {
+  const save = html.slice(html.indexOf('if (act === "save-settings")'), html.indexOf('if (act === "save-rest-settings")'));
+  assert.match(save, /await upiModule\.refresh\(\)/);
+  assert.match(save, /upiModule\.isNativeStorageAvailable\(\)/);
+  assert.match(save, /upiState\?\.storageError/);
+  assert.match(save, /hasOpenUpiRequests/);
+  assert.match(save, /await persistMutation\(\)/);
+  assert.match(save, /HTML preview changes are not saved/);
+});
+
+test('Folios renders one shared payment workspace and does not duplicate the open-balance panel', () => {
+  const folios = html.slice(html.indexOf('upi() {'), html.indexOf('guests() {'));
+  assert.match(folios, /id="aurelia-upi-root"/);
+  assert.doesNotMatch(folios, /Open Balances Ready to Collect/);
+  assert.doesNotMatch(folios, /const folioRows/);
+});
+
+test('UPI workspace inherits the PMS content width and card surfaces', async () => {
+  const css = await readFile(new URL('../assets/aurelia-upi.css', import.meta.url), 'utf8');
+  assert.match(css, /\.au-shell\{[^}]*width:100%;max-width:none/);
+  assert.match(css, /\.pms-upi-content\{width:100%;min-width:0\}/);
+  assert.match(css, /background:var\(--bg-card\)/);
+});
+
+
+test('blocked persistence retains the original load or migration diagnostic instead of replacing it with a generic save warning', () => {
+  const guard = html.slice(html.indexOf('function saveState('), html.indexOf('async function persistMutation'));
+  assert.match(guard, /if \(!persistenceMessage\)/);
+});
+
+test('print action targets one active invoice or receipt and avoids fixed-position duplicate pages', () => {
+  assert.match(html, /function printActiveDocument\(/);
+  assert.match(html, /print-target/);
+  assert.match(html, /printing-document/);
+  assert.doesNotMatch(html, /\.print-area \{ position: fixed/);
+});
+
+test('occupied dining tables are visually distinct from the single selected table', () => {
+  assert.match(html, /\.table-tile\.has-order:not\(\.selected\)/);
+  assert.match(html, /\.table-tile\.selected/);
+});
+
+test('property logo is validated, persisted in property settings and rendered in the PMS identity', () => {
+  assert.match(html, /logoDataUrl/);
+  assert.match(html, /id="set-logo"/);
+  assert.match(html, /async function optimizePropertyLogo\(/);
+  assert.match(html, /propertyLogoMarkup\(/);
+  assert.match(html, /image\/png.*image\/jpeg.*image\/webp/);
+});
+

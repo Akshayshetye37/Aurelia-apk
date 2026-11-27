@@ -286,7 +286,7 @@ function renderActiveSession(session) {
     '<div><small>' + timerLabel + '</small><strong id="au-countdown" data-status="' + esc(session.status) + '" data-expires="' + target + '">' + timerText + '</strong></div></div>' +
     (session.status === SESSION_STATUS.ACTIVE ? '<div class="au-active-qr"><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
       '<button class="au-primary au-wide" type="button" data-upi-action="whatsapp" data-id="' + esc(session.id) + '">Send exact-amount link to guest on WhatsApp</button>' +
-      '<button class="au-secondary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button>' +
+      '<button class="au-secondary au-wide" type="button" data-upi-action="copy-link" data-id="' + esc(session.id) + '">Copy UPI payment link</button>' +
       '<button class="au-link au-wide" type="button" data-upi-action="customer-paid" data-id="' + esc(session.id) + '">Customer says payment sent</button>' :
       '<div class="au-warning">Payment is not settled. Verify the actual credit in the receiving bank account before posting it to a folio.</div>') +
     '</div>';
@@ -978,20 +978,6 @@ function renderView() {
     (state.storageError ? '<div class="au-storage-warning" role="status">' + esc(state.storageError) + '</div>' : "") + body + '</div>';
 }
 
-async function openSession(session) {
-  if (!session) return;
-  if (session.status !== "ACTIVE") {
-    notify(session.status === "QUEUED" ? "This request is queued. It will activate after the current request is closed." : "Only the active Aurelia UPI request can be opened.");
-    return;
-  }
-  if (context?.launchUpi) {
-    const ok = await context.launchUpi(session.upiUri);
-    if (!ok) notify("UPI app could not be opened. Scan the QR instead.");
-  } else {
-    globalThis.location?.assign?.(session.upiUri);
-  }
-}
-
 function normalizeWhatsAppNumber(value) {
   const digits = String(value || "").replace(/\D/g, "");
   return digits.length >= 10 && digits.length <= 15 ? digits : "";
@@ -1027,6 +1013,28 @@ async function shareSessionOnWhatsApp(sessionId) {
   const url = "https://wa.me/" + phone + "?text=" + encodeURIComponent(message);
   const opened = await context?.launchExternalUrl?.(url);
   if (!opened && typeof window !== "undefined") window.location.assign(url);
+}
+
+async function copySessionPaymentLink(sessionId) {
+  const session = state.sessions.find(row => row.id === sessionId);
+  if (!session || session.status !== SESSION_STATUS.ACTIVE || !session.upiUri) {
+    throw new Error("Only an active Aurelia UPI request can be copied.");
+  }
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(session.upiUri);
+  } else {
+    const field = document.createElement("textarea");
+    field.value = session.upiUri;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.select();
+    const copied = document.execCommand?.("copy") === true;
+    field.remove();
+    if (!copied) throw new Error("Clipboard access is unavailable. Share the QR or use WhatsApp.");
+  }
+  notify("UPI payment link copied. Send it to the guest; the guest pays on their own phone.");
 }
 
 function onActionClick(event) {
@@ -1077,7 +1085,7 @@ function onActionClick(event) {
       if (!ok) throw new Error("Could not open the dining cash collection panel.");
       return;
     }
-    if (action === "open") { await openSession(state.sessions.find(row => row.id === id)); return; }
+    if (action === "copy-link") { await copySessionPaymentLink(id); return; }
     if (action === "whatsapp") { await shareSessionOnWhatsApp(id); return; }
     if (action === "customer-paid") { await markCustomerReportedPaid(id); return; }
     if (action === "cancel") { await cancelSession(id); return; }
@@ -1225,7 +1233,7 @@ function renderSessionQr(session) {
   if (!session) return "";
   return '<div class="au-qr-card"><img alt="Aurelia UPI amount-specific QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '">' +
     '<strong>' + esc(formatPaise(session.amountPaise)) + '</strong><small>' + esc(session.vpa) + '</small>' +
-    '<button class="au-secondary" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button></div>';
+    '<button class="au-secondary" type="button" data-upi-action="copy-link" data-id="' + esc(session.id) + '">Copy payment link</button></div>';
 }
 
 function initialize() {

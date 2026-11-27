@@ -1,5 +1,5 @@
 /* Aurelia UPI — dedicated payment workspace, independent of app settings navigation. */
-.au-shell{--au-bg:#07140f;--au-panel:#0e2118;--au-panel-2:#132a20;--au-line:rgba(218,190,125,.17);--au-gold:#dfbd72;--au-ivory:#f4eedf;--au-muted:#9daf9f;--au-green:#6b9d7d;--au-red:#d47b70;color:var(--au-ivory);font-family:var(--sans,Inter,Arial,sans-serif);padding:2px 0 30px;max-width:1240px;margin:0 auto}
+.au-shell{--au-bg:#07140f;--au-panel:var(--bg-card,#0e2118);--au-panel-2:var(--bg-card-2,#132a20);--au-line:var(--border,rgba(218,190,125,.17));--au-gold:var(--gold,#dfbd72);--au-ivory:var(--text,#f4eedf);--au-muted:var(--text-muted,#9daf9f);--au-green:#6b9d7d;--au-red:#d47b70;color:var(--au-ivory);font-family:var(--sans,Inter,Arial,sans-serif);width:100%;max-width:none;margin:0;padding:0 0 24px}
 .au-shell *{box-sizing:border-box}
 .au-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 2px 18px;border-bottom:1px solid var(--au-line)}
 .au-brand{display:flex;align-items:center;gap:11px;min-width:0}
@@ -101,3 +101,11 @@
 .dock button{min-width:0!important;font-size:9px!important;letter-spacing:0!important}
 .au-folio-actions{margin-top:14px;padding:12px;border:1px solid rgba(218,190,125,.2);border-radius:14px;background:rgba(223,189,114,.045)}
 .au-folio-actions .lab{font-size:9px;line-height:1.5;color:var(--muted)}
+
+/* PMS workspace alignment: UPI content uses the same content width and card rhythm as every other destination. */
+.pms-upi-content{width:100%;min-width:0}
+.pms-upi-content>.au-shell{width:100%;max-width:none;margin:0;padding:0 0 24px}
+.pms-upi-content .au-hero,.pms-upi-content .au-panel,.pms-upi-content .au-metric{min-width:0}
+.pms-upi-content .au-panel{border-color:var(--border);background:var(--bg-card);box-shadow:var(--shadow-card,0 8px 24px rgba(0,0,0,.12))}
+.pms-upi-content .au-metric{border-color:var(--border);background:var(--bg-card-2)}
+@media(max-width:760px){.pms-upi-content>.au-shell{padding-bottom:18px}.pms-upi-content .au-hero{margin-top:0}}

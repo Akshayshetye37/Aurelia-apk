@@ -197,7 +197,8 @@ test('uploaded workspace escapes user data and uses delegated action attributes 
   assert.ok(html.includes('const esc ='));
   assert.ok(html.includes('data-action='));
   assert.ok(html.includes('esc(b.g)'));
-  assert.ok(html.includes('esc(t.guest'));
+  const upiApp = read('src/aurelia-upi/app.mjs');
+  assert.ok(upiApp.includes('esc(row.guestName || "Walk-in")'));
   assert.doesNotMatch(html, /onclick="[^"]*\$\{/);
 });
 test('booking API omits government ID numbers and ID photos and escapes preview data', () => {

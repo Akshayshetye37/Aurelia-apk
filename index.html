@@ -538,7 +538,13 @@ body[data-theme="light"] .chip.on { background: #143d2d; color: #fff; border-col
 }
 .table-tile:hover { border-color: var(--border-strong); }
 .table-tile.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold-soft); }
-.table-tile.has-order { background: var(--gold-soft); border-color: var(--gold); }
+.table-tile.has-order:not(.selected) { background: var(--bg-card-2, var(--bg-card)); border-color: var(--border); box-shadow: inset 0 -3px 0 var(--emerald); }
+.brand-mark.has-property-logo { background: transparent; box-shadow: none; padding: 2px; }
+.brand-mark .brand-logo { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
+.property-logo-preview { display:flex; align-items:center; justify-content:flex-start; min-height:72px; margin:8px 0 12px; padding:10px; border:1px dashed var(--border-strong); border-radius:12px; background:var(--bg-card-2); }
+.property-logo-preview-image { display:block; width:auto; max-width:180px; height:auto; max-height:76px; object-fit:contain; }
+.invoice-logo { display:block; width:auto; max-width:100px; height:auto; max-height:62px; object-fit:contain; margin:0 0 8px; }
+.thermal-logo { display:block; width:auto; max-width:56px; max-height:34px; object-fit:contain; margin:0 auto 5px; }
 .table-tile strong { font: 600 22px/1 var(--serif); }
 .table-tile small { font-size: 11.5px; color: var(--text-muted); }
 
@@ -926,9 +932,25 @@ body[data-theme="light"] .chip.on { background: #143d2d; color: #fff; border-col
 }
 
 @media print {
-  body * { visibility: hidden; }
-  .print-area, .print-area * { visibility: visible; }
-  .print-area { position: fixed; left: 0; top: 0; width: 100%; margin: 0; box-shadow: none; border: 0; }
+  @page { margin: 12mm; }
+  body.printing-document * { visibility: hidden !important; }
+  body.printing-document #modal-root {
+    display: block !important; position: static !important; inset: auto !important;
+    padding: 0 !important; background: transparent !important; overflow: visible !important;
+  }
+  body.printing-document #modal-panel {
+    display: block !important; position: static !important; inset: auto !important;
+    width: auto !important; max-width: none !important; max-height: none !important;
+    padding: 0 !important; margin: 0 !important; overflow: visible !important;
+    transform: none !important; box-shadow: none !important; border: 0 !important;
+  }
+  body.printing-document .print-area.print-target,
+  body.printing-document .print-area.print-target * { visibility: visible !important; }
+  body.printing-document .print-area.print-target {
+    position: static !important; inset: auto !important; width: 100% !important;
+    max-height: none !important; overflow: visible !important; margin: 0 !important;
+    box-shadow: none !important; border: 0 !important; transform: none !important;
+  }
   .no-print { display: none !important; }
 }
 
@@ -2386,6 +2408,7 @@ module.exports = QRCode;
         tax: "",
         gst: 0,
         upi: "",
+        logoDataUrl: "",
         cur: "₹",
         checkInTime: "14:00",
         checkOutTime: "11:00",
@@ -2851,7 +2874,11 @@ module.exports = QRCode;
 
   function saveState(forceAfterValidatedRestore = false) {
     if (persistenceLoadBlocked && !forceAfterValidatedRestore) {
-      setPersistenceState("unavailable", "SAVE BLOCKED — existing device data could not be read safely. Restore a verified backup before making further changes.");
+      // Preserve the original load/migration failure so render() cannot hide the
+      // actionable storage diagnostic behind a generic save-blocked message.
+      if (!persistenceMessage) {
+        setPersistenceState("unavailable", "SAVE BLOCKED — existing device data could not be read safely. Restore a verified backup before making further changes.");
+      }
       return Promise.resolve(false);
     }
     const serialized = JSON.stringify(S);
@@ -2943,6 +2970,66 @@ module.exports = QRCode;
     if (!Object.prototype.hasOwnProperty.call(CONFIRM_ACTIONS, actionKey)) { toast("Confirmation action is invalid"); return; }
     openModal(t, "", `<h2 class="foil">${esc(t)}</h2><p class="lab">${esc(m)}</p><div class="row"><button class="btn ghost sm" type="button" data-action="close-modal">Keep it</button><button class="btn sm danger" type="button" data-action="confirm-safe-action" data-confirm="${esc(actionKey)}">${esc(l)}</button></div>`);
   }
+  function propertyLogoMarkup(className = "") {
+    const value = String(S.settings?.logoDataUrl || "");
+    if (value.length > 420000 || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) return "";
+    return '<img class="' + esc(className) + '" src="' + esc(value) + '" alt="">';
+  }
+
+  async function optimizePropertyLogo(file) {
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
+    if (!file || !allowedTypes.includes(file.type)) throw new Error("Choose a PNG, JPEG or WebP property logo. SVG and other formats are not accepted.");
+    if (file.size > 5 * 1024 * 1024) throw new Error("Property logo must be 5 MB or smaller.");
+    if (typeof createImageBitmap !== "function") throw new Error("This browser cannot safely process the logo. Use a supported Android WebView or a current browser.");
+    const bitmap = await createImageBitmap(file);
+    try {
+      if (!bitmap.width || !bitmap.height) throw new Error("The selected logo image is invalid.");
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Logo image processing is unavailable.");
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.84));
+      if (!blob || blob.size > 300 * 1024) throw new Error("The optimized logo must be 300 KB or smaller.");
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Logo encoding failed."));
+        reader.onerror = () => reject(new Error("Logo file could not be read."));
+        reader.readAsDataURL(blob);
+      });
+    } finally {
+      bitmap.close?.();
+    }
+  }
+
+  function printActiveDocument(button) {
+    if (document.body.classList.contains("printing-document")) return;
+    const panel = button?.closest(".modal-panel") || document.getElementById("modal-panel");
+    const documents = panel ? [...panel.querySelectorAll(".print-area")] : [];
+    if (documents.length !== 1) {
+      toast(documents.length ? "Select one invoice or receipt to print at a time." : "No invoice or receipt is open for printing.");
+      return;
+    }
+    const target = documents[0];
+    target.classList.add("print-target");
+    document.body.classList.add("printing-document");
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      target.classList.remove("print-target");
+      document.body.classList.remove("printing-document");
+      window.removeEventListener("afterprint", cleanup);
+      window.removeEventListener("focus", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.addEventListener("focus", cleanup, { once: true });
+    try { window.print(); }
+    catch (error) { cleanup(); toast("The print dialog could not be opened."); }
+  }
+
   function openModal(title, subtitle, bodyHtml) {
     const root = document.getElementById("modal-root");
     const panel = document.getElementById("modal-panel");
@@ -3188,6 +3275,12 @@ module.exports = QRCode;
 
   function renderNav() {
     const propertyLabel = S.settings.name && S.settings.name !== "Aurelia PMS" ? S.settings.name : "Property Workspace";
+    const logoMarkup = propertyLogoMarkup("brand-logo");
+    const fallbackMark = '<svg viewBox="0 0 24 24"><path d="M12 2.8 19.2 6v5.4c0 4.6-3 8.2-7.2 9.8-4.2-1.6-7.2-5.2-7.2-9.8V6L12 2.8Z"/><path d="M8.5 14.8 12 8.2l3.5 6.6M9.7 12.6h4.6"/></svg>';
+    document.querySelectorAll(".brand-mark").forEach(mark => {
+      mark.innerHTML = logoMarkup || fallbackMark;
+      mark.classList.toggle("has-property-logo", !!logoMarkup);
+    });
     document.getElementById("sb-property-name").textContent = propertyLabel;
     document.getElementById("mob-property-name").textContent = propertyLabel;
     document.getElementById("topbar-title").textContent = TAB_TITLES[S.tab] || "Aurelia PMS";
@@ -3673,36 +3766,14 @@ module.exports = QRCode;
 
     upi() {
       window.AureliaPmsContext?.importLegacyAlerts?.();
-      const openFolios = S.bookings.filter(b => bookingDue(b) > 0);
-      const openTables = S.tables.filter(t => (t.o || []).length > 0);
-      const folioRows = openFolios.map(b => `
-        <div class="list-item" style="flex-wrap:wrap">
-          <div class="item-main"><strong>${esc(b.g)} · Room ${esc(b.room)}</strong><small>Folio balance due: ${fmtMoney(bookingDue(b))}</small></div>
-          <div class="row-wrap">
-            <button class="btn xs emerald" type="button" data-action="upi-create-folio" data-id="${b.id}">Aurelia UPI · ${fmtMoney(bookingDue(b))}</button>
-            <button class="btn xs ghost" type="button" data-action="folio-manual-payment" data-id="${b.id}">Cash / Bank</button>
-          </div>
-        </div>`).join("");
-      const diningRows = openTables.map(t => {
-        const amount = t.o.reduce((sum, item) => sum + Number(item.unit || 0) * Number(item.qty || 0), 0);
-        return `
-          <div class="list-item" style="flex-wrap:wrap">
-            <div class="item-main"><strong>Dining Table ${esc(t.n)} · ${esc(t.guest || "Walk-in")}</strong><small>Open dining ticket: ${fmtMoney(amount)}</small></div>
-            <div class="row-wrap">
-              <button class="btn xs emerald" type="button" data-action="upi-create-table" data-table="${esc(t.n)}">Aurelia UPI · ${fmtMoney(amount)}</button>
-              <button class="btn xs ghost" type="button" data-action="upi-cash-table" data-table="${esc(t.n)}">Cash / Bank</button>
-            </div>
-          </div>`;
-      }).join("");
+      // The payment module owns its open-balance list. Do not render a second,
+      // differently styled copy in the PMS shell.
       return `
-        <section class="card" style="margin-bottom:16px">
-          <div class="row" style="flex-wrap:wrap;margin-bottom:10px"><div><h3 style="font-size:22px">Open Balances Ready to Collect</h3><div class="dim">Every room folio and dining ticket supports Aurelia UPI, cash or bank transfer.</div></div><span class="tag occ">${openFolios.length + openTables.length} open</span></div>
-          <div class="list-rows">
-            ${folioRows}${diningRows}
-            ${(!openFolios.length && !openTables.length) ? '<div class="empty-state">All folios and dining tickets are settled.</div>' : ""}
-          </div>
-        </section>
-        <div id="aurelia-upi-root">${window.AureliaUPI ? window.AureliaUPI.render(window.AureliaPmsContext) : '<div class="card"><h3>Aurelia UPI is loading</h3><p class="dim">Encrypted payment storage and the notification observer are initializing.</p></div>'}</div>
+        <div id="aurelia-upi-root" class="pms-upi-content">
+          ${window.AureliaUPI
+            ? window.AureliaUPI.render(window.AureliaPmsContext)
+            : '<section class="card"><h3>Aurelia UPI is loading</h3><p class="dim">Encrypted payment storage and the notification observer are initializing.</p></section>'}
+        </div>
       `;
     },
 
@@ -3971,6 +4042,9 @@ module.exports = QRCode;
               <label class="fld"><span>GSTIN / Tax ID</span><input id="set-tax" value="${esc(s.tax)}"></label>
             </div>
             <label class="fld"><span>Address</span><input id="set-addr" value="${esc(s.addr)}"></label>
+            <label class="fld"><span>Property branding logo · PNG, JPEG or WebP (max 5 MB)</span><input id="set-logo" type="file" accept="image/png,image/jpeg,image/webp"></label>
+            <div class="property-logo-preview" id="set-logo-preview">${propertyLogoMarkup("property-logo-preview-image") || '<span class="dim">No property logo uploaded.</span>'}</div>
+            ${S.settings.logoDataUrl ? '<button class="btn xs ghost" type="button" data-action="clear-property-logo">Remove property logo</button>' : ""}
             <div class="grid g2">
               <label class="fld"><span>Aurelia UPI ID (VPA)</span><input id="set-upi" value="${esc(s.upi)}" placeholder="property@bank"></label>
               <label class="fld"><span>Included GST (%)</span><input id="set-gst" type="number" min="0" max="50" value="${Number(s.gst) || 0}"></label>
@@ -4565,6 +4639,7 @@ module.exports = QRCode;
         ${due <= 0 ? '<div class="paid-stamp">PAID</div>' : ""}
         <div class="row" style="align-items:flex-start;border-bottom:1px solid #dfd6c3;padding-bottom:14px">
           <div>
+            ${propertyLogoMarkup("invoice-logo")}
             <h3>${esc(s.name)}</h3>
             <div style="font-size:12px;color:#55665c">${esc(s.addr)}<br>${esc(s.phone)} · GSTIN ${esc(s.tax || "—")}</div>
           </div>
@@ -4625,6 +4700,7 @@ module.exports = QRCode;
       </div>
       <div class="thermal-paper w80 print-area" id="thermal-doc">
         <div style="text-align:center">
+          ${propertyLogoMarkup("thermal-logo")}
           <strong style="font-size:15px">${esc(S.settings.name)}</strong><br>
           <span>${esc(title)}</span><br>
           <span style="font-size:10.5px">${fmtDateTime(new Date().toISOString())}</span>
@@ -4852,7 +4928,7 @@ module.exports = QRCode;
   }
 
   /* ================= DELEGATED EVENT HANDLER ================= */
-  document.addEventListener("click", e => {
+  document.addEventListener("click", async e => {
     if (e.target.id === "modal-root") { closeModal(); return; }
 
     const navBtn = e.target.closest("[data-nav]");
@@ -4877,7 +4953,7 @@ module.exports = QRCode;
     const act = actEl.dataset.action;
 
     if (act === "close-modal") { closeModal(); return; }
-    if (act === "print-now") { window.print(); return; }
+    if (act === "print-now") { printActiveDocument(actEl); return; }
     if (act === "check-avail") { openAvailabilityModal(); return; }
     if (act === "new-booking") { openNewBookingModal(actEl.dataset.room, actEl.dataset.day, actEl.dataset.nights, actEl.dataset.guest); return; }
 
@@ -5722,23 +5798,68 @@ module.exports = QRCode;
     }
 
     /* Settings & Backup */
+    if (act === "clear-property-logo") {
+      const previousSettings = { ...S.settings };
+      const previousAudit = S.audit.slice();
+      S.settings.logoDataUrl = "";
+      addAudit("Property branding updated", "Property logo removed");
+      if (!(await persistMutation())) {
+        S.settings = previousSettings;
+        S.audit = previousAudit;
+        return;
+      }
+      render();
+      toast("Property logo removed.");
+      return;
+    }
+
     if (act === "save-settings") {
       const upi = document.getElementById("set-upi").value.trim();
       if (upi && !/^[^\s@]+@[^\s@]+$/.test(upi)) { toast("Enter a valid UPI ID (e.g. hotel@bank)."); return; }
       const currentUpi = String(S.settings.upi || "").trim();
-      const upiState = window.AureliaUPI?.getState?.();
-      const hasOpenUpiRequests = (upiState?.sessions || []).some(row => ["CREATED", "QUEUED", "ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status));
-      if (upi !== currentUpi && (!upiState?.loaded || upiState?.storageError)) { toast("Open Aurelia UPI and verify encrypted payment storage before changing the receiving UPI ID."); return; }
-      if (upi !== currentUpi && hasOpenUpiRequests) { toast("Resolve all active and queued Aurelia UPI requests before changing the receiving UPI ID."); return; }
+      if (upi !== currentUpi) {
+        const upiModule = window.AureliaUPI;
+        if (!upiModule || typeof upiModule.refresh !== "function" ||
+            typeof upiModule.isNativeStorageAvailable !== "function" ||
+            !upiModule.isNativeStorageAvailable()) {
+          toast("The receiving UPI ID can only be changed in the installed Aurelia Android app after encrypted payment storage is available. HTML preview changes are not saved.");
+          return;
+        }
+        try {
+          await upiModule.refresh();
+        } catch (error) {
+          toast("Encrypted Aurelia UPI storage could not be verified. Unlock device storage and try again.");
+          return;
+        }
+        const upiState = upiModule.getState?.();
+        const hasOpenUpiRequests = (upiState?.sessions || []).some(row => ["CREATED", "QUEUED", "ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status));
+        if (!upiState?.loaded || upiState?.storageError) {
+          toast("Encrypted Aurelia UPI payment storage is locked or unavailable. The receiving UPI ID was not changed.");
+          return;
+        }
+        if (hasOpenUpiRequests) {
+          toast("Resolve all active and queued Aurelia UPI requests before changing the receiving UPI ID.");
+          return;
+        }
+      }
+      let propertyLogoDataUrl = String(S.settings.logoDataUrl || "");
+      const logoFile = document.getElementById("set-logo")?.files?.[0];
+      if (logoFile) {
+        try { propertyLogoDataUrl = await optimizePropertyLogo(logoFile); }
+        catch (error) { toast(error?.message || "Property logo could not be processed."); return; }
+      }
+      const bookingApiUrlInput = document.getElementById("set-booking-api-url")?.value || "";
+      const validatedApiUrl = validatedBookingApiBaseUrl(bookingApiUrlInput);
+      if (bookingApiUrlInput.trim() && !validatedApiUrl) { toast("Booking API URL must be HTTPS and must not contain credentials, query strings or fragments."); return; }
+      const previousSettings = { ...S.settings };
+      const previousAudit = S.audit.slice();
       S.settings.name = document.getElementById("set-name").value.trim() || "Aurelia PMS";
       S.settings.tag = document.getElementById("set-tag").value.trim();
       S.settings.phone = document.getElementById("set-phone").value.trim();
       S.settings.tax = document.getElementById("set-tax").value.trim();
       S.settings.addr = document.getElementById("set-addr").value.trim();
       S.settings.upi = upi;
-      const bookingApiUrlInput = document.getElementById("set-booking-api-url")?.value || "";
-      const validatedApiUrl = validatedBookingApiBaseUrl(bookingApiUrlInput);
-      if (bookingApiUrlInput.trim() && !validatedApiUrl) { toast("Booking API URL must be HTTPS and must not contain credentials, query strings or fragments."); return; }
+      S.settings.logoDataUrl = propertyLogoDataUrl;
       S.settings.bookingApiEnabled = document.getElementById("set-booking-api-enabled")?.value === "true";
       S.settings.bookingApiUrl = validatedApiUrl;
       S.settings.bookingApiKey = validatedApiUrl ? String(document.getElementById("set-booking-api-key")?.value || "").trim() : "";
@@ -5748,6 +5869,12 @@ module.exports = QRCode;
       S.settings.checkInTime = document.getElementById("set-cin").value || "14:00";
       S.settings.checkOutTime = document.getElementById("set-cout").value || "11:00";
       addAudit("Settings updated", "Property identity saved");
+      if (!(await persistMutation())) {
+        S.settings = previousSettings;
+        S.audit = previousAudit;
+        toast("Property identity was not saved. Existing device data has been preserved.");
+        return;
+      }
       render();
       toast("Property identity saved");
       return;
