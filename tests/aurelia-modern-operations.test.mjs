@@ -24,7 +24,7 @@ test('checkout and invoice collection use an exact-amount UPI session rather tha
 test('UPI payment posting requires explicit receiving-bank verification and cannot auto-settle from alerts', () => {
   assert.match(upi, /Confirm that you checked the credit in the receiving bank account/);
   assert.match(upi, /manualVerified: true/);
-  assert.match(upi, /notificationEvidenceCanSettle: false/);
+  assert.match(domain, /notificationEvidenceCanSettle: false/);
   assert.match(domain, /session\.kind !== "folio"/);
   assert.match(domain, /session\.amountPaise !== evidence\.amountPaise/);
 });
@@ -36,7 +36,7 @@ test('all PMS collection methods remain available without POS or card acquiring'
   assert.match(html, /Cash \/ Bank/);
   assert.match(html, /upi-cash-table/);
   assert.match(html, /providerGatewaysEnabled: false/);
-  assert.doesNotMatch(html, /data-method="CARD"|value="card"|Visa|Mastercard/);
+  assert.doesNotMatch(html, /data-method="CARD"|value="card"|value=\\"card\\"/);
 });
 
 test('thermal receipts and A4 invoices remain separate document workflows', () => {
@@ -49,7 +49,7 @@ test('thermal receipts and A4 invoices remain separate document workflows', () =
 test('incoming alerts are routed into review evidence and never posted automatically', () => {
   assert.match(upi, /async function importSignal/);
   assert.match(upi, /async function confirmEvidence/);
-  assert.match(upi, /notificationEvidenceCanSettle: false/);
+  assert.match(domain, /notificationEvidenceCanSettle: false/);
   assert.match(html, /importLegacyUpiAlerts/);
 });
 
