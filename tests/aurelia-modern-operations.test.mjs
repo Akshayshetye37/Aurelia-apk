@@ -9,7 +9,7 @@ const domain = await readFile(new URL('../src/aurelia-upi/domain.mjs', import.me
 test('uploaded PMS Folios destination mounts the project Aurelia UPI payment desk', () => {
   assert.match(html, /MOBILE_TABS/);
   assert.match(html, /\["upi", "Folios"/);
-  assert.match(html, /window\.AureliaUPI \? window\.AureliaUPI\.render\(window\.AureliaPmsContext\)/);
+  assert.match(html, /window\.AureliaUPI\s*\?\s*window\.AureliaUPI\.render\(window\.AureliaPmsContext\)/);
   assert.match(html, /id="aurelia-upi-root"/);
 });
 
