@@ -67,3 +67,50 @@ This source-level audit was performed against `main`. Findings are ranked by imp
 ## Release gate
 
 Do not process real guest data or payments until client-side secrets have been removed, third-party data flows have been reviewed, dependency advisories have been resolved, Android permission and native bridge boundaries have been verified, and browser plus Android end-to-end tests have passed.
+
+
+## Final owner-approved authentication and data-protection decision — 28 November 2026
+
+This section supersedes earlier statements in this review that describe PIN/recovery-key unlock as the approved design.
+
+### Authentication
+
+- Google Sign-In through Android Credential Manager is the only account-login method in Google Mode.
+- Firebase Authentication validates the Google ID token; Aurelia separately authorizes owner/property membership.
+- No email/password, email verification link, email OTP, SMS OTP, verification email/message, separate Aurelia password, recovery PIN, recovery passphrase or user-held recovery key.
+- Local Mode remains available without Google authentication.
+
+### Device credential and encryption
+
+- The approved local unlock direction is Android's native device-credential prompt (PIN, pattern or password, with supported biometric authentication) authorizing access to a random 256-bit SQLCipher DEK protected by Android Keystore.
+- Aurelia must not collect or store the device credential. It is not the DEK.
+- The database remains encrypted while locked. Clear in-memory key material on process termination and explicit lock.
+- A missing/invalidated Keystore key or failed/cancelled device authentication must fail closed without deleting the encrypted database or generating a replacement key.
+- Google Sign-In alone does not unlock the local database or prove device ownership.
+
+### Current source status
+
+The main branch currently contains the earlier PmsUnlockManager implementation with an Aurelia PIN and a generated recovery key, and the native SQLCipher repository is not wired into live business reads/writes. The frontend still uses browser-side persistence as the active store. These are known mismatches against the final product decision and remain implementation blockers. Do not claim the final screen-lock flow or encrypted canonical storage is implemented until the legacy unlock design is replaced safely, existing data is preserved, and the new flow is compiled and device-tested.
+
+### Backup and restore
+
+- The approved zero-server backup direction is encrypted backup archives written to an owner-selected SAF folder, such as a Google Drive folder exposed by the installed DocumentsProvider. This is distinct from Drive REST API/OAuth.
+- After Google Sign-In and owner/property authorization, show one backup-discovery permission explanation. Allow launches the SAF picker; Deny is remembered and must not cause repeat automatic prompts or a persistent dashboard warning. Users can later initiate discovery in Settings → Backup & Storage.
+- Search only the folder the owner selected. If a matching backup is found, present Skip (left) and Restore (right). Never restore automatically.
+- Android Auto Backup is supplementary only, not a guaranteed PMS backup.
+- Encrypt backup archives before writing them. Never put plaintext database files or DEKs in the selected folder.
+- SAF permissions do not automatically transfer to a new phone. The owner must select the folder again.
+
+### Unresolved cross-device key recovery gate
+
+A device-bound Android Keystore key from the old phone cannot be used by the new phone. Google Sign-In and the replacement phone's own screen lock do not recover the old DEK. SAF only transports the encrypted archive. Cross-device encrypted restore must not be claimed as working until a secure key-transfer mechanism is approved that does not introduce a recovery PIN, passphrase or user-held recovery key. Do not derive the DEK from a Google ID token, store the DEK beside the backup, weaken encryption or silently generate a replacement DEK.
+
+### Error disclosure and intellectual property
+
+- User-facing errors must be generic and must not disclose stack traces, file paths, SQL statements, tokens, cryptographic material, guest details, payment details or raw provider responses.
+- Redact secrets and personal/financial data from logs and crash diagnostics.
+- Keep credentials and privileged API secrets out of HTML, JavaScript, APK resources and source control.
+- Use R8/resource shrinking, release debuggable=false, WebView debugging disabled, restrictive WebView settings, reviewed CSP and private/restricted repository access. Treat obfuscation as deterrence, not a guarantee against reverse engineering.
+- Protect app signing credentials outside source control and use protected release signing.
+
+No production-readiness claim is permitted until Credential Manager/Firebase, native screen-lock-bound DEK access, SQLCipher live-store migration, backup encryption, replacement-device key recovery, error redaction and physical-device verification pass.
