@@ -26,6 +26,7 @@ function validateEnvelope(payload) {
   if (parsed?.format !== "AURELIA-PMS-ENCRYPTED-BACKUP" || ![1, 2, 3].includes(parsed.v) || parsed.cipher !== "AES-256-GCM" || typeof parsed.ciphertext !== "string" || !parsed.ciphertext.length) {
     throw fail("DRIVE_BACKUP_NOT_ENCRYPTED", "Google Drive accepts only Aurelia encrypted backup envelopes.");
   }
+  if (!safeName(parsed.name)) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup filename is invalid.");
   if (parsed.v === 3) {
     const manifest = parsed.manifest;
     const recordKeys = ["rooms", "b", "g", "t", "sales", "exp", "inv", "led", "aud"];
@@ -100,7 +101,8 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
   }
   async function upload(token, name, encryptedEnvelope) {
     if (!safeName(name)) throw fail("DRIVE_BACKUP_INVALID", "Backup filename is invalid.");
-    validateEnvelope(encryptedEnvelope);
+    const parsedEnvelope = validateEnvelope(encryptedEnvelope);
+    if (name !== parsedEnvelope.name) throw fail("DRIVE_BACKUP_NAME_MISMATCH", "Drive filename must match the authenticated backup envelope.");
     const boundary = "aurelia-" + secureHex(16);
     const metadata = JSON.stringify({ name, parents: ["appDataFolder"], mimeType: "application/json" });
     const body = "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Type: application/json\r\n\r\n" + encryptedEnvelope + "\r\n--" + boundary + "--";
@@ -156,7 +158,8 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
   }
   async function uploadSnapshot(token, _requestedName, envelope, { retention = DEFAULT_BACKUP_RETENTION } = {}) {
     if (!Number.isInteger(retention) || retention < 1 || retention > 100) throw fail("DRIVE_RETENTION_INVALID", "Backup retention must be between 1 and 100.");
-    const remoteName = "aurelia-backup-" + Date.now() + "-" + secureHex(12) + ".json";
+    const parsedEnvelope = validateEnvelope(envelope);
+    const remoteName = parsedEnvelope.name;
     const created = await upload(token, remoteName, envelope);
     let files;
     try { files = await list(token); } catch (error) {
