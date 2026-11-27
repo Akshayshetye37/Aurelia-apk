@@ -181,3 +181,67 @@ Cash and bank transfer remain available for room folios and dining tickets. Cash
 On first launch after this workspace change, `loadState()` checks the previous `aurelia_lodge_v2` browser record and maps its rooms, bookings, guest profiles, payments, dining orders, sales, settings and audit data into the uploaded workspace schema. The old key is retained; it is not deleted. If the previous data cannot be validated or migrated, writes are blocked and the recovery message is shown rather than silently starting with empty sample data.
 
 The web build packages `assets/aurelia-upi.css`, the local QR engine and the Aurelia UPI module. No CDN chart, font or QR runtime is required.
+
+## Identity, local operation, screen lock and cloud backup decisions
+
+The following product decisions define the intended authentication, local-operation, screen-lock and cloud-backup experience. They are architectural requirements; their presence in this README does not claim that the native integrations are implemented or production-qualified.
+
+### Operating modes and Google Sign-In
+
+- Aurelia supports permanent **Local Mode** and optional **Google Sign-In**.
+- The first-run welcome screen offers **Continue with Google** and **Use without login**.
+- Google Sign-In is the only account-login method. Do not add email/password login, email verification, SMS OTP or recovery-key prompts to the Google login flow.
+- Use Android Credential Manager for Google account selection. Present eligible accounts through Google's supported account picker; allow the user to choose or add another Google account through that flow.
+- Validate the Google ID token with Firebase Authentication, then independently verify the authenticated UID's owner/property membership before granting cloud-linked owner access.
+- An authenticated but unauthorized Google account must not silently create a new property or gain access to an existing property.
+- Local Mode is not a trial or restricted demo. Core PMS operations use the same PMS engine and business rules in both modes and remain available offline.
+- Keep Google account identity, Aurelia owner identity, tenant/property identity and device/installation identity separate.
+- A Local Mode property may later be linked to an authorized Google owner from Settings. Linking must preserve the existing property ID, device identity and all local business records; it must not create a duplicate property or overwrite local data.
+- Signing out of Google or losing cloud authorization must not delete or disable the local property and its locally available PMS operations.
+
+### App screen lock
+
+- The **Use Screen Lock** control is available from the Dashboard and Settings.
+- When enabled, Aurelia uses Android's native device-credential authentication prompt (PIN, pattern or password, with supported biometric options where configured). Aurelia does not create, store or compare a separate copy of the device passcode.
+- Authenticate when a new Aurelia app process starts after the previous process was killed while in the background.
+- After one successful authentication, keep the app unlocked for the lifetime of that process. Do not prompt again for ordinary navigation, temporary backgrounding, notification-shade use, app switching or activity recreation while the process remains alive.
+- A process restart requires authentication again when the feature is enabled.
+- Use the device's currently configured screen-lock credential. Do not cache an old PIN, pattern or password.
+- Device credential removal, Keystore key invalidation, biometric enrollment changes and authentication failures must be handled explicitly and fail safely without silently destroying or resetting property data.
+- App screen lock is an app-entry/session control. Database encryption and database-key protection remain independent storage-security requirements; a screen-lock prompt alone does not make browser storage encrypted.
+
+### Cloud provider authorization and backup
+
+- Cloud backup is optional. Local PMS operation and local encrypted backup/restore must remain available without any cloud account.
+- Google Sign-In authenticates the Aurelia owner; it does **not** by itself grant Google Drive access.
+- After successful Google Sign-In and owner/property authorization, show an Aurelia explanation screen asking whether the user wants to connect an available supported cloud provider for backup. The user can choose **Allow** or **Deny**.
+- **Allow** starts the selected provider's genuine OAuth/authorization flow and requests only the minimum required scopes. The provider is considered connected only after authorization succeeds and is verified.
+- **Deny** completes sign-in and opens the PMS without cloud backup. Do not repeatedly show the prompt after a recorded denial; let the user change the choice in Settings.
+- Provide provider connection, disconnection, status and backup controls under **Settings → Backup & Storage**. A user can connect a provider later, switch providers, or disconnect one. Revoking/disconnecting cloud access must not delete local PMS data.
+- Do not claim Android can enumerate every cloud account, infer every provider's entitlements, or detect arbitrary cloud access. Provider availability is provider-specific and must be established through supported SDKs/account authorization or an explicit user selection.
+- Implement cloud providers behind a provider-neutral adapter contract (for example: availability/connection initiation, OAuth callback, account identity, capability reporting, upload, list, download, delete/retention where supported, revoke/disconnect). Keep provider tokens in secure native storage; never expose refresh tokens or client secrets to WebView JavaScript, browser storage, logs or APK resources.
+- Google Drive, Microsoft OneDrive and Dropbox may be evaluated as separate provider adapters. Do not claim any provider is supported until its adapter, authorization, security review and end-to-end tests are complete. The system must support a provider being unavailable, disconnected, revoked or temporarily offline without blocking local PMS use.
+- Before upload, create an authenticated encrypted backup archive. Verify upload completion and the stored object before reporting backup success. Never upload plaintext property backups.
+- Restore must validate authentication/integrity, schema and compatibility; preserve a restore point; stage and verify the restored data, including financial totals; and commit only after verification. A failed restore must leave the existing database intact.
+- Automatic backup must not be described as guaranteed while the app is stopped unless a qualified native background execution design and device tests support that guarantee.
+
+### Required product flows
+
+1. **First launch:** choose Local Mode or Google Sign-In.
+2. **Google path:** select Google account → Firebase authentication → owner/property authorization → Aurelia cloud-provider Allow/Deny explanation → provider-specific authorization if allowed → open PMS.
+3. **Local path:** initialize or unlock the local property → open the same PMS engine without Google or cloud authorization.
+4. **Later cloud changes:** Settings → Backup & Storage → connect, switch or disconnect a supported provider.
+5. **Later account linking:** Settings → Account → Connect Google Account; authenticate and authorize the existing local property without changing its property ID or replacing its records.
+
+### Implementation and release gates
+
+These decisions are not evidence that the features are already implemented. Before release, verify on supported physical Android devices:
+- Offline Local Mode creation, restart and continued operation.
+- Canonical SQLCipher-backed live reads/writes and safe legacy-data migration/rollback.
+- Native screen-lock prompt, process-kill/relaunch behavior, temporary background behavior and device-credential-change failure cases.
+- Google Credential Manager, Firebase token validation and owner/property authorization, including unauthorized-account denial.
+- Google Drive consent Allow/Deny, later connection, revocation and reconnection.
+- Each additional cloud provider's independent authorization and adapter contract.
+- Encrypted backup upload, negative integrity cases, restore staging, financial reconciliation and rollback.
+
+Until these gates pass, describe the relevant capability as planned or in progress, not production-ready.
