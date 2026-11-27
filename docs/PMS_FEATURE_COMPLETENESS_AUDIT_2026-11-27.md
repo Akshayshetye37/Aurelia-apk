@@ -35,9 +35,11 @@ This is a source audit. It does not claim a physical-device run, successful Goog
 
 ### P0 — Google identity and account model
 
-- No Google Sign-In authentication flow was found in maintained `main`.
+- No Google Sign-In authentication flow is integrated in maintained `main`.
+- A historical branch, `docs/google-device-credential-snapshot-2026-11-22`, contains a native Credential Manager Google ID-token flow (`GooglePrimaryAuthActivity`), Firebase Auth sign-in, a server-side `ensureOwnerMembership` callable, and App Check/Firestore membership contracts. It is a staging foundation, not a maintained-main feature or proof of live Firebase configuration.
+- That primary-auth snapshot is 3,775 commits ahead and 357 behind main at audit time. Its Android/Firebase modules, rules, deployment workflow and tests must be selectively reviewed and ported; the branch also contains unrelated payment-backend work that is explicitly excluded.
 - The historical Drive-backup implementation explicitly treats Google Drive authorization as separate from Google Sign-In. A Drive grant must not be represented as PMS login.
-- A real sign-in feature still needs an agreed identity provider, OAuth client configuration, redirect/package/signing configuration, account lifecycle, session handling, authorization rules and recovery policy. No client secret or service-account credential should be embedded in the APK.
+- A production sign-in still needs the actual Firebase project configuration, Web OAuth client ID, exact Android package/signing fingerprints, App Check/Play Integrity deployment and physical-device verification. No client secret or service-account credential should be embedded in the APK.
 
 ### P1 — encrypted Google Drive backup
 
@@ -81,6 +83,7 @@ This is a source audit. It does not claim a physical-device run, successful Goog
 |---|---|---|
 | `feat/folio-checkout-cash-whatsapp-20261127` | Checkout cash confirmation and direct UPI/WhatsApp flow | Main already contains the core UPI route and related contracts; cherry-pick only a demonstrable missing behavior |
 | `work/brand-timezone-dashboard-20261127` | Hotel logo file preview | Preview-only; not a durable upload |
+| `docs/google-device-credential-snapshot-2026-11-22` | Google Credential Manager sign-in, Firebase owner membership and App Check contracts | Staging foundation; 3,775 ahead / 357 behind; selectively port only after Firebase and Android configuration review |
 | `feature/owner-google-drive-backup-v2` | Encrypted Drive backup, restore and native Drive authorization | Valuable candidate; too diverged for wholesale merge |
 | `feature/phase-7-pms-persistence` / `fix/p0-storage-authority` | PMS storage-authority and recovery work | Review module-by-module; do not claim canonical cutover without verified integration |
 | `feature/bt-printing` | Printer catalog, print queue, ESC/POS/ZPL and transports | Feature disabled by default; separate device qualification required |
