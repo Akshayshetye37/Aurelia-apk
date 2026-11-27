@@ -931,6 +931,12 @@ body[data-theme="light"] .chip.on { background: #143d2d; color: #fff; border-col
   .print-area { position: fixed; left: 0; top: 0; width: 100%; margin: 0; box-shadow: none; border: 0; }
   .no-print { display: none !important; }
 }
+
+:focus-visible { outline: 3px solid var(--gold-bright); outline-offset: 3px; }
+button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 </style>
 <link rel="stylesheet" href="./assets/aurelia-upi.css">
 </head>
