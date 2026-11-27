@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 const [patch, plugin, client, protocol, html] = await Promise.all([
   read('../scripts/patch-android.js'),
   read('../android/templates/AureliaPayBridgePlugin.java'),
@@ -38,16 +38,16 @@ test('protocol v1 advertises no payment or provider-management capability', () =
   assert.doesNotMatch(client, /CAP_PAYMENT_CREATE/);
 });
 
-test('settings page exposes connection controls without activating payment rails', () => {
-  assert.match(html, /Aurelia Gateway connection/);
-  assert.match(html, /Connect Aurelia Gateway/);
-  assert.match(html, /render\(\);refreshAureliaGateway\(\)/);
-  assert.match(html, /Only Aurelia UPI is enabled/);
+test('uploaded PMS does not expose Aurelia Gateway as a payment method or collection dependency', () => {
+  assert.doesNotMatch(html, /Connect Aurelia Gateway|Aurelia Gateway connection/);
+  assert.match(html, /providerGatewaysEnabled: false/);
+  assert.match(html, /enabledMethods: Object\.freeze\(\["AURELIA_UPI", "CASH", "BANK_TRANSFER"\]\)/);
+  assert.match(html, /Payment is confirmed only after the receiving bank credit is verified/);
 });
 
-test('Aurelia PMS remains the fixed application title and shell brand', () => {
-  assert.match(html, /<title>Aurelia PMS<\/title>/);
-  assert.match(html, /<strong>AURELIA PMS<\/strong>/);
+test('uploaded application identity remains Aurelia PMS', () => {
+  assert.match(html, /<title>Aurelia PMS/);
+  assert.match(html, /name="application-name" content="Aurelia PMS"/);
+  assert.match(html, /Aurelia PMS/);
   assert.doesNotMatch(html, /SOVEREIGN HOSPITALITY/);
-  assert.match(html, /document\.title='Aurelia PMS'/);
 });
