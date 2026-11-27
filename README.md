@@ -245,3 +245,23 @@ These decisions are not evidence that the features are already implemented. Befo
 - Encrypted backup upload, negative integrity cases, restore staging, financial reconciliation and rollback.
 
 Until these gates pass, describe the relevant capability as planned or in progress, not production-ready.
+
+### Cloud consent and Google Drive backup location — final product decision
+
+This section supersedes any earlier wording in this README that suggests showing a multi-provider picker during Google Sign-In.
+
+- After Google Sign-In and owner/property authorization, show one Aurelia Google Drive consent explanation with **Allow** and **Deny**.
+- **Allow** starts Google's actual Drive authorization flow. **Deny** continues into the PMS without cloud backup.
+- Do not show a cloud-provider chooser during login. Do not automatically connect another cloud provider.
+- If the user denies or skips Drive authorization, they can connect Google Drive later under **Settings → Backup & Storage**. Cloud connection and management remain in Settings.
+- Google Sign-In and Google Drive authorization remain separate grants. Signing in does not itself authorize Drive.
+- The recommended backup destination is a user-visible folder in the signed-in user's Drive: **My Drive/Aurelia PMS Backups/[Property Name]/**. Aurelia creates and manages its own folder and backup files there.
+- Prefer the narrow Google Drive drive.file scope for files created by Aurelia (and files explicitly opened/shared with Aurelia through supported flows). Do not request broad full-Drive access merely to manage Aurelia's own backup folder.
+- Do not use the hidden appDataFolder as the default destination for the primary owner-facing backup archive: it is not visible in Drive's normal UI and is intended for app-specific data. It may be considered separately for internal app metadata, not as a substitute for a visible owner-managed backup location.
+- Each backup is a versioned, authenticated encrypted archive. Encrypt locally before upload; never upload plaintext PMS data, database keys, PINs, recovery secrets or provider tokens.
+- Maintain a backup manifest containing only the necessary metadata (for example schema version, property identifier, backup identifier, creation time, archive size and integrity/authentication metadata). Do not expose guest or financial details in filenames.
+- Keep multiple verified restore points with a documented retention policy. Upload to a temporary/new version, verify the stored object, then mark that version as successful. Never overwrite the only known-good backup before a new upload is verified.
+- Settings must show provider connection status, destination folder, last successful backup, backup history, manual backup, restore and disconnect actions. Disconnecting Drive must not delete local data.
+- Restore must authenticate/decrypt and validate the archive, preserve a local restore point, stage and verify the restored database and financial totals, and only then commit. A failed restore must leave current data intact.
+- The user-visible folder can be deleted or modified by its owner. Aurelia must detect missing or inaccessible backup files and report the condition; it must not claim a backup exists merely because a previous upload once succeeded.
+- Cloud backup is optional. Local PMS operation and local encrypted export/restore remain available when Drive is denied, disconnected, unavailable or out of quota.
