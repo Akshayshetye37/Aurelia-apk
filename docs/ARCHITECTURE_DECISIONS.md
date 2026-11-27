@@ -33,15 +33,21 @@ The native SQLite implementation must not be promoted to canonical until all of 
 - Failed initialization, migration or integrity checks fail closed without silently falling back to weaker storage.
 - Backup/restore verifies authentication, integrity, record counts and financial ledger continuity.
 
-### Implemented native foundation (not a production cutover)
+### Native foundation and approved unlock direction (not a production cutover)
 
-The generated Android project includes SQLCipher for Android 4.20.0, AndroidX SQLite 2.7.0 and AndroidX Biometric 1.2.0, following the upstream [SQLCipher Android integration guide](https://github.com/sqlcipher/sqlcipher-android). The one random 256-bit DEK is wrapped independently by (1) an 8–12 digit user PIN, (2) a high-entropy recovery key shown once, and (3) an optional strong-biometric key stored in Android Keystore and requiring authentication for each cryptographic operation. PIN and recovery envelope keys use PBKDF2-HMAC-SHA256 with 600,000 iterations and AES-256-GCM; envelopes are versioned and factor-specific AAD-bound. Native dialogs collect secrets and display the recovery key; secrets are not passed as WebView arguments. Failed PIN/recovery attempts receive a persistent exponential delay. Missing/corrupt required PIN or recovery envelopes, or a database without configured unlock envelopes, fails closed; a missing/invalidated optional biometric key disables only biometric unlock, leaving PIN and recovery available. It never creates a replacement DEK.
+The generated Android project includes SQLCipher for Android 4.20.0, AndroidX SQLite 2.7.0 and AndroidX Biometric 1.1.0. The native repository verifies SQLCipher status and database integrity and enables SQLCipher memory sanitization. This is a source foundation only: it is not yet wired to live UI/domain reads and writes, and no canonical storage cutover has occurred.
 
-The repository opens through SQLCipher's `SQLiteOpenHelper`, verifies `PRAGMA cipher_status`, `PRAGMA integrity_check` and `PRAGMA cipher_integrity_check`, and enables SQLCipher memory sanitization. See the [SQLCipher integrity and status PRAGMAs](https://www.zetetic.net/sqlcipher/sqlcipher-api/). Generic WebView writes are restricted to non-domain metadata/backup stores; WebView-accessible database wipe and authority-promotion methods are not exposed.
+The previous source implementation that wrapped the DEK with an Aurelia PIN, a user-held recovery key and an optional biometric envelope is **rejected by the product owner**. Do not expose or extend that design. The approved direction is:
+- Google Mode: Android Credential Manager Google Sign-In, Firebase Authentication token validation, then independent Aurelia owner/property authorization.
+- Local database unlock: Android's native device credential prompt (device PIN/pattern/password and supported biometrics) authorizes a hardware-backed Android Keystore key that protects the random 256-bit SQLCipher DEK.
+- No Aurelia email/password, email verification, email OTP, SMS OTP, separate Aurelia database PIN, recovery PIN, recovery passphrase or user-held recovery key.
+- The Android device credential is handled by Android and is never collected by Aurelia, derived into a database key, or persisted by the app.
+- Keep the DEK out of WebView memory and browser storage. Expose only narrow native repository operations through the validated Capacitor bridge.
+- If device authentication is unavailable, cancelled or the Keystore key is invalidated, fail closed and preserve the database. Never silently generate a replacement DEK for an existing database.
 
-PIN, biometric and recovery-key envelopes now independently unwrap the same DEK. OTP is an identity/recovery-authorization factor only: it must never derive, replace, wrap or regenerate the DEK; SMS alone cannot restore database access. Biometric unlock is opt-in and can be invalidated by biometric enrollment changes; users must retain their PIN or recovery key as the fallback. The native repository is not wired into live UI/domain reads and writes, and no legacy migration or rollback has been run.
+A device-bound Keystore key cannot be used on a replacement phone. Google Sign-In and the new phone's screen lock do not recover the original device's DEK. SAF transfers encrypted backup files, not the original Keystore key. Cross-device restore is therefore a release blocker until a secure key-transfer design is approved that does not introduce a user-held recovery PIN, passphrase or key. Do not weaken encryption or store the DEK alongside the backup.
 
-Until all gates pass, existing browser storage remains the live compatibility store. Do not claim native SQLCipher is canonical or migrate live user data.
+Until SQLCipher is connected to live business reads/writes and the complete unlock, migration, rollback and device test gates pass, browser storage remains the live compatibility store. Do not claim native SQLCipher is canonical or migrate live user data.
 
 ## 3. Financial and booking invariants
 
@@ -95,3 +101,39 @@ Keep source repositories private, restrict collaborators, protect signing creden
 | Brand impersonation | Trademark, official signing identity and monitoring | Clearance record and takedown evidence |
 
 No migration, native-storage cutover or production-readiness claim is accepted until its corresponding tests pass on supported Android devices. APK build success alone is not security qualification.
+
+
+## 8. Final authentication, local unlock and backup UX decision — 28 November 2026
+
+This section supersedes any conflicting authentication or key-recovery wording above.
+
+### Google account authentication
+
+- Google Sign-In through Credential Manager is the only account-login method in Google Mode.
+- Validate the Google ID token through Firebase Authentication and independently authorize the resulting account against the Aurelia owner/property membership.
+- No email/password login, email verification links, email OTP, SMS OTP, verification messages, separate Aurelia password, recovery PIN, recovery passphrase or user-held recovery key.
+- Local Mode remains permanent, offline-capable and uses the same PMS engine/business rules without requiring Google.
+
+### Local database unlock
+
+- For a Google-linked property, complete Google authentication and owner/property authorization before opening its encrypted local database.
+- Require Android's native device-credential authentication prompt for a new app process when the app's screen-lock protection is enabled. Accept the device's PIN, pattern or password and supported biometric authenticators.
+- Protect the random 256-bit SQLCipher DEK using an authentication-bound Android Keystore key. The user's device credential is an Android-managed authorization factor, not the DEK.
+- Keep the database unlocked only for the lifetime of the authenticated process/session. Do not prompt on ordinary navigation, temporary backgrounding or activity recreation while the process remains alive. Clear in-memory key material on explicit lock and process termination.
+- Handle missing secure lock screen, user cancellation, authentication errors, credential changes and Keystore invalidation without deleting or replacing existing data.
+- Google account authentication is not proof of device ownership and cannot independently unlock a device-bound Keystore key.
+
+### Storage, backup and error disclosure
+
+- HTML/JavaScript are presentation only. The target canonical business store is native SQLCipher; browser storage must not remain the authority for guest, booking, folio or payment records after a verified migration/cutover.
+- Store no database keys, credentials, tokens or provider secrets in HTML, JavaScript, localStorage, crash messages or logs.
+- Keep local SQLCipher as the canonical source of truth. Google Drive is optional backup storage only, using an owner-selected SAF folder; encrypt archives before writing them.
+- Backup discovery consent is shown once after Google Sign-In and owner/property authorization. Allow opens the SAF folder picker; Deny is remembered and does not trigger automatic repeat prompts or a dashboard warning. The user can initiate discovery later in Settings → Backup & Storage.
+- A matching backup is shown with Skip (left) and Restore (right); never restore automatically. Verify owner/property binding, authentication/integrity, schema and financial continuity before staged restore.
+- Android Auto Backup is supplementary only. Do not rely on the 25 MB quota as the PMS backup.
+- User-facing errors must not expose stack traces, file paths, SQL, secrets, guest/payment details or raw provider responses. Logs and diagnostics must redact sensitive values.
+- R8, minification and obfuscation are defense-in-depth only; they cannot make client-shipped code impossible to reverse engineer.
+
+### Release gates
+
+Credential Manager/Firebase integration, device-credential-bound DEK wrapping, native SQLCipher live-store cutover, browser-data migration/rollback, SAF backup, replacement-device key recovery, error redaction and physical-device tests must all pass before the corresponding capabilities are described as production-ready.
