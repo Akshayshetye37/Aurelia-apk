@@ -183,13 +183,13 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
 
   @PluginMethod public void migrateWorkspace(PluginCall call) {
     String id = call.getString("migrationId"), source = call.getString("sourceKey");
-    String timestamp = call.getString("sourceTimestamp"), raw = call.getString("raw");
-    if (empty(id) || empty(source) || timestamp == null || raw == null || raw.isEmpty()) {
+    String timestamp = call.getString("sourceTimestamp"), sourceRaw = call.getString("sourceRaw"), raw = call.getString("raw");
+    if (empty(id) || empty(source) || timestamp == null || sourceRaw == null || sourceRaw.isEmpty() || raw == null || raw.isEmpty()) {
       call.reject("A complete source snapshot is required for migration.", "PMS_WORKSPACE_MIGRATION_INVALID"); return;
     }
     io.execute(() -> {
       try {
-        JSONObject result = repository().migrateWorkspace(id, source, timestamp, raw);
+        JSONObject result = repository().migrateWorkspace(id, source, timestamp, sourceRaw, raw);
         boolean marked = getContext().getSharedPreferences("aurelia_native_storage_v1", android.content.Context.MODE_PRIVATE)
             .edit().putBoolean("workspace_ever_canonical", true).putString("workspace_migration_id", id).commit();
         if (!marked) throw new IllegalStateException("native_workspace_marker_write_failed");

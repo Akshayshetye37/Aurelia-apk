@@ -2561,6 +2561,8 @@ module.exports = QRCode;
   let nativeStorageActive = false;
   let nativeStorageMigrationPending = false;
   let nativeWorkspaceVersion = 0;
+  let nativeMigrationSourceRaw = null;
+  let nativeMigrationSourceKey = "";
   let nativePmsPlugin = null;
 
   function setPersistenceState(state, message) {
@@ -2846,16 +2848,15 @@ module.exports = QRCode;
   async function migrateNativeWorkspace() {
     if (!nativeStorageMigrationPending || !nativePmsPlugin) return true;
     const raw = JSON.stringify(S);
+    const sourceRaw = nativeMigrationSourceRaw || raw;
+    const sourceKey = nativeMigrationSourceKey || (DB_NAME + "/" + DB_STORE + "/" + DB_KEY);
     const migrationId = "aurelia-workspace-v1";
     const result = await nativePmsPlugin.migrateWorkspace({
-      migrationId,
-      sourceKey: DB_NAME + "/" + DB_STORE + "/" + DB_KEY,
-      sourceTimestamp: new Date().toISOString(),
-      raw
+      migrationId, sourceKey, sourceTimestamp: new Date().toISOString(), sourceRaw, raw
     });
     const verified = await nativePmsPlugin.getWorkspaceState();
     const workspace = verified && verified.workspace;
-    if (!workspace || workspace.raw !== raw || workspace.sha256 !== result.sha256
+    if (!workspace || workspace.raw !== raw || workspace.sha256 !== result.sha256 || !result.sourceSha256
         || Number(workspace.version) !== Number(result.version) || Number(result.version) !== 1) {
       throw new Error("NATIVE_SQLCIPHER — migrated workspace failed exact read-back verification.");
     }
@@ -2888,6 +2889,8 @@ module.exports = QRCode;
       deviceDbReadCompleted = true;
       deviceRecordPresent = stored != null;
       if (stored != null) {
+        nativeMigrationSourceRaw = typeof stored === "string" ? stored : JSON.stringify(stored);
+        nativeMigrationSourceKey = DB_NAME + "/" + DB_STORE + "/" + DB_KEY;
         const parsed = typeof stored === "string" ? JSON.parse(stored) : stored;
         normalizeLoadedState(parsed);
         const normalized = JSON.stringify(S);
@@ -2898,6 +2901,8 @@ module.exports = QRCode;
       }
 
       if (legacy.raw) {
+        nativeMigrationSourceRaw = legacy.raw;
+        nativeMigrationSourceKey = "legacy-localstorage:" + STORAGE_KEY;
         const parsed = JSON.parse(legacy.raw);
         normalizeLoadedState(parsed);
         await writeDeviceRecord(persistenceDb, JSON.stringify(S));
@@ -2908,6 +2913,8 @@ module.exports = QRCode;
 
       if (projectLegacy.raw) {
         try {
+          nativeMigrationSourceRaw = projectLegacy.raw;
+          nativeMigrationSourceKey = "legacy-project-state:aurelia_lodge_v2";
           normalizeLoadedState(migrateLegacyProjectState(JSON.parse(projectLegacy.raw)));
           const normalized = JSON.stringify(S);
           await writeDeviceRecord(persistenceDb, normalized);
@@ -2929,7 +2936,9 @@ module.exports = QRCode;
       if (projectLegacy.error) throw new Error("Could not read the previous Aurelia PMS data key safely.");
 
       normalizeLoadedState(S);
-      await writeDeviceRecord(persistenceDb, JSON.stringify(S));
+      nativeMigrationSourceRaw = JSON.stringify(S);
+      nativeMigrationSourceKey = "new-empty-workspace";
+      await writeDeviceRecord(persistenceDb, nativeMigrationSourceRaw);
       await requestPersistentStorage();
       markDeviceSaved();
       return true;
@@ -2945,6 +2954,8 @@ module.exports = QRCode;
       persistenceDb = null;
       if (legacy.raw) {
         try {
+          nativeMigrationSourceRaw = legacy.raw;
+          nativeMigrationSourceKey = "legacy-localstorage:" + STORAGE_KEY;
           normalizeLoadedState(JSON.parse(legacy.raw));
           persistenceLoadBlocked = false;
           setPersistenceState("fallback", "IndexedDB is unavailable. Records were loaded from legacy browser storage; persistence is best-effort and may be cleared by the browser. Export a JSON backup.");
@@ -2957,6 +2968,8 @@ module.exports = QRCode;
       }
       if (projectLegacy.raw) {
         try {
+          nativeMigrationSourceRaw = projectLegacy.raw;
+          nativeMigrationSourceKey = "legacy-project-state:aurelia_lodge_v2";
           normalizeLoadedState(migrateLegacyProjectState(JSON.parse(projectLegacy.raw)));
           const normalized = JSON.stringify(S);
           window.localStorage.setItem(STORAGE_KEY, normalized);
@@ -2983,6 +2996,8 @@ module.exports = QRCode;
       if (!legacy.error && !deviceRecordPresent && (!deviceDbWasOpened || deviceDbReadCompleted)) {
         try {
           const raw = JSON.stringify(S);
+          nativeMigrationSourceRaw = raw;
+          nativeMigrationSourceKey = "new-empty-workspace";
           window.localStorage.setItem(STORAGE_KEY, raw);
           if (window.localStorage.getItem(STORAGE_KEY) !== raw) throw new Error("Legacy storage read-back verification failed.");
           persistenceLoadBlocked = false;

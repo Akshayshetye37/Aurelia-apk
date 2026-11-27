@@ -8,6 +8,9 @@ test('SQLCipher repository provides versioned workspace read, copy-first migrati
   const repository = await read('android/templates/LocalPmsRepository.java');
   assert.match(repository, /getWorkspaceState\(\)/);
   assert.match(repository, /migrateWorkspace\(/);
+  assert.match(repository, /sourceRawJson/);
+  assert.match(repository, /sourceSha256/);
+  assert.match(repository, /verifyMigrationSource/);
   assert.match(repository, /saveWorkspace\(/);
   assert.match(repository, /pms_legacy_backup/);
   assert.match(repository, /sha256Hex\(rawJson\)/);
@@ -27,6 +30,7 @@ test('Capacitor bridge exposes only authenticated workspace operations', async (
   assert.match(plugin, /ensureDatabaseUnlocked/);
   assert.match(plugin, /getWorkspaceState/);
   assert.match(plugin, /migrateWorkspace/);
+  assert.match(plugin, /sourceRaw = call.getString\("sourceRaw"\)/);
   assert.match(plugin, /saveWorkspace/);
   assert.match(plugin, /android-keystore-auth-per-use-device-credential/);
   assert.match(plugin, /workspace_ever_canonical/);
@@ -38,6 +42,8 @@ test('native app boots from SQLCipher and saves to it after migration without br
   assert.match(html, /ensureDatabaseUnlocked/);
   assert.match(html, /getWorkspaceState/);
   assert.match(html, /migrateWorkspace/);
+  assert.match(html, /nativeMigrationSourceRaw/);
+  assert.match(html, /sourceRaw, raw/);
   assert.match(html, /saveWorkspace/);
   assert.match(html, /nativeStorageActive/);
   assert.match(html, /nativeWorkspaceVersion/);
