@@ -3880,7 +3880,7 @@ window.printGuestPreview=function(){
    panel.querySelectorAll('#pa,#pr,#pc,#pm,#folio-upi-dynamic,.exact-upi-card,button[onclick^="pay("],button[onclick^="out("]').forEach(node=>node.remove());
    const due=Math.max(0,Number(dueB(booking))||0),actions=document.createElement('div');
    actions.className='au-folio-actions';
-   actions.innerHTML=due>0?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="openAureliaUpiForFolio('+Number(id)+')">Collect with Aurelia UPI · '+esc(K(due))+'</button><div class="lab" style="margin-top:8px">Payment must be verified in the Aurelia UPI review desk before the folio can be closed.</div>':(booking.st==='in'?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="outB('+Number(id)+')">Check out</button>':'<div class="lab">No outstanding balance.</div>');
+   actions.innerHTML=due>0?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="openAureliaUpiForFolio('+Number(id)+')">Generate QR & Share Payment Link · '+esc(K(due))+'</button><div class="lab" style="margin-top:8px">Creates the exact-amount Aurelia UPI QR and WhatsApp guest-share action. Verify bank credit before posting.</div>':(booking.st==='in'?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="outB('+Number(id)+')">Check out</button>':'<div class="lab">No outstanding balance.</div>');
    panel.appendChild(actions);return result;
   };
   wrappedFolio.__aureliaUpiFolio=true;window.folio=wrappedFolio;
