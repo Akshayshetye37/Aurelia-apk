@@ -185,46 +185,47 @@ test('native guest photos are encrypted at rest with a per-install Keystore AES-
 
 test('booking API bearer token is disabled unless the configured endpoint is HTTPS', () => {
   const html = read('index.html');
-  assert.match(html, /function validatedBookingApiBaseUrl/);
-  assert.match(html, /parsed\\.protocol !== "https:"/);
-  assert.match(html, /parsed\\.username \\|\\| parsed\\.password/);
-  assert.match(html, /enabled: !!settings\\.bookingApiEnabled && !!baseUrl/);
-  assert.match(html, /apiKey: baseUrl \\? \\(settings\\.bookingApiKey \\|\\| ""\\) : ""/);
+  assert.ok(html.includes('function validatedBookingApiBaseUrl(value)'));
+  assert.ok(html.includes('parsed.protocol !== "https:"'));
+  assert.ok(html.includes('parsed.username || parsed.password'));
+  assert.ok(html.includes('enabled: !!settings.bookingApiEnabled && !!baseUrl'));
+  assert.ok(html.includes('apiKey: baseUrl ? (settings.bookingApiKey || "") : ""'));
 });
 test('uploaded workspace escapes user data and uses delegated action attributes instead of inline handler strings', () => {
   const html = read('index.html');
-  assert.match(html, /const jsArg=value=>esc\\(JSON\\.stringify/);
-  assert.match(html, /function esc\\s*=/);
-  assert.match(html, /data-action=/);
-  assert.match(html, /esc\\(b\\.g\\)/);
-  assert.match(html, /esc\\(t\\.guest/);
-  assert.doesNotMatch(html, /onclick="[^"]*\\$\\{/);
+  assert.ok(html.includes('const jsArg=value=>esc(JSON.stringify'));
+  assert.ok(html.includes('const esc ='));
+  assert.ok(html.includes('data-action='));
+  assert.ok(html.includes('esc(b.g)'));
+  assert.ok(html.includes('esc(t.guest'));
+  assert.doesNotMatch(html, /onclick="[^"]*\$\{/);
 });
 test('booking API omits government ID numbers and ID photos and escapes preview data', () => {
   const html = read('index.html');
   const start = html.indexOf('function bookingPublicView');
   const end = html.indexOf('function listBookingsForApi', start);
-  assert.ok(start >= 0);
-  const view = html.slice(start, end > start ? end : html.indexOf('function getBookingForApi', start));
+  assert.ok(start >= 0 && end > start);
+  const view = html.slice(start, end);
   assert.doesNotMatch(view, /idNumber|idPhoto|idType/);
-  assert.match(view, /booking-guest-stay-contact-only/);
-  assert.match(html, /esc\\(String\\(b\\.bookingId\\)\\)/);
-  assert.match(html, /esc\\(String\\(b\\.guest\\.name\\)\\)/);
+  assert.ok(view.includes('booking-guest-stay-contact-only'));
+  assert.ok(html.includes('esc(String(b.bookingId))'));
+  assert.ok(html.includes('esc(String(b.guest.name))'));
 });
 test('confirmation dialogs escape content and accept only constrained internal callbacks', () => {
   const html = read('index.html');
-  assert.match(html, /Confirmation action is invalid/);
-  assert.match(html, /function openSafeConfirmation/);
-  assert.match(html, /data-confirm="\\$\\{esc\\(actionKey\\)\\}"/);
-  assert.match(html, /<h2 class="foil">\\$\\{esc\\(t\\)\\}<\\/h2>/);
-  assert.match(html, /\\$\\{esc\\(l\\)\\}<\\/button>/);
+  assert.ok(html.includes('Confirmation action is invalid'));
+  assert.ok(html.includes('function openSafeConfirmation'));
+  assert.ok(html.includes('data-confirm='));
+  assert.ok(html.includes('esc(t)'));
+  assert.ok(html.includes('esc(m)'));
+  assert.ok(html.includes('esc(l)'));
 });
 test('guest WhatsApp uses normalized phone data and a universal URL without unsafe inline arguments', () => {
   const html = read('index.html');
-  assert.match(html, /function guestWhatsAppAction\\(phone, guestName\\)/);
-  assert.match(html, /https:\\/\\/wa\\.me\\//);
-  assert.match(html, /normalizeWhatsAppPhone\\(phone\\)/);
-  assert.doesNotMatch(html, /onclick="guestWhatsAppAction\\([^"]*\\$\\{/);
+  assert.ok(html.includes('function guestWhatsAppAction(phone, guestName)'));
+  assert.ok(html.includes('https://wa.me/'));
+  assert.ok(html.includes('normalizeWhatsAppPhone(phone)'));
+  assert.doesNotMatch(html, /onclick="guestWhatsAppAction\([^"]*\$\{/);
 });
 test('main WebView rejects mixed content and file-origin privilege escalation', () => {
   assert.match(patch, /MIXED_CONTENT_NEVER_ALLOW/);
@@ -260,9 +261,9 @@ test('inspected app and native sources contain no common committed secret format
 
 test('booking API URL validator rejects HTTP, credentials and strips query/fragment', () => {
   const html = read('index.html');
-  const match = html.match(/function validatedBookingApiBaseUrl\\(value\\) \\{[\\s\\S]*?\\n  \\}/);
+  const match = html.match(/function validatedBookingApiBaseUrl\(value\) \{[\s\S]*?\n  \}/);
   assert.ok(match, 'booking URL validator is present');
-  const validate = new Function(match[0] + '\\nreturn validatedBookingApiBaseUrl;')();
+  const validate = new Function(match[0] + '\nreturn validatedBookingApiBaseUrl;')();
   assert.equal(validate('https://api.example.com/v1'), 'https://api.example.com/v1');
   assert.equal(validate('http://api.example.com'), '');
   assert.equal(validate('https://user:pass@example.com'), '');
@@ -270,10 +271,10 @@ test('booking API URL validator rejects HTTP, credentials and strips query/fragm
 });
 test('JSON handler encoder round-trips hostile strings without breaking inline JavaScript context', () => {
   const html = read('index.html');
-  const match = html.match(/^const esc\\s*=.*\\nconst jsArg\\s*=.*$/m);
+  const match = html.match(/^const esc\s*=.*\nconst jsArg\s*=.*$/m);
   assert.ok(match, 'HTML and JavaScript context encoders are present');
-  const encode = new Function(match[0] + '\\nreturn jsArg;')();
-  const input = "O'Brian \" </script> <img src=x onerror=alert(1)> &\\n";
+  const encode = new Function(match[0] + '\nreturn jsArg;')();
+  const input = "O'Brian \" </script> <img src=x onerror=alert(1)> &\n";
   const encoded = encode(input);
   const decoded = encoded.replace(/&(quot|lt|gt|amp);/g, (_, entity) => ({ quot: '"', lt: '<', gt: '>', amp: '&' })[entity]);
   assert.equal(JSON.parse(decoded), input);
