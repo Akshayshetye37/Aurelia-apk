@@ -84,7 +84,8 @@ test('restaurant settlement sheet exposes cash and a shareable Aurelia UPI sessi
   const sheet = html.slice(start, end);
   assert.match(sheet, /data-pay="UPI"/);
   assert.match(sheet, /Aurelia UPI/);
-  assert.match(sheet, /data-pay="Cash"/);\n  assert.match(sheet, /Create shareable Aurelia UPI request/);
+  assert.match(sheet, /data-pay="Cash"/);
+  assert.match(sheet, /Create shareable Aurelia UPI request/);
 });
 
 
