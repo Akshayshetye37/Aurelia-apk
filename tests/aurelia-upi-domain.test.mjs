@@ -27,6 +27,9 @@ const base = {
   expiresAt: '2026-11-26T04:05:00.000Z',
   currency: 'INR',
   rail: 'AURELIA_UPI',
+  kind: 'folio',
+  bookingId: 'booking-test',
+  guestName: 'Test Guest',
   status: SESSION_STATUS.ACTIVE
 };
 
@@ -292,4 +295,33 @@ test('bank statement CSV date parsing treats slash dates as Indian day-first dat
   assert.equal(parsed.rows[0].receivedAt.slice(0, 10), '2026-04-03');
   const invalid = 'Date,Description,UTR,Credit\n31/02/2026,"UPI/CR/123456789012",123456789012,10.00';
   assert.equal(parseBankStatementCsv(invalid).rows.length, 0);
+});
+
+test('payment sessions preserve the guest phone for addressed WhatsApp sharing', () => {
+  const session = createPaymentSession({
+    ...base,
+    id: 'whatsapp-guest',
+    guestName: 'Aarav Deshmukh',
+    guestPhone: '+91 98220 51204'
+  }, Date.parse(base.createdAt));
+  assert.equal(session.guestPhone, '+91 98220 51204');
+  assert.equal(session.upiUri && new URL(session.upiUri).searchParams.get('am'), '1250.50');
+});
+
+
+test('incoming UPI alerts only suggest named guest folio sessions, never dining or general collections', () => {
+  const evidence = { amountPaise: 1208000, receivedAt: '2026-11-27T10:02:00.000Z', utr: '433290184722' };
+  const base = {
+    currency: 'INR', rail: 'AURELIA_UPI', amountPaise: 1208000,
+    createdAt: '2026-11-27T10:00:00.000Z', expiresAt: '2026-11-27T10:05:00.000Z',
+    status: 'ACTIVE', guestName: 'Aarav Deshmukh'
+  };
+  const folio = { ...base, id: 'UPI-901', kind: 'folio', bookingId: 101 };
+  const dining = { ...base, id: 'UPI-902', kind: 'restaurant', bookingId: null };
+  const general = { ...base, id: 'UPI-903', kind: 'general', bookingId: null };
+  const matched = matchEvidenceToSessions(evidence, [dining, general, folio]);
+  assert.equal(matched.decision, 'REVIEW_REQUIRED');
+  assert.equal(matched.suggestedSessionId, 'UPI-901');
+  assert.deepEqual(matched.candidates.map(row => row.id), ['UPI-901']);
+  assert.equal(matchEvidenceToSessions(evidence, [dining, general]).decision, 'UNMATCHED');
 });

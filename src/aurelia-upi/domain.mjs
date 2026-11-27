@@ -119,6 +119,13 @@ export function createPaymentSession(input = {}, nowMs = Date.now()) {
     bookingId: input.bookingId == null ? null : safeText(input.bookingId, 128, "Booking ID"),
     tableId: input.tableId == null ? null : safeText(input.tableId, 64, "Table ID"),
     guestName: String(input.guestName || "").trim().slice(0, 100),
+    guestPhone: (() => {
+      const phone = String(input.guestPhone ?? "").trim();
+      if (phone.length > 20 || /[\x00-\x1f\x7f]/.test(phone)) {
+        throw new TypeError("Guest phone is invalid.");
+      }
+      return phone;
+    })(),
     room: String(input.room || "").trim().slice(0, 64),
     amountPaise,
     currency: "INR",
@@ -161,7 +168,7 @@ export function transitionSession(session, nextStatus, patch = {}, nowMs = Date.
     throw error;
   }
   const protectedFields = new Set([
-    "id", "kind", "bookingId", "tableId", "guestName", "room",
+    "id", "kind", "bookingId", "tableId", "guestName", "guestPhone", "room",
     "amountPaise", "currency", "rail", "vpa", "payeeName", "reference",
     "note", "createdAt", "upiUri"
   ]);
@@ -437,6 +444,9 @@ export function matchEvidenceToSessions(evidence, sessions, {
   const receivedAt = Date.parse(evidence.receivedAt);
   if (!Number.isFinite(receivedAt)) return { decision: "UNMATCHED", reason: "invalid_timestamp", candidates: [] };
   const candidates = (Array.isArray(sessions) ? sessions : []).filter(session => {
+    // Incoming alerts are auto-suggested only against a named, open guest folio.
+    // General and dining collections remain unmatched rather than being attributed to a room guest.
+    if (session.kind !== "folio" || session.bookingId == null || !String(session.guestName || "").trim()) return false;
     if (session.currency !== "INR" || session.rail !== "AURELIA_UPI" ||
         session.amountPaise !== evidence.amountPaise) return false;
     const createdAt = Date.parse(session.createdAt);
