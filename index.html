@@ -5872,10 +5872,10 @@ module.exports = QRCode;
       const booking = getBooking(session.bookingId);
       const amount = Number(session.amountPaise) / 100;
       if (!booking) throw new Error("The linked guest folio no longer exists.");
-      if (!(amount > 0) || amount > bookingDue(booking) + 0.009) throw new Error("The folio balance changed. Refresh the collection before posting.");
       booking.pays = Array.isArray(booking.pays) ? booking.pays : [];
       const sessionMarker = "AURELIA-UPI:" + String(session.id);
       if (booking.pays.some(payment => payment.sessionId === session.id || payment.r === sessionMarker)) return true;
+      if (!(amount > 0) || amount > bookingDue(booking) + 0.009) throw new Error("The folio balance changed. Refresh the collection before posting.");
       const beforePays = booking.pays.slice(), beforeRevenue = Number(S.todayRevenue) || 0, beforeAudit = S.audit.slice();
       const reference = String(utr || session.reference || session.id).trim().slice(0, 80);
       booking.pays.push({ a: amount, m: "Aurelia UPI", r: reference, sessionId: session.id, at: new Date().toISOString(), source: "AURELIA_UPI" });
@@ -5891,11 +5891,11 @@ module.exports = QRCode;
     applyRestaurantPayment: async (session, utr) => {
       const table = S.tables.find(row => String(row.n) === String(session.tableId));
       const amount = Number(session.amountPaise) / 100;
+      S.sales = Array.isArray(S.sales) ? S.sales : [];
+      if (S.sales.some(sale => sale.aureliaUpiSessionId === session.id)) return true;
       if (!table || !Array.isArray(table.o) || !table.o.length) throw new Error("The linked dining ticket is no longer open.");
       const current = table.o.reduce((sum, item) => sum + (Number(item.unit) || 0) * (Number(item.qty) || 0), 0);
       if (!(amount > 0) || Math.abs(current - amount) > 0.009) throw new Error("The dining bill changed. Refresh the ticket before posting.");
-      S.sales = Array.isArray(S.sales) ? S.sales : [];
-      if (S.sales.some(sale => sale.aureliaUpiSessionId === session.id)) return true;
       const beforeOrders = table.o.map(item => ({ ...item })), beforeSales = S.sales.slice();
       const beforeRevenue = Number(S.todayRevenue) || 0, beforeAudit = S.audit.slice();
       const now = new Date().toISOString();
@@ -5956,6 +5956,8 @@ module.exports = QRCode;
 
   async function importLegacyUpiAlerts() {
     if (!window.AureliaUPI || S.legacyAlertsImported || S.legacyAlertsImporting) return;
+    const paymentState = window.AureliaUPI.getState?.();
+    if (!paymentState?.loaded || paymentState?.loading || paymentState?.storageError) return;
     const alerts = (Array.isArray(S.upiAlerts) ? S.upiAlerts : []).filter(alert => alert && alert.status !== "RECONCILED");
     if (!alerts.length) { S.legacyAlertsImported = true; return; }
     S.legacyAlertsImporting = true;
