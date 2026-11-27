@@ -121,6 +121,7 @@ async function refreshData() {
         id: item.evidenceId || item.id,
         source: "ANDROID_NOTIFICATION",
         sourcePackage: item.sourcePackage || "",
+        senderName: item.senderName || null,
         amountPaise: Number(item.amountPaise),
         currency: "INR",
         utr: item.utr || null,
@@ -185,7 +186,7 @@ function statusSummary() {
 function renderTabs() {
   const tabs = [
     ["overview", "Overview"], ["collect", "Collect"], ["activity", "Activity"],
-    ["review", "Reconcile"], ["refunds", "Refunds"], ["controls", "Controls"]
+    ["review", "Incoming UPI Alerts"], ["refunds", "Refunds"], ["controls", "Controls"]
   ];
   return '<nav class="au-tabs" aria-label="Aurelia UPI workspace">' + tabs.map(([key, label]) =>
     '<button type="button" role="tab" aria-selected="' + (state.view === key) +
@@ -207,6 +208,26 @@ function renderOpenBalances() {
   const diningRows = dining.map(row => '<article class="au-row"><div class="au-row-main"><strong>Dining Table ' + esc(row.id) + ' · ' + esc(row.guestName || "Walk-in") + '</strong><div class="au-row-meta">Open dining ticket</div></div><div class="au-row-end"><strong>' + esc(formatPaise(row.amountPaise)) + '</strong><button class="au-link" type="button" data-upi-action="collect-dining" data-id="' + esc(row.id) + '">Collect with UPI</button><button class="au-link" type="button" data-upi-action="cash-dining" data-id="' + esc(row.id) + '">Collect cash</button></div></article>').join("");
   return '<section class="au-panel au-open-balances"><div class="au-panel-head"><div><span class="au-kicker">FRONT DESK</span><h3>Open balances ready to collect</h3><p class="au-hint">Each folio and dining ticket offers UPI or cash collection.</p></div></div>' +
     (folioRows.length || diningRows.length ? '<div class="au-list">' + folioRows + diningRows + '</div>' : '<div class="au-empty"><strong>All balances are settled</strong><p>No open folio or dining balance needs collection.</p></div>') + '</section>';
+}
+
+function renderIncomingAlerts() {
+  const rows = state.evidence.filter(row => row.matchDecision === "REVIEW_REQUIRED" && row.suggestedSessionId)
+    .sort((a, b) => dateMs(b.receivedAt) - dateMs(a.receivedAt)).slice(0, 5);
+  return '<section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">EXACT GUEST MATCHES ONLY</span><h3>Incoming UPI Alerts</h3></div><button class="au-link" type="button" data-upi-view="review">Review all</button></div>' +
+    (rows.length ? '<div class="au-list">' + rows.map(row => {
+      const session = state.sessions.find(item => item.id === row.suggestedSessionId);
+      return '<article class="au-row"><div class="au-row-main"><strong>' + esc(formatPaise(row.amountPaise)) + ' · Aurelia UPI Notification</strong><div class="au-row-meta">' + esc(row.senderName || session?.guestName || "Guest identity matched from alert") + (row.utr ? ' · UTR ' + esc(row.utr) : '') + '</div><div class="au-row-meta">Exact folio match: ' + esc(session?.guestName || "—") + (session?.room ? ' · Room ' + esc(session.room) : '') + '</div></div><div class="au-row-end"><button class="au-link" type="button" data-upi-view="review">Reconcile</button></div></article>';
+    }).join("") + '</div>' : '<div class="au-empty"><strong>No exact guest-folio alert matches</strong><p>Alerts appear here only when the guest identity, amount and time match a named open folio. Other alerts remain in manual review.</p></div>') + '</section>';
+}
+
+function renderVerifiedHistory() {
+  const rows = state.payments.filter(row => row.status === "APPLIED_TO_PMS")
+    .sort((a, b) => dateMs(b.confirmedAt) - dateMs(a.confirmedAt)).slice(0, 5);
+  return '<section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">POSTED TO PMS</span><h3>Verified Settlement History</h3></div><button class="au-link" type="button" data-upi-view="activity">Full history</button></div>' +
+    (rows.length ? '<div class="au-list">' + rows.map(row => {
+      const session = state.sessions.find(item => item.id === row.sessionId);
+      return '<article class="au-row"><div class="au-row-main"><strong>' + esc(session?.guestName || row.kind || "Verified payment") + '</strong><div class="au-row-meta">' + esc(row.transactionReference || row.sessionId) + ' · ' + esc(iso(row.confirmedAt)) + '</div></div><div class="au-row-end"><strong>' + esc(formatPaise(row.amountPaise)) + '</strong><span class="au-status">Verified</span></div></article>';
+    }).join("") + '</div>' : '<div class="au-empty"><strong>No verified settlements yet</strong><p>Verified payments appear here after bank-credit review and successful PMS posting.</p></div>') + '</section>';
 }
 
 function renderSessionRow(session, compact = false) {
@@ -240,7 +261,7 @@ function renderOverview() {
     renderMetric("Active requests", String(metrics.active), metrics.queued + " queued in FIFO order") +
     renderMetric("Needs review", String(metrics.review), "Alerts awaiting operator verification") +
     renderMetric("Unmatched alerts", String(metrics.unmatched), "No safe exact candidate") +
-    '</div>' + renderOpenBalances() +
+    '</div>' + renderOpenBalances() + renderIncomingAlerts() + renderVerifiedHistory() +
     '<div class="au-columns"><section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">LIVE SESSION</span><h3>Collection queue</h3></div><button class="au-link" type="button" data-upi-view="activity">View all</button></div>' +
     (active ? renderActiveSession(active) : '<div class="au-empty"><span class="au-empty-icon">↗</span><strong>No active collection</strong><p>Create a request to generate an amount-specific Aurelia UPI QR.</p><button class="au-primary" type="button" data-upi-view="collect">Create collection</button></div>') +
     '</section><section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">RECENT</span><h3>Payment activity</h3></div><button class="au-link" type="button" data-upi-view="activity">History</button></div>' +
@@ -338,7 +359,7 @@ function renderReviewCard(evidence) {
 
 function renderReview() {
   const rows = [...state.evidence].sort((a, b) => dateMs(b.receivedAt) - dateMs(a.receivedAt));
-  return '<section class="au-page-heading"><div><span class="au-kicker">EVIDENCE & RECONCILIATION</span><h3>Review incoming payment alerts</h3><p>Import a bank alert or review an Android notification. An alert never marks a folio paid by itself.</p></div></section>' +
+  return '<section class="au-page-heading"><div><span class="au-kicker">EVIDENCE & RECONCILIATION</span><h3>Incoming UPI Alerts</h3><p>Import a bank alert or review an Android notification. An alert never marks a folio paid by itself.</p></div></section>' +
     '<section class="au-panel au-import"><label><span>Paste incoming UPI credit alert</span><textarea id="au-alert-text" rows="4" maxlength="4000" placeholder="Paste the notification text exactly as received. Do not paste OTPs or unrelated messages."></textarea></label>' +
     '<button class="au-primary" type="button" data-upi-action="import-evidence">Add evidence for review</button><p class="au-hint">Aurelia parses amount and UTR locally. Raw alert text is stored only in encrypted on-device storage when available.</p>' +
     '<div class="au-statement-import"><label><span>Import bank statement CSV</span><input id="au-statement-file" type="file" accept=".csv,text/csv"></label><p class="au-hint">Only dated UPI credit rows with an exact amount and UTR/RRN are imported. The original file is not retained. CSV rows remain unverified evidence and never settle a payment automatically.</p></div></section>' +
