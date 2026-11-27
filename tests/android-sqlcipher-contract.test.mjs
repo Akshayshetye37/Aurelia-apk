@@ -271,9 +271,10 @@ test('booking API URL validator rejects HTTP, credentials and strips query/fragm
 });
 test('JSON handler encoder round-trips hostile strings without breaking inline JavaScript context', () => {
   const html = read('index.html');
-  const match = html.match(/^const esc\s*=.*\nconst jsArg\s*=.*$/m);
-  assert.ok(match, 'HTML and JavaScript context encoders are present');
-  const encode = new Function(match[0] + '\nreturn jsArg;')();
+  const lines = html.split("\n").map(line => line.trim());
+  const encoderLines = lines.filter(line => line.startsWith("const esc =") || line.startsWith("const jsArg="));
+  assert.equal(encoderLines.length, 2, 'HTML and JavaScript context encoders are present');
+  const encode = new Function(encoderLines.join("\n") + "\nreturn jsArg;")();
   const input = "O'Brian \" </script> <img src=x onerror=alert(1)> &\n";
   const encoded = encode(input);
   const decoded = encoded.replace(/&(quot|lt|gt|amp);/g, (_, entity) => ({ quot: '"', lt: '<', gt: '>', amp: '&' })[entity]);
