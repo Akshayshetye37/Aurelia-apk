@@ -118,7 +118,9 @@ test('active exact-amount Aurelia UPI requests can be addressed to the guest thr
 
 test('Aurelia UPI UTR is optional while receiving-bank confirmation remains mandatory', async () => {
   const app = await read('src/aurelia-upi/app.mjs');
-  const review = app.slice(app.indexOf('function renderReviewCard'), app.indexOf('function renderReview'));
+  const reviewStart = app.indexOf('function renderReviewCard');
+  const reviewEnd = app.indexOf('function renderReview()', reviewStart);
+  const review = app.slice(reviewStart, reviewEnd);
   const confirm = app.slice(app.indexOf('async function confirmEvidence'), app.indexOf('async function retryPendingPosting'));
   assert.match(review, /Enter UTR if available/);
   assert.match(confirm, /Confirm that you checked the credit in the receiving bank account/);
