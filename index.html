@@ -538,7 +538,13 @@ body[data-theme="light"] .chip.on { background: #143d2d; color: #fff; border-col
 }
 .table-tile:hover { border-color: var(--border-strong); }
 .table-tile.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold-soft); }
-.table-tile.has-order { background: var(--gold-soft); border-color: var(--gold); }
+.table-tile.has-order:not(.selected) { background: var(--bg-card-2, var(--bg-card)); border-color: var(--border); box-shadow: inset 0 -3px 0 var(--emerald); }
+.brand-mark.has-property-logo { background: transparent; box-shadow: none; padding: 2px; }
+.brand-mark .brand-logo { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
+.property-logo-preview { display:flex; align-items:center; justify-content:flex-start; min-height:72px; margin:8px 0 12px; padding:10px; border:1px dashed var(--border-strong); border-radius:12px; background:var(--bg-card-2); }
+.property-logo-preview-image { display:block; width:auto; max-width:180px; height:auto; max-height:76px; object-fit:contain; }
+.invoice-logo { display:block; width:auto; max-width:100px; height:auto; max-height:62px; object-fit:contain; margin:0 0 8px; }
+.thermal-logo { display:block; width:auto; max-width:56px; max-height:34px; object-fit:contain; margin:0 auto 5px; }
 .table-tile strong { font: 600 22px/1 var(--serif); }
 .table-tile small { font-size: 11.5px; color: var(--text-muted); }
 
