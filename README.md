@@ -278,3 +278,23 @@ Until written approval is obtained:
 - Continue supporting local encrypted export, restore and device-to-device transfer mechanisms that do not depend on Drive API.
 - Evaluate an independently hosted Aurelia backup service or another provider only after reviewing that provider's terms, privacy, security, data residency and operational requirements.
 - If Google approves the use case in writing, use the minimum approved scope and re-check the current Google policy and implementation constraints before enabling it.
+
+### Backup discovery consent and restore UX — latest decision
+
+This section supersedes earlier backup-login UX wording wherever it conflicts with the decisions below. It defines the intended user experience; it does not claim that SAF backup, key recovery, background scheduling or restore is already implemented or production-qualified.
+
+- After successful Google Sign-In and owner/property authorization, Aurelia shows **one** first-time explanation popup asking whether the user allows Aurelia to look for an existing property backup in a user-selected storage folder.
+- The popup has **Deny** on the left and **Allow** on the right.
+- **Allow:** launch Android's Storage Access Framework (SAF) folder picker. Where supported, suggest Google Drive as the initial location, but do not assume Android can force a particular provider or folder to open. The owner selects the existing Aurelia backup folder and grants access. Aurelia persists the granted URI permission where supported, then searches only within the selected folder for backups matching the authenticated owner and authorized property.
+- SAF folder permission is not Google Drive OAuth and does not grant access to the entire Drive account. Do not use Drive REST API access or broad Drive OAuth scopes as a substitute for this folder-selection flow.
+- If a matching, valid backup is found, show a separate restore decision with **Skip** on the left and **Restore** on the right. Do not restore automatically merely because a backup was found.
+- **Deny:** remember the user's decision and continue into the PMS. Do not show the discovery popup again automatically, do not show a persistent dashboard warning, and do not interrupt normal PMS operation.
+- After denying, the user can initiate discovery or configure/change the backup destination manually at **Settings → Backup & Storage**. Provide a clear **Find Existing Backup** / **Set Up Automatic Backup** action there. The user may change their decision at any time.
+- Denial of backup discovery is not consent to create a duplicate property and is not evidence that no backup exists. Do not create or initialize a replacement property until the normal property-selection/creation flow and identity checks are complete.
+- If the user allows discovery but no matching backup is found, continue to the normal property setup/selection flow and report that no matching backup was found; do not imply that all of Drive was searched.
+- On a replacement device, Google Sign-In and owner/property authorization happen first. Because SAF URI permissions do not automatically transfer to a new device, the user must select the backup folder again before Aurelia can inspect it.
+- Validate backup ownership metadata, property identity, archive authentication/integrity, schema compatibility and financial-ledger consistency before offering or completing restore. Never overwrite an initialized property silently. Stage restoration and preserve existing data if validation or restore fails.
+- Keep Local Mode available without Google Sign-In. The SAF backup folder is optional; lack of folder permission must never block core local PMS operations.
+- Do not introduce a Property Recovery PIN, recovery passphrase or user-held recovery key. A secure encryption-key recovery design that meets this product constraint remains a prerequisite for claiming cross-device encrypted restore; Google Sign-In by itself does not recover a device-bound encryption key.
+- Android Auto Backup, if configured, is supplementary only. Do not rely on its 25 MB quota or claim it guarantees a complete PMS backup. SAF backup is a separate user-authorized destination and background execution/provider availability must be tested on supported physical devices.
+
