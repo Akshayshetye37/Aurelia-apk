@@ -5848,6 +5848,9 @@ module.exports = QRCode;
         try { propertyLogoDataUrl = await optimizePropertyLogo(logoFile); }
         catch (error) { toast(error?.message || "Property logo could not be processed."); return; }
       }
+      const bookingApiUrlInput = document.getElementById("set-booking-api-url")?.value || "";
+      const validatedApiUrl = validatedBookingApiBaseUrl(bookingApiUrlInput);
+      if (bookingApiUrlInput.trim() && !validatedApiUrl) { toast("Booking API URL must be HTTPS and must not contain credentials, query strings or fragments."); return; }
       const previousSettings = { ...S.settings };
       const previousAudit = S.audit.slice();
       S.settings.name = document.getElementById("set-name").value.trim() || "Aurelia PMS";
@@ -5857,9 +5860,6 @@ module.exports = QRCode;
       S.settings.addr = document.getElementById("set-addr").value.trim();
       S.settings.upi = upi;
       S.settings.logoDataUrl = propertyLogoDataUrl;
-      const bookingApiUrlInput = document.getElementById("set-booking-api-url")?.value || "";
-      const validatedApiUrl = validatedBookingApiBaseUrl(bookingApiUrlInput);
-      if (bookingApiUrlInput.trim() && !validatedApiUrl) { toast("Booking API URL must be HTTPS and must not contain credentials, query strings or fragments."); return; }
       S.settings.bookingApiEnabled = document.getElementById("set-booking-api-enabled")?.value === "true";
       S.settings.bookingApiUrl = validatedApiUrl;
       S.settings.bookingApiKey = validatedApiUrl ? String(document.getElementById("set-booking-api-key")?.value || "").trim() : "";
