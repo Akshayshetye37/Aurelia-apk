@@ -31,3 +31,10 @@ test('cash and UPI remain the only supported collection methods; no card or gate
   assert.match(html, /providerGatewaysEnabled:false/);
   assert.doesNotMatch(html, /enabledMethods:Object\.freeze\(\[[^\]]*CARD/);
 });
+
+test('dining POS offers both direct Aurelia UPI collection and confirmed cash settlement', async () => {
+  const html = await readIndex();
+  assert.match(html, /onclick="openAureliaUpiForDining\(\)">Aurelia UPI/);
+  assert.match(html, /onclick="settle\(\)">Settle bill · Cash/);
+  assert.match(html, /function recordDiningCashPayment\(\)/);
+});
