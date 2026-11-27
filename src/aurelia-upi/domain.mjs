@@ -119,6 +119,7 @@ export function createPaymentSession(input = {}, nowMs = Date.now()) {
     bookingId: input.bookingId == null ? null : safeText(input.bookingId, 128, "Booking ID"),
     tableId: input.tableId == null ? null : safeText(input.tableId, 64, "Table ID"),
     guestName: String(input.guestName || "").trim().slice(0, 100),
+    guestPhone: safeText(input.guestPhone || "", 20, "Guest phone"),
     room: String(input.room || "").trim().slice(0, 64),
     amountPaise,
     currency: "INR",
@@ -161,7 +162,7 @@ export function transitionSession(session, nextStatus, patch = {}, nowMs = Date.
     throw error;
   }
   const protectedFields = new Set([
-    "id", "kind", "bookingId", "tableId", "guestName", "room",
+    "id", "kind", "bookingId", "tableId", "guestName", "guestPhone", "room",
     "amountPaise", "currency", "rail", "vpa", "payeeName", "reference",
     "note", "createdAt", "upiUri"
   ]);
