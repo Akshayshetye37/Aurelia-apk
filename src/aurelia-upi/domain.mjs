@@ -303,6 +303,7 @@ export function parseIncomingUpiNotification(input = {}) {
       amountPaise,
       currency: "INR",
       utr,
+      senderName: String(input.senderName || "").trim().slice(0, 100) || null,
       senderVpa: vpaMatch ? vpaMatch[1].trim() : null,
       receivedAt: Number.isFinite(parsedAt.getTime()) ? parsedAt.toISOString() : new Date().toISOString(),
       rawText: normalized,
@@ -444,9 +445,21 @@ export function matchEvidenceToSessions(evidence, sessions, {
   const receivedAt = Date.parse(evidence.receivedAt);
   if (!Number.isFinite(receivedAt)) return { decision: "UNMATCHED", reason: "invalid_timestamp", candidates: [] };
   const candidates = (Array.isArray(sessions) ? sessions : []).filter(session => {
-    // Incoming alerts are auto-suggested only against a named, open guest folio.
-    // General and dining collections remain unmatched rather than being attributed to a room guest.
+    // Alerts are suggested only when they identify the exact named guest and an open folio.
+    // Amount-only matches, dining tickets and general collections are never assigned to a room guest.
     if (session.kind !== "folio" || session.bookingId == null || !String(session.guestName || "").trim()) return false;
+    const guestName = String(session.guestName).trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const senderName = String(evidence.senderName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const alertText = String(evidence.rawText || "").replace(/\s+/g, " ").toLocaleLowerCase();
+    const identityMatches = senderName
+      ? senderName === guestName
+      : (() => {
+          const index = alertText.indexOf(guestName);
+          if (index < 0) return false;
+          const word = character => !!character && /[\p{L}\p{N}]/u.test(character);
+          return !word(alertText[index - 1]) && !word(alertText[index + guestName.length]);
+        })();
+    if (!identityMatches) return false;
     if (session.currency !== "INR" || session.rail !== "AURELIA_UPI" ||
         session.amountPaise !== evidence.amountPaise) return false;
     const createdAt = Date.parse(session.createdAt);
