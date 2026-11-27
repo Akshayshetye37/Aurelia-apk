@@ -183,6 +183,16 @@ test('native guest photos are encrypted at rest with a per-install Keystore AES-
   assert.doesNotMatch(patch, /writeText\(photoFile|readText\(file\)/);
 });
 
+test('native ID OCR rejects oversized images, bounds decoded pixels and clears input bytes', () => {
+  assert.match(patch, /MAX_ID_SCAN_BYTES = 12 \* 1024 \* 1024/);
+  assert.match(patch, /MAX_ID_SCAN_BASE64_CHARS = 16 \* 1024 \* 1024/);
+  assert.match(patch, /bounds\.inJustDecodeBounds = true/);
+  assert.match(patch, /MAX_ID_SCAN_DIMENSION/);
+  assert.match(patch, /MAX_ID_SCAN_PIXELS/);
+  assert.match(patch, /java\.util\.Arrays\.fill\(imageBytes, \(byte\) 0\)/);
+  assert.match(patch, /recognizeId.*?aureliaNativeOcrResult/s);
+});
+
 test('browser booking API discards legacy bearer tokens and never transmits reusable credentials', () => {
   const html = read('index.html');
   assert.ok(html.includes('function validatedBookingApiBaseUrl(value)'));
