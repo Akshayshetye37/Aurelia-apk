@@ -15,7 +15,7 @@ test('uploaded Aurelia PMS design keeps its emerald, champagne and warm ivory pa
 
 test('uploaded theme has consistent cards, responsive dock and modal surfaces', () => {
   assert.match(html, /\.card\s*\{/);
-  assert.match(html, /\.mobile-dock\\s*\\{//);
+  assert.match(html, /\.mobile-dock\s*\{//);
   assert.match(html, /\.modal-panel/);
   assert.match(html, /@media\s*\(max-width:/);
 });
