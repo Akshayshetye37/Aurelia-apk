@@ -2930,6 +2930,13 @@ module.exports = QRCode;
     toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
   }
 
+  const CONFIRM_ACTIONS = Object.freeze({
+    "reset-demo": () => { S = createDefaultState(); closeModal(); render(); toast("Workspace restored to sample data."); }
+  });
+  function openSafeConfirmation(t, m, l, actionKey) {
+    if (!Object.prototype.hasOwnProperty.call(CONFIRM_ACTIONS, actionKey)) { toast("Confirmation action is invalid"); return; }
+    openModal(t, "", `<h2 class="foil">${esc(t)}</h2><p class="lab">${esc(m)}</p><div class="row"><button class="btn ghost sm" type="button" data-action="close-modal">Keep it</button><button class="btn sm danger" type="button" data-action="confirm-safe-action" data-confirm="${esc(actionKey)}">${esc(l)}</button></div>`);
+  }
   function openModal(title, subtitle, bodyHtml) {
     const root = document.getElementById("modal-root");
     const panel = document.getElementById("modal-panel");
@@ -5790,14 +5797,13 @@ module.exports = QRCode;
     }
 
     if (act === "reset-demo") {
-      openModal("Reset to Sample Data?", "This restores the default Aurelia PMS sample dataset.", `
-        <p class="muted">Any edits made in this browser session will be replaced with the fresh sample dataset.</p>
-        <div class="row-wrap">
-          <button class="btn ghost" type="button" data-action="close-modal">Cancel</button>
-          <button class="btn danger" type="button" data-action="confirm-reset-demo">Reset Data</button>
-        </div>
-      `);
+      openSafeConfirmation("Reset to Sample Data?", "This restores the default Aurelia PMS sample dataset. Existing backups remain untouched.", "Reset Data", "reset-demo");
       return;
+    }
+    if (act === "confirm-safe-action") {
+      const action = CONFIRM_ACTIONS[actEl.dataset.confirm];
+      if (typeof action !== "function") { toast("Confirmation action is invalid"); return; }
+      action(); return;
     }
 
     if (act === "confirm-reset-demo") {
