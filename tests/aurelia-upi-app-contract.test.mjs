@@ -111,7 +111,8 @@ test('active exact-amount Aurelia UPI requests can be addressed to the guest thr
   assert.match(app, /guestPhone/);
   assert.match(app, /Exact amount due:/);
   assert.match(html, /guestPhone:\(S\.g\|\|\[\]\)\.find/);
-  assert.match(domain, /guestPhone: \(\(\) => \{/);\n  assert.match(domain, /String\(input\.guestPhone \?\? \"\"\)/);
+  assert.match(domain, /guestPhone: \(\(\) => \{/);
+  assert.match(domain, /String\(input\.guestPhone \?\? ""\)/);
   assert.match(domain, /"guestName", "guestPhone", "room"/);
   assert.doesNotMatch(app, /package=com\\.whatsapp(?:\\.w4b)?/);
 });
