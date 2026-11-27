@@ -147,7 +147,8 @@ test('notification evidence can match a session in the 30-second processing wind
   const processing = markCustomerPaid(active, now + 1000, 30000);
   const match = matchEvidenceToSessions({
     amountPaise: processing.amountPaise,
-    receivedAt: new Date(now + 5000).toISOString()
+    receivedAt: new Date(now + 5000).toISOString(),
+    senderName: 'Test Guest'
   }, [processing], { nowMs: now + 5000 });
   assert.equal(match.decision, 'REVIEW_REQUIRED');
   assert.equal(match.suggestedSessionId, processing.id);
@@ -173,7 +174,8 @@ test('matching suggests review only and flags ambiguous exact-amount candidates'
   const evidence = {
     amountPaise: 125050,
     utr: '123456789012',
-    receivedAt: '2026-11-26T04:02:00.000Z'
+    receivedAt: '2026-11-26T04:02:00.000Z',
+    senderName: 'Test Guest'
   };
   const one = matchEvidenceToSessions(evidence, [{
     ...base,
@@ -310,7 +312,7 @@ test('payment sessions preserve the guest phone for addressed WhatsApp sharing',
 
 
 test('incoming UPI alerts only suggest named guest folio sessions, never dining or general collections', () => {
-  const evidence = { amountPaise: 1208000, receivedAt: '2026-11-27T10:02:00.000Z', utr: '433290184722' };
+  const evidence = { amountPaise: 1208000, receivedAt: '2026-11-27T10:02:00.000Z', utr: '433290184722', senderName: 'Aarav Deshmukh' };
   const base = {
     currency: 'INR', rail: 'AURELIA_UPI', amountPaise: 1208000,
     createdAt: '2026-11-27T10:00:00.000Z', expiresAt: '2026-11-27T10:05:00.000Z',
@@ -324,4 +326,21 @@ test('incoming UPI alerts only suggest named guest folio sessions, never dining 
   assert.equal(matched.suggestedSessionId, 'UPI-901');
   assert.deepEqual(matched.candidates.map(row => row.id), ['UPI-901']);
   assert.equal(matchEvidenceToSessions(evidence, [dining, general]).decision, 'UNMATCHED');
+});
+
+test('incoming alert candidates require exact guest identity in addition to amount and time', () => {
+  const evidence = {
+    amountPaise: 125050,
+    receivedAt: '2026-11-26T04:02:00.000Z',
+    senderName: 'Test Guest'
+  };
+  const folio = { ...base, id: 'identity-match', kind: 'folio', bookingId: 'booking-test' };
+  assert.equal(matchEvidenceToSessions(evidence, [folio]).suggestedSessionId, 'identity-match');
+  assert.equal(matchEvidenceToSessions({ ...evidence, senderName: 'Different Guest' }, [folio]).decision, 'UNMATCHED');
+  assert.equal(matchEvidenceToSessions({ amountPaise: evidence.amountPaise, receivedAt: evidence.receivedAt }, [folio]).decision, 'UNMATCHED');
+  assert.equal(matchEvidenceToSessions({
+    amountPaise: evidence.amountPaise,
+    receivedAt: evidence.receivedAt,
+    rawText: 'UPI credit received from Test Guest. INR 1,250.50'
+  }, [folio]).suggestedSessionId, 'identity-match');
 });

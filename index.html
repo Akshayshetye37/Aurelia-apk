@@ -238,11 +238,11 @@ input[type=date]{max-width:100%;min-width:0}
 <style id="aurelia-reference-workspace">
 /* Aurelia reference workspace — visual system adapted to the existing PMS runtime. */
 :root{
- --bg:#07120e;--s1:#0c1d16;--s2:#10241c;--ln:rgba(223,192,123,.18);
- --gold:#dfc07b;--gold2:#9c7a3c;--tx:#f5f0e6;--mu:#9ab0a4;
- --em:#3ec48d;--rb:#e06d60;--am:#eab354;
- --serif:"Cormorant Garamond",Georgia,serif;
- --sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+ --bg:#081711;--s1:#10271d;--s2:#173628;--ln:rgba(220,194,133,.24);
+ --gold:#e2c783;--gold2:#a98443;--tx:#f7f2e7;--mu:#afc0b5;
+ --em:#52c79a;--rb:#df7c70;--am:#edbb5d;
+ --serif:"EB Garamond",Georgia,serif;
+ --sans:Manrope,system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 body[data-theme="light"]{
  --bg:#f5f2ea;--s1:#fff;--s2:#faf7f0;--ln:rgba(20,61,45,.12);
@@ -250,7 +250,7 @@ body[data-theme="light"]{
  --em:#177d56;--rb:#b83b31;--am:#b37412;
 }
 html,body{min-height:100%;overflow-x:hidden}
-body{background:var(--bg);color:var(--tx);font-family:var(--sans);font-weight:400}
+body{background:radial-gradient(900px 500px at 80% -10%,#1c4834 0,transparent 60%),radial-gradient(700px 500px at -10% 40%,#173b2b 0,transparent 60%),var(--bg);color:var(--tx);font-family:var(--sans);font-weight:400}
 .aurelia-design-shell{display:flex;min-height:100vh;width:100%}
 .aurelia-design-sidebar{
  width:256px;flex:0 0 256px;position:sticky;top:0;height:100vh;z-index:35;
@@ -607,7 +607,7 @@ rooms(){return `<h2 style="margin-top:6px;font-size:36px">Chambers</h2><div clas
 dining(){const t=S.t[S.tb-1],tt=t.o.reduce((a,x)=>a+x[1],0);
 return `<h2 style="margin-top:6px;font-size:36px">Dining</h2><div class="card"><div class="tbls">${S.t.map(x=>`<button class="tb ${x.o.length?'seat':''} ${x.n===S.tb?'on':''}" onclick="S.tb=${x.n};render()">${x.n}<small style="position:absolute;bottom:8px;font:11px var(--sans);color:var(--mu)">${x.s} seats</small></button>`).join('')}</div></div>
 <div class="grid g2"><div class="card"><div class="chips">${Object.keys(MENU).map(c=>`<button class="chip ${c===cat?'on':''}" onclick="cat=${jsArg(c)};render()">${esc(c)}</button>`).join('')}</div><div class="menu">${MENU[cat].map((m,i)=>`<button class="mi" onclick="addI(${jsArg(cat)},${i})"><div><b>${esc(m[0])}</b><div class="lab">${esc(m[2])}</div></div><span>${K(m[1])}</span></button>`).join('')}</div></div>
-<div class="card"><div class="row"><h2>Table ${t.n}</h2><span class="tot" style="font-size:26px">${K(tt)}</span></div>${t.o.map(x=>`<div class="ln"><span>${x[0]}</span><span>${K(x[1])}</span></div>`).join('')||'<div class="empty">Tap a dish to begin the order.</div>'}${t.o.length?`<div class="row" style="margin-top:16px"><button class="btn ghost sm" onclick="toRoom()">Charge to room</button><button class="btn sm" onclick="settle()">Settle bill</button></div>`:''}</div></div>`}};
+<div class="card"><div class="row"><h2>Table ${t.n}</h2><span class="tot" style="font-size:26px">${K(tt)}</span></div>${t.o.map(x=>`<div class="ln"><span>${x[0]}</span><span>${K(x[1])}</span></div>`).join('')||'<div class="empty">Tap a dish to begin the order.</div>'}${t.o.length?`<div class="row" style="margin-top:16px"><button class="btn ghost sm" onclick="toRoom()">Charge to room</button><button class="btn ghost sm" onclick="openAureliaUpiForDining()">Aurelia UPI</button><button class="btn sm" onclick="settle()">Settle bill · Cash</button></div>`:''}</div></div>`}};
 function motes(){const c=$('#cv'),x=c.getContext('2d');if(matchMedia('(prefers-reduced-motion:reduce)').matches||document.visibilityState==='hidden')return;const w=c.width=c.offsetWidth*2,h=c.height=c.offsetHeight*2,P=[...Array(18)].map(()=>({x:Math.random()*w,y:Math.random()*h,r:Math.random()*2+1,v:Math.random()*.6+.2,p:Math.random()*6}));cancelAnimationFrame(S.raf);(function f(t){if(!c.isConnected)return;x.clearRect(0,0,w,h);P.forEach(p=>{p.y-=p.v;p.x+=Math.sin(t/1500+p.p);if(p.y<-10){p.y=h+10;p.x=Math.random()*w}x.beginPath();x.fillStyle=`rgba(240,205,130,${.25+.5*Math.abs(Math.sin(t/900+p.p))})`;x.shadowColor='#d9b76e';x.shadowBlur=5;x.arc(p.x,p.y,p.r,0,7);x.fill()});S.raf=requestAnimationFrame(f)})(0)}
 function avail(){const a=new Date($('#ci').value),b=new Date($('#co').value),n=Math.max(1,Math.round((b-a)/864e5)||1);openS(`<h2 class="foil">Suites available</h2><div class="lab">${n} night${n>1?'s':''} · ${a.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} to ${b.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>${types.map(([t,r])=>{const f=S.rooms.filter(x=>x.t===t&&x.s==='ready');return `<div class="ln" style="align-items:center;padding:14px 0"><div><h3>${t}</h3><div class="lab">${f.length?f.length+' ready':'Fully booked'} · ${K(r*n)} total</div></div>${f.length?`<button class="btn sm" onclick="resv('${f[0].n}')">Reserve</button>`:''}</div>`}).join('')}`)}
 function resv(n){openS(`<h2 class="foil">New reservation</h2><label class="fld"><span>Guest name</span><input id="gn" placeholder="Full name" autocomplete="off" required></label><label class="fld"><span>Suite</span><select id="gr" required>${S.rooms.filter(r=>r.s==='ready').map(r=>`<option value="${esc(r.n)}" ${r.n===n?'selected':''}>${esc(r.n)} · ${esc(r.t)} · ${K(r.r)}</option>`).join('')}</select></label><label class="fld"><span>Arrival date</span><input id="garr" type="date" value="${ymd(0)}" required></label><label class="fld"><span>Check-in time (mandatory)</span><input id="gintime" type="time" value="${defCheckInTime()}" required></label><label class="fld"><span>Departure date</span><input id="gdep" type="date" value="${ymd(1)}" required></label><label class="fld"><span>Check-out time (mandatory)</span><input id="gouttime" type="time" value="${defCheckOutTime()}" required></label><button class="btn" style="width:100%;margin-top:8px" onclick="mk()">Confirm reservation</button>`)}
@@ -637,7 +637,10 @@ function recordFolioCash(i){
  if(!Number.isFinite(amount)||amount<=0){toast('Enter a valid cash amount');return}
  if(amount>due+0.009){toast('Cash amount cannot exceed the folio balance');return}
  if(!document.getElementById('folio-cash-confirm')?.checked){toast('Confirm that cash was physically received');return}
- b.p=(Number(b.p)||0)+amount;S.today=(Number(S.today)||0)+amount;aud('Payment',K(amount)+' by Cash · Room '+b.room);persist();closeS();render();toast(K(amount)+' cash payment recorded');
+ const previousPaid=Number(b.p)||0,previousToday=Number(S.today)||0,previousAudit=(S.aud||[]).slice();
+ b.p=previousPaid+amount;S.today=previousToday+amount;aud('Payment',K(amount)+' by Cash · Room '+b.room);
+ if(!persist()){b.p=previousPaid;S.today=previousToday;S.aud=previousAudit;return}
+ closeS();render();toast(K(amount)+' cash payment recorded');
  if(dueB(b)<=0.009)outB(i);else folio(i);
 }
 function out(i,T){const b=bk(i);if(!b||dueB(b)>0.009){toast('Collect the outstanding balance before check-out');return}outB(i)}
@@ -679,7 +682,30 @@ function confirmDiningRoomCharge(id){
  persist();closeS();render();toast('Dining charge posted to '+b.g+' · Room '+b.room);
 }
 function chg(i){const t=S.t[S.tb-1],b=S.b.find(x=>x.id===i);t.o.forEach(x=>b.ch.push(['Dining · '+x[0],x[1]]));t.o=[];closeS();render();toast('Posted to room '+b.room)}
-function settle(){const t=S.t[S.tb-1],a=t.o.reduce((s,x)=>s+x[1],0);S.today+=a;t.o=[];render();toast('Table '+t.n+' settled · '+K(a))}
+function settle(){
+ const t=S.t[S.tb-1];if(!t||!Array.isArray(t.o)||!t.o.length){toast('There is no open dining bill on this table');return}
+ const amount=t.o.reduce((sum,item)=>sum+(Number(item[1])||0),0);
+ openS(`<h2 class="foil">Collect Dining Cash</h2><div class="lab">Table ${esc(String(t.n))} · ${esc((S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].name)||'Walk-in')}</div><div class="tot" style="margin:12px 0">${K(amount)}</div><label class="fld"><span>Cash received (₹)</span><input id="dining-cash-amount" type="number" min="0.01" step="0.01" value="${amount.toFixed(2)}"></label><label class="check-row"><input id="dining-cash-confirm" type="checkbox"><span>I confirm this cash amount was physically received.</span></label><button class="btn full" style="margin-top:12px" onclick="recordDiningCashPayment()">Record Cash Payment</button><button class="btn ghost full" style="margin-top:8px" onclick="closeS()">Cancel</button>`);
+}
+function openCashDiningPayment(tableId){
+ const index=(S.t||[]).findIndex(row=>String(row.n)===String(tableId));
+ if(index<0)return false;
+ S.tb=index+1;settle();return true;
+}
+function recordDiningCashPayment(){
+ const t=S.t[S.tb-1];if(!t||!Array.isArray(t.o)||!t.o.length){toast('Dining bill is no longer open');return}
+ const amount=t.o.reduce((sum,item)=>sum+(Number(item[1])||0),0);
+ const entered=Math.round((Number(document.getElementById('dining-cash-amount')?.value)||0)*100)/100;
+ if(!(entered>0)||Math.abs(entered-amount)>0.009){toast('Enter the exact dining bill amount');return}
+ if(!document.getElementById('dining-cash-confirm')?.checked){toast('Confirm that cash was physically received');return}
+ const previousOrder=t.o.map(item=>item.slice()),previousToday=Number(S.today)||0,previousSales=Array.isArray(S.sales)?S.sales.slice():[],previousAudit=(S.aud||[]).slice();
+ S.sales=Array.isArray(S.sales)?S.sales:[];
+ const sale={id:'RS-'+Date.now(),t:t.n,guest:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].name)||'Walk-in',phone:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].phone)||'',items:previousOrder.map(item=>({name:item[0],unit:Number(item[1])||0,qty:1})),a:amount,m:'Cash',ref:'CASH-'+Date.now(),at:new Date().toISOString(),status:'paid',postedToHotel:false};
+ S.sales.push(sale);S.today=previousToday+amount;t.o=[];
+ aud('Dining cash payment',sale.guest+' · Table '+t.n+' · '+K(amount));
+ if(!persist()){t.o=previousOrder;S.today=previousToday;S.sales=previousSales;S.aud=previousAudit;return}
+ closeS();render();toast('Cash dining payment recorded · '+K(amount));
+}
 document.addEventListener('pointerdown',e=>{const t=e.target.closest('button,.chip,.room');if(!t)return;const r=t.getBoundingClientRect(),s=Math.max(r.width,r.height)*2.2,d=document.createElement('span');d.className='rp';d.style.cssText=`width:${s}px;height:${s}px;left:${e.clientX-r.left-s/2}px;top:${e.clientY-r.top-s/2}px`;if(getComputedStyle(t).position==='static')t.style.position='relative';t.style.overflow='hidden';t.appendChild(d);setTimeout(()=>d.remove(),800)});
 document.addEventListener('pointermove',e=>{const c=e.target.closest('.card');$$('.card.hot').forEach(x=>{if(x!==c){x.classList.remove('hot');x.style.setProperty('--rx','0deg');x.style.setProperty('--ry','0deg')}});if(c){const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;c.classList.add('hot');c.style.setProperty('--mx',x*100+'%');c.style.setProperty('--my',y*100+'%');c.style.setProperty('--ry',(x-.5)*6+'deg');c.style.setProperty('--rx',(.5-y)*6+'deg')}
 const ch=e.target.closest('.chart');if(ch&&S.P){const r=ch.getBoundingClientRect(),i=Math.max(0,Math.min(6,Math.round((e.clientX-r.left)/r.width*6))),v=[...S.hist,S.today][i];$('#dot').setAttribute('cx',S.P[i][0]);$('#dot').setAttribute('cy',S.P[i][1]);$('#cv2').textContent=K(v)}});
@@ -3751,13 +3777,13 @@ window.printGuestPreview=function(){
    const confirmed=!!(document.querySelector('#pc')?.checked||document.querySelector('#aurelia-upi-received-confirm')?.checked);
    const selected=document.querySelector('.pan .chips .chip.on');
    const method=String(selected?.dataset?.method||selected?.textContent||S.pay||'').trim().toUpperCase();
-   if(method!=='UPI'){toast('Only Aurelia UPI is enabled.');return false}
-   if(!confirmed){toast('Record and confirm the Aurelia UPI payment before check-out.');return false}
+   if(method!=='UPI'&&method!=='CASH'){toast('Use Aurelia UPI or confirmed cash collection.');return false}
+   if(!confirmed){toast('Confirm that the payment was actually received before check-out.');return false}
    return original.apply(this,args);
   };
   guarded.__aureliaUpiGuard=true;window.out=guarded;
  }
- window.AureliaPaymentPolicy=Object.freeze({enabledMethods:Object.freeze(['UPI']),paymentRailLabel:'Aurelia UPI',providerGatewaysEnabled:false,manualConfirmationRequired:true,reactivationRequiresSourceChange:true});
+ window.AureliaPaymentPolicy=Object.freeze({enabledMethods:Object.freeze(['AURELIA_UPI','CASH']),paymentRailLabel:'Aurelia UPI and Cash',providerGatewaysEnabled:false,manualConfirmationRequired:true,automaticSettlement:false,notificationEvidenceCanSettle:false,reactivationRequiresSourceChange:true});
 })();
 </script>
 <script id="aurelia-upi-integration">
@@ -3783,6 +3809,8 @@ window.printGuestPreview=function(){
   launchUpi:uri=>nat({type:'openUrl',url:uri}),
   launchExternalUrl:url=>nat({type:'openUrl',url:String(url||'')}),
   openNotificationSettings:()=>nat({type:'openNotificationAccessSettings'}),
+  openCashFolioPayment:id=>{const booking=getBooking(id);if(!booking)return false;folio(booking.id);return true},
+  openCashDiningPayment:id=>openCashDiningPayment(id),
   applyFolioPayment:async(session,utr)=>{
    const id=Number(session.bookingId),booking=getBooking(id),amount=Number(session.amountPaise)/100;
    if(!booking)throw new Error('The linked guest folio no longer exists.');
@@ -3855,7 +3883,7 @@ window.printGuestPreview=function(){
    panel.querySelectorAll('#pa,#pr,#pc,#pm,#folio-upi-dynamic,.exact-upi-card,button[onclick^="pay("],button[onclick^="out("]').forEach(node=>node.remove());
    const due=Math.max(0,Number(dueB(booking))||0),actions=document.createElement('div');
    actions.className='au-folio-actions';
-   actions.innerHTML=due>0?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="openAureliaUpiForFolio('+Number(id)+')">Collect with Aurelia UPI · '+esc(K(due))+'</button><div class="lab" style="margin-top:8px">Payment must be verified in the Aurelia UPI review desk before the folio can be closed.</div>':(booking.st==='in'?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="outB('+Number(id)+')">Check out</button>':'<div class="lab">No outstanding balance.</div>');
+   actions.innerHTML=due>0?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="openAureliaUpiForFolio('+Number(id)+')">Generate QR & Share Payment Link · '+esc(K(due))+'</button><div class="lab" style="margin-top:8px">Creates the exact-amount Aurelia UPI QR and WhatsApp guest-share action. Verify bank credit before posting.</div>':(booking.st==='in'?'<button type="button" class="btn" style="width:100%;margin-top:12px" onclick="outB('+Number(id)+')">Check out</button>':'<div class="lab">No outstanding balance.</div>');
    panel.appendChild(actions);return result;
   };
   wrappedFolio.__aureliaUpiFolio=true;window.folio=wrappedFolio;

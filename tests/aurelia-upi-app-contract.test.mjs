@@ -128,3 +128,38 @@ test('Aurelia UPI UTR is optional while receiving-bank confirmation remains mand
   assert.match(confirm, /Confirm that you checked the credit in the receiving bank account/);
   assert.match(confirm, /if \(utr && !\//);
 });
+
+test('UPI overview lists every open folio and dining balance with separate UPI and cash actions', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  const html = await read('index.html');
+  assert.match(app, /function renderOpenBalances\(\)/);
+  assert.match(app, /data-upi-action="collect-folio"/);
+  assert.match(app, /data-upi-action="cash-folio"/);
+  assert.match(app, /data-upi-action="collect-dining"/);
+  assert.match(app, /data-upi-action="cash-dining"/);
+  assert.match(app, /context\?\.openCashFolioPayment/);
+  assert.match(app, /context\?\.openCashDiningPayment/);
+  assert.match(html, /openCashFolioPayment:id=>/);
+  assert.match(html, /openCashDiningPayment:id=>openCashDiningPayment\(id\)/);
+  assert.match(html, /function recordDiningCashPayment\(\)/);
+  assert.match(html, /I confirm this cash amount was physically received/);
+});
+
+test('incoming UPI alert assignment dropdown uses exact guest-identity candidates, not amount-only sessions', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  const domain = await read('src/aurelia-upi/domain.mjs');
+  assert.match(app, /matchEvidenceToSessions\(evidence, state\.sessions\)\.candidates/);
+  assert.match(app, /<small>Sender name<\/small>/);
+  assert.match(domain, /senderName === guestName/);
+  assert.match(domain, /session\.kind !== "folio"/);
+});
+
+test('UPI overview separates exact guest-matched alerts from verified PMS settlement history', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  assert.match(app, /function renderIncomingAlerts\(\)/);
+  assert.match(app, /row\.matchDecision === "REVIEW_REQUIRED" && row\.suggestedSessionId/);
+  assert.match(app, /<h3>Incoming UPI Alerts<\/h3>/);
+  assert.match(app, /function renderVerifiedHistory\(\)/);
+  assert.match(app, /row\.status === "APPLIED_TO_PMS"/);
+  assert.match(app, /<h3>Verified Settlement History<\/h3>/);
+});
