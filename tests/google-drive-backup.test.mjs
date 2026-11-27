@@ -2,7 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { BACKUP_SCHEDULES, GOOGLE_DRIVE_BACKUP_SCOPE, GOOGLE_DRIVE_IDENTITY_SCOPE, MAX_DRIVE_BACKUP_BYTES, createBackupScheduleStore, createGoogleDriveBackupAdapter } from "../src/backup/google-drive-backup.mjs";
 
-const envelope = JSON.stringify({ format: "AURELIA-PMS-ENCRYPTED-BACKUP", v: 2, cipher: "AES-256-GCM", ciphertext: "x".repeat(100) });
+const envelopeName = "aurelia-backup-2026-11-27-" + "a".repeat(64) + ".json";
+const envelope = JSON.stringify({
+  format: "AURELIA-PMS-ENCRYPTED-BACKUP", v: 3, application: "com.aurelia.pms",
+  name: envelopeName, cipher: "AES-256-GCM", kdf: "PBKDF2-HMAC-SHA256", iterations: 600000,
+  salt: "AAAAAAAAAAAAAAAAAAAAAA==", iv: "AAAAAAAAAAAAAAAA", wrapIv: "AAAAAAAAAAAAAAAA",
+  wrappedKey: "A".repeat(64), ciphertext: "x".repeat(100),
+  manifest: { formatVersion: 3, name: envelopeName, payloadSha256: "b".repeat(64), payloadBytes: 100,
+    recordCounts: { rooms: 0, b: 0, g: 0, t: 0, sales: 0, exp: 0, inv: 0, led: 0, aud: 0 } }
+});
 const testToken = "t".repeat(40);
 const fakeDriveId = "a".repeat(16);
 function fakeStorage() { const values = new Map(); return { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), values }; }
@@ -78,8 +86,33 @@ test("Drive adapter uses appDataFolder, validates encryption, and uploads encryp
   assert.equal(result.retained, 1, "the newly uploaded recovery point counts even if Drive list indexing lags");
   assert.match(calls[0].url, /uploadType=multipart/);
   assert.match(calls[0].options.body, /appDataFolder/);
-  assert.match(calls[0].options.body, /aurelia-backup-\d+-[a-f0-9]{24}\.json/);
+  assert.ok(calls[0].options.body.includes(envelopeName), "Drive file name must preserve the authenticated envelope name");
   assert.match(calls[0].options.body, /AURELIA-PMS-ENCRYPTED-BACKUP/);
+});
+
+test("Drive upload rejects a filename that differs from the authenticated envelope name", async () => {
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => ({ ok: true, json: async () => ({ id: fakeDriveId, name: envelopeName, size: "200" }) }) });
+  await assert.rejects(adapter.upload(testToken, "aurelia-backup-wrong.json", envelope), { code: "DRIVE_BACKUP_NAME_MISMATCH" });
+});
+
+test("Drive v3 envelope requires authenticated manifest metadata", async () => {
+  const invalid = JSON.stringify({ format: "AURELIA-PMS-ENCRYPTED-BACKUP", v: 3, cipher: "AES-256-GCM", ciphertext: "x".repeat(100) });
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => ({ ok: true }) });
+  await assert.rejects(adapter.upload(testToken, envelopeName, invalid), { code: "DRIVE_BACKUP_INVALID" });
+});
+
+test("Drive download cancels an oversized stream even without Content-Length", async () => {
+  let cancelled = false;
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => ({
+    ok: true, headers: { get: () => null },
+    body: { getReader: () => ({
+      read: async () => ({ done: false, value: { byteLength: MAX_DRIVE_BACKUP_BYTES + 1 } }),
+      cancel: async () => { cancelled = true; },
+      releaseLock: () => {}
+    }) }
+  }) });
+  await assert.rejects(adapter.download(testToken, fakeDriveId), { code: "DRIVE_BACKUP_TOO_LARGE" });
+  assert.equal(cancelled, true);
 });
 
 test("backup history paginates, validates files, and sorts newest first", async () => {
