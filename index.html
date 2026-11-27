@@ -5530,6 +5530,7 @@ module.exports = QRCode;
       return;
     }
 
+    if (act === "guest-whatsapp") { guestWhatsAppAction(actEl.dataset.phone, actEl.dataset.name); return; }
     if (act === "guest-save") {
       const idx = Number(actEl.dataset.idx);
       const n = document.getElementById("gp-n").value.trim();
