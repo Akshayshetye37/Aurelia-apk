@@ -136,12 +136,12 @@ test('reference workspace keeps six-destination mobile dock and responsive deskt
   assert.match(html, /#hor-book\{display:flex!important\}/);
 });
 
-test('reference workspace applies emerald and champagne-gold visual tokens without weakening offline font policy', () => {
-  assert.match(html, /--bg:#07120e;--s1:#0c1d16;--s2:#10241c/);
-  assert.match(html, /--gold:#dfc07b/);
-  assert.match(html, /--serif:"Cormorant Garamond",Georgia,serif/);
-  assert.match(html, /--sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif/);
-  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
+test('reference workspace aligns with the uploaded emerald and champagne-gold palette while keeping fonts offline', () => {
+  assert.match(html, /--bg:#081711;--s1:#10271d;--s2:#173628/);
+  assert.match(html, /--gold:#e2c783/);
+  assert.match(html, /--serif:"EB Garamond",Georgia,serif/);
+  assert.match(html, /--sans:Manrope,system-ui,-apple-system,"Segoe UI",sans-serif/);
+  assert.doesNotMatch(html, /fonts\\.googleapis\\.com|fonts\\.gstatic\\.com/);
   assert.match(html, /Content-Security-Policy/);
 });
 
