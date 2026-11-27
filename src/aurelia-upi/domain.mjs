@@ -121,7 +121,7 @@ export function createPaymentSession(input = {}, nowMs = Date.now()) {
     guestName: String(input.guestName || "").trim().slice(0, 100),
     guestPhone: (() => {
       const phone = String(input.guestPhone ?? "").trim();
-      if (phone.length > 20 || /[\\u0000-\\u001f\\u007f]/.test(phone)) {
+      if (phone.length > 20 || /[\x00-\x1f\x7f]/.test(phone)) {
         throw new TypeError("Guest phone is invalid.");
       }
       return phone;
