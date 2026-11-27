@@ -168,3 +168,16 @@ The main application must satisfy these checks before release:
 2. Non-UPI method submissions are rejected by application logic.
 3. Provider gateway configuration and checkout interfaces are absent from the PMS main branch.
 4. Existing folio and accounting records remain intact.
+
+
+## Uploaded PMS workspace alignment
+
+The active `index.html` now uses the uploaded emerald-and-champagne Aurelia PMS workspace as its application shell. It retains the workspace's room, reservation, folio, dining, guest, housekeeping, inventory, expense, reporting, audit and settings flows.
+
+The Folios destination mounts the repository-backed Aurelia UPI payment desk from `src/aurelia-upi` and the local QR bundle. UPI requests are created with exact INR amounts, guest/folio references and saved guest phone numbers; WhatsApp uses the universal `wa.me` link so Android can route to WhatsApp Personal or Business. Staff must still send the prefilled message and verify receiving-bank credit before PMS posting. Incoming notification evidence is review-only.
+
+Cash and bank transfer remain available for room folios and dining tickets. Cash/bank receipts require operator confirmation. Card/POS and external payment gateways are not enabled.
+
+On first launch after this workspace change, `loadState()` checks the previous `aurelia_lodge_v2` browser record and maps its rooms, bookings, guest profiles, payments, dining orders, sales, settings and audit data into the uploaded workspace schema. The old key is retained; it is not deleted. If the previous data cannot be validated or migrated, writes are blocked and the recovery message is shown rather than silently starting with empty sample data.
+
+The web build packages `assets/aurelia-upi.css`, the local QR engine and the Aurelia UPI module. No CDN chart, font or QR runtime is required.
