@@ -444,6 +444,9 @@ export function matchEvidenceToSessions(evidence, sessions, {
   const receivedAt = Date.parse(evidence.receivedAt);
   if (!Number.isFinite(receivedAt)) return { decision: "UNMATCHED", reason: "invalid_timestamp", candidates: [] };
   const candidates = (Array.isArray(sessions) ? sessions : []).filter(session => {
+    // Incoming alerts are auto-suggested only against a named, open guest folio.
+    // General and dining collections remain unmatched rather than being attributed to a room guest.
+    if (session.kind !== "folio" || session.bookingId == null || !String(session.guestName || "").trim()) return false;
     if (session.currency !== "INR" || session.rail !== "AURELIA_UPI" ||
         session.amountPaise !== evidence.amountPaise) return false;
     const createdAt = Date.parse(session.createdAt);
