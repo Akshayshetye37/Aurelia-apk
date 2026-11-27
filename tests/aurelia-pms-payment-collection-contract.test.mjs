@@ -15,21 +15,21 @@ test('guest checkout shows the folio balance and routes UPI collection into the 
   assert.match(html, /openAureliaUpiForFolio/);
 });
 
-test('every open room folio offers UPI and cash/bank collection', async () => {
+test('every open room folio offers UPI and cash collection in the single Folios payment workspace', async () => {
+  const app = await readFile(new URL('../src/aurelia-upi/app.mjs', import.meta.url), 'utf8');
   const html = await readIndex();
-  assert.match(html, /Open Balances Ready to Collect/);
-  assert.match(html, /data-action="upi-create-folio"/);
-  assert.match(html, /data-action="folio-manual-payment"/);
-  assert.match(html, /<option value="cash">Cash/);
-  assert.match(html, /<option value="bank">Bank Transfer/);
+  assert.match(html, /id="aurelia-upi-root"/);
+  assert.match(app, /data-upi-action="collect-folio"/);
+  assert.match(app, /data-upi-action="cash-folio"/);
+  assert.match(app, /Open balances ready to collect/);
 });
 
-test('every open dining ticket offers UPI and cash/bank collection', async () => {
+test('every open dining ticket offers UPI and cash collection in the single Folios payment workspace', async () => {
+  const app = await readFile(new URL('../src/aurelia-upi/app.mjs', import.meta.url), 'utf8');
   const html = await readIndex();
-  assert.match(html, /data-action="upi-create-table"/);
-  assert.match(html, /data-action="upi-cash-table"/);
-  assert.match(html, /function openManualDiningPaymentModal/);
-  assert.match(html, /function recordManualDiningPayment/);
+  assert.match(html, /id="aurelia-upi-root"/);
+  assert.match(app, /data-upi-action="collect-dining"/);
+  assert.match(app, /data-upi-action="cash-dining"/);
 });
 
 test('cash and bank payments require explicit receipt confirmation and are bounded by the open balance', async () => {
