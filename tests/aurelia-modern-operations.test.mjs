@@ -54,7 +54,7 @@ test('incoming alerts are routed into review evidence and never posted automatic
 });
 
 test('VPA changes fail closed until encrypted payment history is loaded and open sessions are resolved', () => {
-  assert.match(html, /Open Aurelia UPI and verify encrypted payment storage/);
+  assert.match(html, /installed Aurelia Android app after encrypted payment storage is available/);
   assert.match(html, /Resolve all active and queued Aurelia UPI requests/);
   assert.match(html, /Enter a valid UPI ID/);
 });
