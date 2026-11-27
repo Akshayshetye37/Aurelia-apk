@@ -119,7 +119,13 @@ export function createPaymentSession(input = {}, nowMs = Date.now()) {
     bookingId: input.bookingId == null ? null : safeText(input.bookingId, 128, "Booking ID"),
     tableId: input.tableId == null ? null : safeText(input.tableId, 64, "Table ID"),
     guestName: String(input.guestName || "").trim().slice(0, 100),
-    guestPhone: safeText(input.guestPhone || "", 20, "Guest phone"),
+    guestPhone: (() => {
+      const phone = String(input.guestPhone ?? "").trim();
+      if (phone.length > 20 || /[\\u0000-\\u001f\\u007f]/.test(phone)) {
+        throw new TypeError("Guest phone is invalid.");
+      }
+      return phone;
+    })(),
     room: String(input.room || "").trim().slice(0, 64),
     amountPaise,
     currency: "INR",
