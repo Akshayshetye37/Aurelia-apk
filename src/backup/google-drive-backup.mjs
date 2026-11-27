@@ -34,7 +34,7 @@ function validateEnvelope(payload) {
     const validCounts = manifest?.recordCounts && recordKeys.every(key => Number.isSafeInteger(manifest.recordCounts[key]) && manifest.recordCounts[key] >= 0);
     if (parsed.application !== "com.aurelia.pms" || parsed.kdf !== "PBKDF2-HMAC-SHA256" ||
         !Number.isSafeInteger(parsed.iterations) || parsed.iterations < 600000 || parsed.iterations > 1000000 ||
-        typeof parsed.name !== "string" || !/^aurelia-backup-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{64}\\.json$/i.test(parsed.name) ||
+        typeof parsed.name !== "string" || !/^aurelia-backup-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{64}\.json$/i.test(parsed.name) ||
         !validBase64(parsed.salt) || parsed.salt.length !== 24 ||
         !validBase64(parsed.iv) || parsed.iv.length !== 16 ||
         !validBase64(parsed.wrapIv) || parsed.wrapIv.length !== 16 ||
