@@ -293,3 +293,14 @@ test('bank statement CSV date parsing treats slash dates as Indian day-first dat
   const invalid = 'Date,Description,UTR,Credit\n31/02/2026,"UPI/CR/123456789012",123456789012,10.00';
   assert.equal(parseBankStatementCsv(invalid).rows.length, 0);
 });
+
+test('payment sessions preserve the guest phone for addressed WhatsApp sharing', () => {
+  const session = createPaymentSession({
+    ...base,
+    id: 'whatsapp-guest',
+    guestName: 'Aarav Deshmukh',
+    guestPhone: '+91 98220 51204'
+  }, Date.parse(base.createdAt));
+  assert.equal(session.guestPhone, '+91 98220 51204');
+  assert.equal(session.upiUri && new URL(session.upiUri).searchParams.get('am'), '1250.50');
+});
