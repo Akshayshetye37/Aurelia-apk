@@ -4399,9 +4399,9 @@ module.exports = QRCode;
           <label class="fld"><span>Payment Method</span><select id="checkout-method"><option value="upi">Aurelia UPI · Payment Link</option><option value="cash">Cash</option><option value="bank">Bank Transfer</option></select></label>
           <label class="fld"><span>Amount received (${esc(cur())})</span><input id="checkout-amount" type="number" min="0.01" max="${due.toFixed(2)}" step="0.01" value="${due.toFixed(2)}"></label>
           <label class="fld"><span>Bank reference <small>(Optional)</small></span><input id="checkout-reference" maxlength="80" placeholder="Enter UTR / reference if available"></label>
-          <div class="checkout-note" id="checkout-method-note">Cash: confirm the amount received at the front desk.</div>
+          <div class="checkout-note" id="checkout-method-note">Aurelia UPI: generate an exact-amount QR and share the request with the guest. Verify bank credit before posting; UTR is optional.</div>
           <label class="check-row"><input id="checkout-payment-confirm" type="checkbox"><span>I confirm this payment was actually received / approved outside Aurelia PMS.</span></label>
-          <button class="btn full emerald" type="button" data-action="checkout-record-payment" data-id="${b.id}">Record Payment &amp; Recalculate Balance</button>
+          <button class="btn full emerald" id="checkout-submit-payment" type="button" data-action="checkout-record-payment" data-id="${b.id}">Generate UPI QR &amp; Share Payment Link</button>
           <div class="checkout-note"><strong>Card payment unavailable:</strong> Aurelia PMS has no POS terminal or online card gateway. Use Aurelia UPI, cash or bank transfer.</div>
         </div>
       ` : `
@@ -4420,8 +4420,10 @@ module.exports = QRCode;
       if (note) note.textContent = ({
         cash: "Cash: confirm the amount received at the front desk.",
         bank: "Bank transfer: verify the credit in the bank account. UTR entry is optional.",
-        upi: "Aurelia UPI: create an exact-amount link and send it to the guest. Verify bank credit before posting; UTR is optional."
+        upi: "Aurelia UPI: generate the exact-amount QR, then share the payment request with the guest on WhatsApp."
       })[method.value] || "Select an available payment method.";
+      const submit = document.getElementById("checkout-submit-payment");
+      if (submit) submit.innerHTML = method.value === "upi" ? "Generate UPI QR &amp; Share Payment Link" : "Record Payment &amp; Recalculate Balance";
     });
   }
 
