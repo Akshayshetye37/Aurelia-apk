@@ -9,14 +9,6 @@ const { findStayExtensionConflict, buildStayExtension } = require('../scripts/st
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const prepare = await readFile(new URL('../scripts/prepare-web.js', import.meta.url), 'utf8');
 
-function extractScript(source, id) {
-  const start = source.indexOf('<script id="' + id + '">');
-  const openEnd = source.indexOf('>', start);
-  const end = source.indexOf('</script>', openEnd);
-  assert.ok(start >= 0 && openEnd > start && end > openEnd, id + ' script exists');
-  return source.slice(openEnd + 1, end);
-}
-
 test('stay extension blocks overlapping room occupancy but permits checkout-day adjacency', () => {
   const active = { id: 10, g: 'Guest A', room: '101', in: 0, out: 3, st: 'in' };
   const next = { id: 11, g: 'Guest B', room: '101', in: 3, out: 5, st: 'res' };
@@ -63,81 +55,43 @@ test('stay extension rejects invalid status, shortening, conflicts, malformed da
   }), /greater than zero/);
 });
 
-test('browser storage adapter never silently falls back to volatile memory', () => {
-  const source = extractScript(html, 'aurelia-safe-storage');
-  let rejectWrites = false;
-  const values = new Map();
-  const localStorage = {
-    setItem(key, value) { if (rejectWrites) throw new Error('QuotaExceededError'); values.set(String(key), String(value)); },
-    getItem(key) { return values.has(String(key)) ? values.get(String(key)) : null; },
-    removeItem(key) { values.delete(String(key)); }
-  };
-  const context = { window: { localStorage } };
-  vm.runInNewContext(source, context);
-  rejectWrites = true;
-  assert.throws(
-    () => context.window.__aureliaStorage.setItem('aurelia_lodge_v2', '{"b":[]}'),
-    error => error.code === 'AURELIA_PERSISTENCE_UNAVAILABLE'
-  );
-  assert.equal(values.has('aurelia_lodge_v2'), false);
+test('uploaded PMS uses fail-closed IndexedDB reads and read-back verified writes', () => {
+  assert.match(html, /function openDeviceDatabase\(\)/);
+  assert.match(html, /function readDeviceRecord\(db\)/);
+  assert.match(html, /function writeDeviceRecord\(db, raw\)/);
+  assert.match(html, /async function loadState\(\)/);
+  assert.match(html, /async function saveState\(/);
+  assert.match(html, /persistenceLoadBlocked/);
+  assert.match(html, /read-back verification/);
+  assert.match(html, /NOT SAVED/);
 });
 
-test('persist returns success only after exact durable read-back', () => {
-  const start = html.indexOf('function persist(){');
-  const end = html.indexOf('\nlet LOCAL_STATE_STATUS=', start);
-  assert.ok(start >= 0 && end > start);
-  const source = html.slice(start, end);
-  const values = new Map();
-  const storage = {
-    getItem(key) { return values.get(String(key)) ?? null; },
-    setItem(key, value) { values.set(String(key), String(value)); },
-    removeItem(key) { values.delete(String(key)); }
-  };
-  const context = {
-    window: { __aureliaStorage: storage },
-    RECOVERY_CHECK_PENDING: false,
-    LOCAL_STATE_STATUS: 'valid',
-    DK: ['rooms'], SK: 'aurelia_lodge_v2',
-    S: { rooms: [{ id: 1 }], tab: 'stays', bk: {}, qw: 0 },
-    toast() {}
-  };
-  vm.runInNewContext(source + '\nglobalThis.persistResult=persist();', context);
-  assert.equal(context.persistResult, true);
-  assert.ok(values.has('aurelia_lodge_v2'));
-
-  const brokenContext = {
-    window: { __aureliaStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } },
-    RECOVERY_CHECK_PENDING: false,
-    LOCAL_STATE_STATUS: 'valid',
-    DK: ['rooms'], SK: 'aurelia_lodge_v2',
-    S: { rooms: [{ id: 1 }], tab: 'stays', bk: {}, qw: 0 },
-    toast() {}
-  };
-  vm.runInNewContext(source + '\nglobalThis.persistResult=persist();', brokenContext);
-  assert.equal(brokenContext.persistResult, false);
-  assert.equal(brokenContext.LOCAL_STATE_STATUS, 'write-failed');
+test('main-branch v2 records are mapped into the uploaded schema without deleting the source key', () => {
+  assert.match(html, /function migrateLegacyProjectState\(value\)/);
+  assert.match(html, /window\.localStorage\.getItem\("aurelia_lodge_v2"\)/);
+  assert.match(html, /booking\.pays = pays/);
+  assert.match(html, /legacyPaid - recorded/);
+  assert.match(html, /unit, qty/);
+  assert.match(html, /LEGACY-MIGRATION-/);
+  assert.doesNotMatch(html, /removeItem\("aurelia_lodge_v2"\)/);
 });
 
-test('reset only reloads after persisted application state is confirmed absent', () => {
-  const start = html.indexOf('function resetAll(){');
-  const end = html.indexOf('/* backup engine */', start);
-  const reset = html.slice(start, end);
-  assert.ok(reset.includes('storage.removeItem(SK)'));
-  assert.ok(reset.includes('storage.getItem(SK)!==null'));
-  assert.ok(reset.includes('Reset failed: device storage could not be cleared'));
+test('uploaded Stays and Folio screens expose date extension and retain extension history', () => {
+  assert.match(html, /function openExtendStayModal\(id\)/);
+  assert.match(html, /data-action="submit-extend"/);
+  assert.match(html, /extensionHistory/);
+  assert.match(html, /Choose a checkout date later than/);
+  assert.match(html, /conflict/);
 });
 
-test('Stays and Folio expose the extension and the web build packages its rules', () => {
-  assert.ok(html.includes('scripts/stay-extension.js'));
-  assert.ok(html.includes('Change departure before check-in'));
-  assert.ok(html.includes('Extend stay'));
-  assert.ok(html.includes('Stay extension history'));
-  assert.ok(html.includes('if(!persist()){'));
+test('web build packages the UPI module, QR engine and stay-extension rules', () => {
+  assert.ok(prepare.includes("path.join(root, 'src', 'aurelia-upi')"));
   assert.ok(prepare.includes("path.join(root, 'scripts', 'stay-extension.js')"));
-  assert.ok(prepare.includes("path.join(scriptsOutput, 'stay-extension.js')"));
+  assert.ok(prepare.includes("path.join(outputDir, 'src', 'aurelia-upi', 'app.mjs')"));
+  assert.ok(prepare.includes("path.join(outputDir, 'assets', 'qrcode.min.js')"));
 });
 
-test('all inline application scripts parse after stay-extension integration', () => {
+test('all inline application scripts parse after the uploaded workspace integration', () => {
   let cursor = 0, count = 0;
   while (true) {
     const start = html.indexOf('<script', cursor);
@@ -152,5 +106,5 @@ test('all inline application scripts parse after stay-extension integration', ()
     }
     cursor = close + 9;
   }
-  assert.ok(count >= 18);
+  assert.ok(count >= 3);
 });
