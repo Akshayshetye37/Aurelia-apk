@@ -3024,6 +3024,15 @@ module.exports = QRCode;
     return Array.from(document.querySelectorAll("canvas[data-upi-qr]")).find(c => c.getAttribute("data-upi-qr") === uri);
   }
 
+  function guestWhatsAppAction(phone, guestName) {
+    const digits = normalizeWhatsAppPhone(phone);
+    if (!digits) { toast("Add a valid guest phone number with country code first."); return; }
+    const message = "Hello " + String(guestName || "Guest").trim() + ", this is " + String(S.settings.name || "Aurelia PMS") + ". How can we assist you?";
+    const url = "https://wa.me/" + digits + "?text=" + encodeURIComponent(message);
+    if (window.AureliaPmsContext?.launchExternalUrl) window.AureliaPmsContext.launchExternalUrl(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   function normalizeWhatsAppPhone(value) {
     const digits = String(value || "").replace(/\D/g, "");
     return digits.length >= 10 && digits.length <= 15 ? digits : "";
@@ -3712,6 +3721,7 @@ module.exports = QRCode;
                 ${vehicleNames ? `<div class="dim">Vehicles: ${esc(vehicleNames)}</div>` : ""}
                 <div class="row">
                   <div class="row-wrap">
+                    <button class="btn xs ghost" type="button" data-action="guest-whatsapp" data-phone="${esc(g.ph || "")}" data-name="${esc(g.n || "")}">WhatsApp</button>
                     <button class="btn xs ghost" type="button" data-action="guest-edit" data-idx="${idx}">Edit</button>
                     <button class="btn xs" type="button" data-action="new-booking" data-guest="${esc(g.n)}">Book</button>
                   </div>
