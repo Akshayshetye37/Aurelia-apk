@@ -800,6 +800,30 @@ body[data-theme="light"] .chip.on { background: #143d2d; color: #fff; border-col
   border-color: rgba(237, 187, 93, 0.5);
   background: var(--amber-soft);
 }
+
+.modal-panel.cancellation-modal {
+  max-height: min(90vh, var(--aurelia-visual-height, 90vh));
+  overscroll-behavior: contain;
+  scroll-padding-block: 18px;
+}
+.modal-panel.cancellation-modal .fld { min-width: 0; }
+.modal-panel.cancellation-modal input,
+.modal-panel.cancellation-modal select { scroll-margin-block: 22px; }
+@media (max-width: 640px) {
+  .modal-backdrop:has(.cancellation-modal) {
+    top: var(--aurelia-visual-offset-top, 0px);
+    height: var(--aurelia-visual-height, 100dvh);
+    bottom: auto;
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal-panel.cancellation-modal {
+    width: 100%;
+    max-height: min(92vh, var(--aurelia-visual-height, 92vh));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    border-radius: 24px 24px 0 0;
+  }
+}
 @media (max-width: 900px) { .persistence-alert { margin: 6px 14px 0; padding: 8px 10px; font-size: 10.5px; } }
 
 /* Mobile Bottom Dock */
@@ -2554,6 +2578,21 @@ module.exports = QRCode;
     return optionalArrays.every(key => value[key] == null || Array.isArray(value[key]));
   }
 
+  function collapseDuplicateCancellationJournals(entries) {
+    const latestByCancellation = new Map();
+    const retained = [];
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      const ref = String(entry?.ref || "");
+      if (ref.startsWith("CANCEL-")) {
+        if (latestByCancellation.has(ref)) continue;
+        latestByCancellation.set(ref, entry);
+      }
+      retained.push(entry);
+    }
+    return retained.reverse();
+  }
+
   function normalizeLoadedState(value) {
     if (!validatePersistedState(value)) throw new Error("Saved PMS data is incomplete or has an unsupported structure.");
     const defaults = createDefaultState();
@@ -2572,6 +2611,7 @@ module.exports = QRCode;
     if (S.tab === "more") S.tab = "set";
     const validTabs = ["home", "rooms", "stays", "upi", "dining", "guests", "hk", "inv", "exp", "rep", "aud", "set", "more"];
     if (!validTabs.includes(S.tab)) S.tab = "home";
+    S.financialLedger = collapseDuplicateCancellationJournals(S.financialLedger);
     S.bookings = S.bookings.map(b => Object.assign({ oc: [], veh: [] }, b, {
       oc: Array.isArray(b.oc) ? b.oc : [],
       veh: Array.isArray(b.veh) ? b.veh : []
@@ -2931,6 +2971,18 @@ module.exports = QRCode;
   const fmtMoney = n => cur() + Math.round(Number(n) || 0).toLocaleString("en-IN");
   const getRoom = num => S.rooms.find(r => String(r.n) === String(num));
   const getBooking = id => S.bookings.find(b => Number(b.id) === Number(id));
+  const bookingCreatedAt = booking => {
+    const raw = booking?.createdAt || booking?.created_at || booking?.bookedAt || booking?.reservationCreatedAt || booking?.created || "";
+    const parsed = raw ? Date.parse(raw) : NaN;
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  function sortBookingsNewestFirst(bookings) {
+    return bookings.slice().sort((a, b) => {
+      const timeDifference = bookingCreatedAt(b) - bookingCreatedAt(a);
+      if (timeDifference) return timeDifference;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+  }
   const getGuest = name => S.guests.find(g => String(g.n || "").toLowerCase() === String(name || "").toLowerCase());
   const nightsOf = b => Math.max(1, Number(b.out) - Number(b.in));
   const roomSubtotal = b => nightsOf(b) * (Number((getRoom(b.room) || {}).r) || 0);
@@ -3030,9 +3082,10 @@ module.exports = QRCode;
     catch (error) { cleanup(); toast("The print dialog could not be opened."); }
   }
 
-  function openModal(title, subtitle, bodyHtml) {
+  function openModal(title, subtitle, bodyHtml, options = {}) {
     const root = document.getElementById("modal-root");
     const panel = document.getElementById("modal-panel");
+    panel.classList.toggle("cancellation-modal", options.modalClass === "cancellation-modal");
     panel.innerHTML =
       '<div class="modal-head no-print">' +
         '<div><h2>' + esc(title) + '</h2>' + (subtitle ? '<div class="muted" style="margin-top:3px">' + subtitle + '</div>' : '') + '</div>' +
@@ -3041,10 +3094,20 @@ module.exports = QRCode;
       bodyHtml;
     root.classList.add("show");
     renderUpiQrBlocks(panel);
+    if (options.focusId) {
+      const focusTarget = document.getElementById(options.focusId);
+      if (focusTarget) {
+        requestAnimationFrame(() => {
+          focusTarget.focus({ preventScroll: true });
+          focusTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+        });
+      }
+    }
   }
 
   function closeModal() {
     document.getElementById("modal-root").classList.remove("show");
+    document.getElementById("modal-panel").classList.remove("cancellation-modal");
   }
 
   function buildUpiUri(amount, note, ref) {
@@ -3573,7 +3636,7 @@ module.exports = QRCode;
         `;
       }
 
-      const list = S.bookings.filter(b => S.stayFilter === "all" || b.st === S.stayFilter);
+      const list = sortBookingsNewestFirst(S.bookings.filter(b => S.stayFilter === "all" || b.st === S.stayFilter));
       return header + `
         <div class="grid g2">
           ${list.map(b => {
@@ -4927,6 +4990,29 @@ module.exports = QRCode;
     } catch (e) { toast("Copy failed."); }
   }
 
+  /* Android soft keyboard / visual viewport coordination for bottom sheets. */
+  function updateVisibleModalViewport() {
+    const viewportHeight = window.visualViewport?.height || window.innerHeight;
+    const viewportOffsetTop = window.visualViewport?.offsetTop || 0;
+    document.documentElement.style.setProperty("--aurelia-visual-height", Math.max(240, Math.floor(viewportHeight)) + "px");
+    document.documentElement.style.setProperty("--aurelia-visual-offset-top", Math.max(0, Math.floor(viewportOffsetTop)) + "px");
+    const panel = document.getElementById("modal-panel");
+    const active = document.activeElement;
+    if (panel?.classList.contains("cancellation-modal") && active && panel.contains(active) && /^(INPUT|SELECT|TEXTAREA)$/.test(active.tagName)) {
+      requestAnimationFrame(() => active.scrollIntoView({ block: "center", behavior: "smooth" }));
+    }
+  }
+  window.visualViewport?.addEventListener("resize", updateVisibleModalViewport);
+  window.visualViewport?.addEventListener("scroll", updateVisibleModalViewport);
+  window.addEventListener("resize", updateVisibleModalViewport);
+  document.addEventListener("focusin", event => {
+    const panel = document.getElementById("modal-panel");
+    if (panel?.classList.contains("cancellation-modal") && panel.contains(event.target)) {
+      updateVisibleModalViewport();
+      requestAnimationFrame(() => event.target.scrollIntoView({ block: "center", behavior: "smooth" }));
+    }
+  });
+
   /* ================= DELEGATED EVENT HANDLER ================= */
   document.addEventListener("click", async e => {
     if (e.target.id === "modal-root") { closeModal(); return; }
@@ -5023,7 +5109,8 @@ module.exports = QRCode;
         const share = index === selectedRooms.length - 1 ? advanceRemaining : Math.min(advanceRemaining, Math.round(proportionalShare * 100) / 100);
         advanceRemaining = Math.round((advanceRemaining - share) * 100) / 100;
         const pays = share > 0 ? [{ a: share, m: "Aurelia UPI Advance", r: advanceReference || ("ADV-" + groupId), at: new Date().toISOString() }] : [];
-        const nb = { id: ++S.nextId, groupId, groupLead: index === 0, g: name, room: roomNum, in: a, out: z, st: "res", checkInTime: tin, checkOutTime: tout, dc: 0, ch: [], pays, oc: occupants, veh: vehicles, extensionHistory: [] };
+        const createdAt = new Date().toISOString();
+        const nb = { id: ++S.nextId, groupId, groupLead: index === 0, createdAt, g: name, room: roomNum, in: a, out: z, st: "res", checkInTime: tin, checkOutTime: tout, dc: 0, ch: [], pays, oc: occupants, veh: vehicles, extensionHistory: [] };
         S.bookings.unshift(nb);
       });
       if (advance > 0) S.todayRevenue += advance;
@@ -5169,16 +5256,25 @@ module.exports = QRCode;
 
     if (act === "confirm-cancel") {
       const idx = S.bookings.findIndex(x => Number(x.id) === Number(actEl.dataset.id));
-      if (idx < 0) return;
-      const b = S.bookings.splice(idx, 1)[0];
+      if (idx < 0) { toast("This reservation has already been cancelled or is no longer active."); return; }
+      const b = S.bookings[idx];
       const mode = actEl.dataset.mode;
-      S.cancelled.unshift({
+      if (!["no_refund", "refund_pending"].includes(mode)) { toast("Cancellation outcome is invalid."); return; }
+      const cancelledRecord = {
         ...b,
         originalPaid: bookingPaid(b),
         cancelledAt: new Date().toISOString(),
         refundStatus: mode === "refund_pending" ? "Pending manual admin review" : "No refund (retained)"
-      });
+      };
+      S.bookings.splice(idx, 1);
+      S.cancelled.unshift(cancelledRecord);
       addAudit("Booking cancelled", `${b.g} · Room ${b.room} · ${mode}`);
+      if (!(await persistMutation())) {
+        S.cancelled.shift();
+        S.bookings.splice(idx, 0, b);
+        S.audit.shift();
+        return;
+      }
       closeModal();
       S.stayFilter = "cancelled";
       render();
@@ -5189,18 +5285,38 @@ module.exports = QRCode;
       const idx = Number(actEl.dataset.idx);
       const c = S.cancelled[idx];
       if (!c) return;
+      const journalRef = "CANCEL-" + c.id;
+      const existingJournal = S.financialLedger.find(entry => entry.ref === journalRef);
+      const refundLine = existingJournal?.lines?.find(line => line.account === "Refunds Payable Liability");
+      const cashLine = existingJournal?.lines?.find(line => line.account === "Cash & Bank");
+      const hasRecordedRefund = c.journalRefundAmount != null || !!existingJournal;
+      const previousRefund = Number(c.journalRefundAmount ?? refundLine?.credit ?? cashLine?.credit ?? 0);
+      const initialRefund = hasRecordedRefund && Number.isFinite(previousRefund) ? previousRefund : Math.max(0, Number(c.originalPaid) || 0);
       openModal("Cancellation Accounting", `${esc(c.g)} · Room ${esc(c.room)}`, `
-        <div class="card card-tight" style="margin-bottom:12px">Original Paid: <strong>${fmtMoney(c.originalPaid)}</strong></div>
-        <label class="fld"><span>Refund Amount (${esc(cur())})</span><input id="rf-amt" type="number" min="0" max="${c.originalPaid}" value="${c.originalPaid}"></label>
+        <div class="card card-tight" style="margin-bottom:12px">
+          <div class="row"><span>Original paid</span><strong>${fmtMoney(c.originalPaid)}</strong></div>
+          <div class="row"><span>Journal state</span><strong>${existingJournal ? "Existing entry · will update" : "Not journaled"}</strong></div>
+        </div>
+        <label class="fld"><span>Refund Amount (${esc(cur())})</span><input id="rf-amt" type="number" inputmode="decimal" min="0" max="${Number(c.originalPaid) || 0}" step="0.01" value="${initialRefund}" autocomplete="off"></label>
         <label class="fld"><span>Journal Status</span>
           <select id="rf-status">
-            <option value="refunded">Refund Paid via Aurelia UPI</option>
-            <option value="pending">Pending Refund (Liability)</option>
-            <option value="no_refund">No Refund / Full Retention</option>
+            <option value="pending" ${/pending/i.test(String(c.refundStatus || "")) ? "selected" : ""}>Pending Refund (Liability)</option>
+            <option value="refunded" ${/^Refunded/i.test(String(c.refundStatus || "")) ? "selected" : ""}>Refund Transfer Completed · Aurelia UPI</option>
+            <option value="no_refund" ${/retained|no refund/i.test(String(c.refundStatus || "")) ? "selected" : ""}>No Refund / Full Retention</option>
           </select>
         </label>
-        <button class="btn full" type="button" data-action="commit-refund" data-idx="${idx}">Commit Double-Entry Journal</button>
-      `);
+        <div id="rf-completed-fields" class="stack" style="gap:8px">
+          <label class="fld"><span>Completed refund transfer UTR / Reference</span><input id="rf-refund-reference" maxlength="80" autocomplete="off" value="${esc(c.refundTransferReference || "")}" placeholder="Enter UTR from your UPI/bank app"></label>
+          <label class="check-row"><input id="rf-refund-verified" type="checkbox" ${c.refundTransferVerified === true ? "checked" : ""}><span>I completed this refund through Aurelia UPI / my UPI app and verified the debit in the bank account.</span></label>
+          <div class="checkout-note">Aurelia does not send the refund. Complete the transfer yourself, then record its UTR and verify the bank debit. No provider gateway is used.</div>
+        </div>
+        <button class="btn full" type="button" data-action="commit-refund" data-idx="${idx}">${existingJournal ? "Update Cancellation Journal" : "Commit Cancellation Journal"}</button>
+      `, { modalClass: "cancellation-modal", focusId: "rf-amt" });
+      const statusSelect = document.getElementById("rf-status");
+      const completedFields = document.getElementById("rf-completed-fields");
+      const updateRefundFields = () => { completedFields.hidden = statusSelect.value !== "refunded"; };
+      statusSelect.addEventListener("change", updateRefundFields);
+      updateRefundFields();
       return;
     }
 
@@ -5208,24 +5324,68 @@ module.exports = QRCode;
       const idx = Number(actEl.dataset.idx);
       const c = S.cancelled[idx];
       if (!c) return;
-      const status = document.getElementById("rf-status").value;
-      const refund = status === "no_refund" ? 0 : Math.min(c.originalPaid, Math.max(0, Number(document.getElementById("rf-amt").value) || 0));
-      const retained = Math.max(0, c.originalPaid - refund);
+      const status = document.getElementById("rf-status")?.value;
+      if (!["pending", "refunded", "no_refund"].includes(status)) { toast("Choose a valid cancellation journal status."); return; }
+      const enteredRefund = status === "no_refund" ? 0 : Number(document.getElementById("rf-amt")?.value);
+      const originalPaid = Math.max(0, Math.round((Number(c.originalPaid) || 0) * 100) / 100);
+      const refund = Math.round((Number.isFinite(enteredRefund) ? enteredRefund : 0) * 100) / 100;
+      if (refund < 0 || refund > originalPaid || (status !== "no_refund" && !Number.isFinite(enteredRefund))) {
+        toast(`Refund amount must be between 0 and ${fmtMoney(originalPaid)}.`); return;
+      }
+      const retained = Math.max(0, originalPaid - refund);
+      const transferReference = String(document.getElementById("rf-refund-reference")?.value || "").trim().toUpperCase().slice(0, 80);
+      const manualVerified = document.getElementById("rf-refund-verified")?.checked === true;
+      if (status === "refunded" && refund > 0 && (!transferReference || !manualVerified)) {
+        toast("Enter the refund transfer reference and confirm the UPI/bank debit was verified."); return;
+      }
+      if ((status === "refunded" || status === "pending") && originalPaid > 0 && refund <= 0) {
+        toast("Enter a positive refund amount or choose No Refund / Full Retention."); return;
+      }
+      if (status === "refunded" && refund > 0 && S.cancelled.some((row, rowIndex) => rowIndex !== idx &&
+        String(row.refundTransferReference || "").trim().toUpperCase() === transferReference)) {
+        toast("This refund transfer reference is already recorded for another cancellation."); return;
+      }
       const lines = [];
       if (status === "pending" && refund > 0) {
         lines.push({ account: "Guest Advances Liability", debit: refund, credit: 0 }, { account: "Refunds Payable Liability", debit: 0, credit: refund });
+        if (retained > 0) lines.push({ account: "Guest Advances Liability", debit: retained, credit: 0 }, { account: "Cancellation Revenue", debit: 0, credit: retained });
       } else {
         if (refund > 0) lines.push({ account: "Guest Advances Liability", debit: refund, credit: 0 }, { account: "Cash & Bank", debit: 0, credit: refund });
         if (retained > 0) lines.push({ account: "Guest Advances Liability", debit: retained, credit: 0 }, { account: "Cancellation Revenue", debit: 0, credit: retained });
       }
+      const journalRef = "CANCEL-" + c.id;
+      const previousLedger = S.financialLedger.slice();
+      const existingJournals = S.financialLedger.filter(entry => entry.ref === journalRef);
+      const existingJournal = existingJournals[existingJournals.length - 1] || null;
+      const previousCancellation = { ...c };
+      const previousAudit = S.audit.slice();
+      S.financialLedger = collapseDuplicateCancellationJournals(S.financialLedger.filter(entry => entry.ref !== journalRef));
       if (lines.length) {
-        S.financialLedger.push({ id: "JE-" + String(Date.now()).slice(-5), ref: "CANCEL-" + c.id, at: new Date().toISOString(), lines });
+        S.financialLedger.unshift({
+          ...(existingJournal || {}),
+          id: existingJournal?.id || "JE-" + String(Date.now()),
+          ref: journalRef,
+          at: new Date().toISOString(),
+          lines
+        });
       }
-      c.refundStatus = status === "refunded" ? `Refunded ${fmtMoney(refund)} (Retained ${fmtMoney(retained)})` : status === "pending" ? `Refund Pending (${fmtMoney(refund)})` : `Retained ${fmtMoney(retained)}`;
-      addAudit("Cancellation journal", `${c.g} · ${c.refundStatus}`);
+      c.journalRefundAmount = refund;
+      c.journalRetainedAmount = retained;
+      c.refundTransferReference = status === "refunded" ? transferReference : "";
+      c.refundTransferVerified = status === "refunded" ? manualVerified : false;
+      c.refundStatus = status === "refunded" ? `Refunded ${fmtMoney(refund)} via Aurelia UPI (Retained ${fmtMoney(retained)})` : status === "pending" ? `Refund Pending ${fmtMoney(refund)} (Retained ${fmtMoney(retained)})` : `Retained ${fmtMoney(retained)}`;
+      addAudit(existingJournals.length ? "Cancellation journal updated" : "Cancellation journal committed", `${c.g} · ${journalRef} · ${c.refundStatus}`);
+      if (!(await persistMutation())) {
+        S.financialLedger = previousLedger;
+        Object.assign(c, previousCancellation);
+        S.audit = previousAudit;
+        return;
+      }
       closeModal();
+      S.tab = "set";
+      S.finTab = "journal";
       render();
-      toast("Double-entry cancellation journal committed");
+      toast(existingJournals.length ? "Cancellation journal updated; duplicate historical postings consolidated." : "Cancellation journal committed.");
       return;
     }
 
