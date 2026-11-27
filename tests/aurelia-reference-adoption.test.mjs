@@ -40,7 +40,7 @@ test('uploaded app keeps its own responsive layout and local emerald/gold design
 
 test('new collection and reservation actions delegate to real PMS functions', () => {
   assert.match(html, /function openNewBookingModal/);
-  assert.match(html, /function openAureliaUpiForFolio/);
-  assert.match(html, /function openAureliaUpiForDining/);
+  assert.match(html, /window\.openAureliaUpiForFolio = function/);
+  assert.match(html, /window\.openAureliaUpiForDining = function/);
   assert.match(html, /applyFolioPayment/);
 });
