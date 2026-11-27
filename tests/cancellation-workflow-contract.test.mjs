@@ -42,5 +42,5 @@ test('mobile cancellation form adapts to the visible keyboard viewport', () => {
   assert.match(html, /visualViewport/);
   assert.match(html, /--aurelia-visual-height/);
   assert.match(html, /modal-panel\.cancellation-modal/);
-  assert.match(html, /scrollIntoView\(\{\\s*block:\\s*"center"/);
+  assert.match(html, /scrollIntoView\\(\\{\\s*block:\\s*"center"/
 });
