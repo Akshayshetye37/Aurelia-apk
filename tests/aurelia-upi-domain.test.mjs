@@ -312,7 +312,7 @@ test('payment sessions preserve the guest phone for addressed WhatsApp sharing',
 
 
 test('incoming UPI alerts only suggest named guest folio sessions, never dining or general collections', () => {
-  const evidence = { amountPaise: 1208000, receivedAt: '2026-11-27T10:02:00.000Z', utr: '433290184722' };
+  const evidence = { amountPaise: 1208000, receivedAt: '2026-11-27T10:02:00.000Z', utr: '433290184722', senderName: 'Aarav Deshmukh' };
   const base = {
     currency: 'INR', rail: 'AURELIA_UPI', amountPaise: 1208000,
     createdAt: '2026-11-27T10:00:00.000Z', expiresAt: '2026-11-27T10:05:00.000Z',
