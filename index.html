@@ -3981,6 +3981,16 @@ module.exports = QRCode;
             </div>
 
             <div class="card">
+              <h3 style="font-size:22px;margin-bottom:8px">Booking API</h3>
+              <div class="dim" style="margin-bottom:12px">Optional HTTPS-only feed for guest contact and stay details. Government ID numbers/photos, folio balances, payments and dining sales are excluded.</div>
+              <label class="fld"><span>Enable Booking API</span><select id="set-booking-api-enabled"><option value="false" ${S.settings.bookingApiEnabled ? "" : "selected"}>Off</option><option value="true" ${S.settings.bookingApiEnabled ? "selected" : ""}>On</option></select></label>
+              <label class="fld"><span>HTTPS API Base URL</span><input id="set-booking-api-url" type="url" value="${esc(S.settings.bookingApiUrl || "")}" placeholder="https://api.example.com/v1"></label>
+              <label class="fld"><span>Bearer Token (optional)</span><input id="set-booking-api-key" type="password" autocomplete="off" value="${esc(S.settings.bookingApiKey || "")}" placeholder="Stored only in this device's PMS settings"></label>
+              <div class="row-wrap"><label class="check"><input id="set-booking-api-current" type="checkbox" ${S.settings.bookingApiIncludeCurrent !== false ? "checked" : ""}> Include current stays</label><label class="check"><input id="set-booking-api-past" type="checkbox" ${S.settings.bookingApiIncludePast !== false ? "checked" : ""}> Include past stays</label></div>
+              <div class="row-wrap"><button class="btn sm ghost" type="button" data-action="booking-api-preview">Preview Safe Feed</button><button class="btn sm ghost" type="button" data-action="booking-api-push">Push to HTTPS API</button></div>
+            </div>
+
+            <div class="card">
               <h3 style="font-size:22px;margin-bottom:8px">Operational Safeguards</h3>
               <div class="list-rows">
                 <div class="list-item"><div class="item-main"><strong>Room release</strong><small>Housekeeping staff confirms readiness before a room becomes bookable.</small></div><span class="tag amber">Manual</span></div>
@@ -5702,6 +5712,14 @@ module.exports = QRCode;
       S.settings.tax = document.getElementById("set-tax").value.trim();
       S.settings.addr = document.getElementById("set-addr").value.trim();
       S.settings.upi = upi;
+      const bookingApiUrlInput = document.getElementById("set-booking-api-url")?.value || "";
+      const validatedApiUrl = validatedBookingApiBaseUrl(bookingApiUrlInput);
+      if (bookingApiUrlInput.trim() && !validatedApiUrl) { toast("Booking API URL must be HTTPS and must not contain credentials, query strings or fragments."); return; }
+      S.settings.bookingApiEnabled = document.getElementById("set-booking-api-enabled")?.value === "true";
+      S.settings.bookingApiUrl = validatedApiUrl;
+      S.settings.bookingApiKey = validatedApiUrl ? String(document.getElementById("set-booking-api-key")?.value || "").trim() : "";
+      S.settings.bookingApiIncludeCurrent = !!document.getElementById("set-booking-api-current")?.checked;
+      S.settings.bookingApiIncludePast = !!document.getElementById("set-booking-api-past")?.checked;
       S.settings.gst = Math.max(0, Number(document.getElementById("set-gst").value) || 0);
       S.settings.checkInTime = document.getElementById("set-cin").value || "14:00";
       S.settings.checkOutTime = document.getElementById("set-cout").value || "11:00";
@@ -5740,6 +5758,12 @@ module.exports = QRCode;
     if (act === "backup-folder") { chooseNativeBackupFolder(); return; }
     if (act === "backup-recover") { recoverLatestNativeBackup(); return; }
 
+    if (act === "booking-api-preview") { openBookingApiPreview(); return; }
+    if (act === "booking-api-copy") { copyBookingApiJson(); return; }
+    if (act === "booking-api-push") {
+      pushBookingsToRemote().then(result => toast(result.ok ? "Booking feed pushed successfully." : (result.error || "Booking API push failed.")));
+      return;
+    }
     if (act === "health-check") {
       const missingRooms = S.bookings.filter(b => !getRoom(b.room)).length;
       openModal("System Health Check", "Integrity scan of local PMS records", `
