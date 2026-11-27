@@ -27,6 +27,9 @@ const base = {
   expiresAt: '2026-11-26T04:05:00.000Z',
   currency: 'INR',
   rail: 'AURELIA_UPI',
+  kind: 'folio',
+  bookingId: 'booking-test',
+  guestName: 'Test Guest',
   status: SESSION_STATUS.ACTIVE
 };
 
