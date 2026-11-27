@@ -265,3 +265,16 @@ This section supersedes any earlier wording in this README that suggests showing
 - Restore must authenticate/decrypt and validate the archive, preserve a local restore point, stage and verify the restored database and financial totals, and only then commit. A failed restore must leave current data intact.
 - The user-visible folder can be deleted or modified by its owner. Aurelia must detect missing or inaccessible backup files and report the condition; it must not claim a backup exists merely because a previous upload once succeeded.
 - Cloud backup is optional. Local PMS operation and local encrypted export/restore remain available when Drive is denied, disconnected, unavailable or out of quota.
+
+### Google Drive application-data policy gate — clarification
+
+The product preference is to use Google's hidden `appDataFolder` for private, app-managed data if the proposed use is permitted. Google documents that this space is hidden from the Drive UI, accessible only to the creating app, and removable by the user; it is intended for application-specific data such as configuration files. It is not a user-browsable backup folder.
+
+**Do not implement or release Aurelia PMS full-property backup/restore through the Google Drive API solely on the assumption that the `drive.appdata` scope permits it.** Google's Drive API Terms and Workspace user-data/developer policy explicitly restrict backup of user or app content from a developer's app to Drive without Google's express prior written consent. This policy issue is separate from OAuth scope sensitivity or OAuth app verification. Obtain and retain authoritative written approval from Google for Aurelia's exact PMS backup/restore use case before enabling that Drive API workflow. Do not treat a non-sensitive scope, a successful OAuth consent, a forum post, or the hidden nature of `appDataFolder` as policy approval.
+
+Until written approval is obtained:
+- Keep Google Sign-In independent and available.
+- Keep cloud backup disconnected/disabled; do not upload PMS backups to Drive through the Drive API.
+- Continue supporting local encrypted export, restore and device-to-device transfer mechanisms that do not depend on Drive API.
+- Evaluate an independently hosted Aurelia backup service or another provider only after reviewing that provider's terms, privacy, security, data residency and operational requirements.
+- If Google approves the use case in writing, use the minimum approved scope and re-check the current Google policy and implementation constraints before enabling it.
