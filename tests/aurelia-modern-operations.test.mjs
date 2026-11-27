@@ -33,10 +33,10 @@ test('legacy direct checkout cannot bypass explicit UPI receipt confirmation', (
 });
 
 test('Aurelia payment policy supports UPI and cash without payment gateways', () => {
-  assert.match(html, /enabledMethods:Object\\.freeze\\(\\['AURELIA_UPI','CASH'\\]\\)/);
+  assert.match(html, /enabledMethods:Object\.freeze\(\['AURELIA_UPI','CASH'\]\)/);
   assert.match(html, /automaticSettlement:false/);
   assert.match(html, /notificationEvidenceCanSettle:false/);
-  assert.match(html, /providerGatewaysEnabled:\\s*false/);
+  assert.match(html, /providerGatewaysEnabled:\s*false/);
 });
 
 test('Aurelia UPI QR generation is local and does not call a hosted QR service', () => {
