@@ -141,7 +141,7 @@ test('reference workspace aligns with the uploaded emerald and champagne-gold pa
   assert.match(html, /--gold:#e2c783/);
   assert.match(html, /--serif:"EB Garamond",Georgia,serif/);
   assert.match(html, /--sans:Manrope,system-ui,-apple-system,"Segoe UI",sans-serif/);
-  assert.doesNotMatch(html, /fonts\\.googleapis\\.com|fonts\\.gstatic\\.com/);
+  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
   assert.match(html, /Content-Security-Policy/);
 });
 
