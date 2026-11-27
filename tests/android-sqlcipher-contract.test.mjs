@@ -146,10 +146,10 @@ test('uploaded workspace security policy blocks embedded content and uses local-
   assert.match(html, /child-src 'none'/);
   assert.match(html, /object-src 'none'/);
   assert.match(html, /script-src 'self'/);
-  assert.match(html, /src="\\.\\/assets\\/qrcode\\.min\\.js"/);
-  assert.match(html, /src="\\.\\/src\\/aurelia-upi\\/app\\.mjs"/);
+  assert.ok(html.includes('src="./assets/qrcode.min.js"'));
+  assert.ok(html.includes('src="./src/aurelia-upi/app.mjs"'));
   assert.doesNotMatch(html, /<script[^>]+src="https?:/);
-  assert.match(html, /Capacitor\\.Plugins\\.AureliaNativeActions/);
+  assert.ok(html.includes("Capacitor.Plugins.AureliaNativeActions"));
 });
 test('native print WebView cannot execute JavaScript or load local/network resources', () => {
   assert.match(patch, /printSettings\.setJavaScriptEnabled\(false\)/);
