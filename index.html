@@ -3673,36 +3673,14 @@ module.exports = QRCode;
 
     upi() {
       window.AureliaPmsContext?.importLegacyAlerts?.();
-      const openFolios = S.bookings.filter(b => bookingDue(b) > 0);
-      const openTables = S.tables.filter(t => (t.o || []).length > 0);
-      const folioRows = openFolios.map(b => `
-        <div class="list-item" style="flex-wrap:wrap">
-          <div class="item-main"><strong>${esc(b.g)} · Room ${esc(b.room)}</strong><small>Folio balance due: ${fmtMoney(bookingDue(b))}</small></div>
-          <div class="row-wrap">
-            <button class="btn xs emerald" type="button" data-action="upi-create-folio" data-id="${b.id}">Aurelia UPI · ${fmtMoney(bookingDue(b))}</button>
-            <button class="btn xs ghost" type="button" data-action="folio-manual-payment" data-id="${b.id}">Cash / Bank</button>
-          </div>
-        </div>`).join("");
-      const diningRows = openTables.map(t => {
-        const amount = t.o.reduce((sum, item) => sum + Number(item.unit || 0) * Number(item.qty || 0), 0);
-        return `
-          <div class="list-item" style="flex-wrap:wrap">
-            <div class="item-main"><strong>Dining Table ${esc(t.n)} · ${esc(t.guest || "Walk-in")}</strong><small>Open dining ticket: ${fmtMoney(amount)}</small></div>
-            <div class="row-wrap">
-              <button class="btn xs emerald" type="button" data-action="upi-create-table" data-table="${esc(t.n)}">Aurelia UPI · ${fmtMoney(amount)}</button>
-              <button class="btn xs ghost" type="button" data-action="upi-cash-table" data-table="${esc(t.n)}">Cash / Bank</button>
-            </div>
-          </div>`;
-      }).join("");
+      // The payment module owns its open-balance list. Do not render a second,
+      // differently styled copy in the PMS shell.
       return `
-        <section class="card" style="margin-bottom:16px">
-          <div class="row" style="flex-wrap:wrap;margin-bottom:10px"><div><h3 style="font-size:22px">Open Balances Ready to Collect</h3><div class="dim">Every room folio and dining ticket supports Aurelia UPI, cash or bank transfer.</div></div><span class="tag occ">${openFolios.length + openTables.length} open</span></div>
-          <div class="list-rows">
-            ${folioRows}${diningRows}
-            ${(!openFolios.length && !openTables.length) ? '<div class="empty-state">All folios and dining tickets are settled.</div>' : ""}
-          </div>
-        </section>
-        <div id="aurelia-upi-root">${window.AureliaUPI ? window.AureliaUPI.render(window.AureliaPmsContext) : '<div class="card"><h3>Aurelia UPI is loading</h3><p class="dim">Encrypted payment storage and the notification observer are initializing.</p></div>'}</div>
+        <div id="aurelia-upi-root" class="pms-upi-content">
+          ${window.AureliaUPI
+            ? window.AureliaUPI.render(window.AureliaPmsContext)
+            : '<section class="card"><h3>Aurelia UPI is loading</h3><p class="dim">Encrypted payment storage and the notification observer are initializing.</p></section>'}
+        </div>
       `;
     },
 
@@ -4852,7 +4830,7 @@ module.exports = QRCode;
   }
 
   /* ================= DELEGATED EVENT HANDLER ================= */
-  document.addEventListener("click", e => {
+  document.addEventListener("click", async e => {
     if (e.target.id === "modal-root") { closeModal(); return; }
 
     const navBtn = e.target.closest("[data-nav]");
@@ -5726,10 +5704,31 @@ module.exports = QRCode;
       const upi = document.getElementById("set-upi").value.trim();
       if (upi && !/^[^\s@]+@[^\s@]+$/.test(upi)) { toast("Enter a valid UPI ID (e.g. hotel@bank)."); return; }
       const currentUpi = String(S.settings.upi || "").trim();
-      const upiState = window.AureliaUPI?.getState?.();
-      const hasOpenUpiRequests = (upiState?.sessions || []).some(row => ["CREATED", "QUEUED", "ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status));
-      if (upi !== currentUpi && (!upiState?.loaded || upiState?.storageError)) { toast("Open Aurelia UPI and verify encrypted payment storage before changing the receiving UPI ID."); return; }
-      if (upi !== currentUpi && hasOpenUpiRequests) { toast("Resolve all active and queued Aurelia UPI requests before changing the receiving UPI ID."); return; }
+      if (upi !== currentUpi) {
+        const upiModule = window.AureliaUPI;
+        if (!upiModule || typeof upiModule.refresh !== "function" ||
+            typeof upiModule.isNativeStorageAvailable !== "function" ||
+            !upiModule.isNativeStorageAvailable()) {
+          toast("The receiving UPI ID can only be changed in the installed Aurelia Android app after encrypted payment storage is available. HTML preview changes are not saved.");
+          return;
+        }
+        try {
+          await upiModule.refresh();
+        } catch (error) {
+          toast("Encrypted Aurelia UPI storage could not be verified. Unlock device storage and try again.");
+          return;
+        }
+        const upiState = upiModule.getState?.();
+        const hasOpenUpiRequests = (upiState?.sessions || []).some(row => ["CREATED", "QUEUED", "ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status));
+        if (!upiState?.loaded || upiState?.storageError) {
+          toast("Encrypted Aurelia UPI payment storage is locked or unavailable. The receiving UPI ID was not changed.");
+          return;
+        }
+        if (hasOpenUpiRequests) {
+          toast("Resolve all active and queued Aurelia UPI requests before changing the receiving UPI ID.");
+          return;
+        }
+      }
       S.settings.name = document.getElementById("set-name").value.trim() || "Aurelia PMS";
       S.settings.tag = document.getElementById("set-tag").value.trim();
       S.settings.phone = document.getElementById("set-phone").value.trim();
@@ -5748,6 +5747,10 @@ module.exports = QRCode;
       S.settings.checkInTime = document.getElementById("set-cin").value || "14:00";
       S.settings.checkOutTime = document.getElementById("set-cout").value || "11:00";
       addAudit("Settings updated", "Property identity saved");
+      if (!(await persistMutation())) {
+        toast("Property identity was not saved. Existing device data has been preserved.");
+        return;
+      }
       render();
       toast("Property identity saved");
       return;
