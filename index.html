@@ -5865,6 +5865,127 @@ module.exports = QRCode;
     if (el) el.textContent = new Intl.DateTimeFormat("en-IN", { timeZone: IST_TZ, hour: "2-digit", minute: "2-digit", hour12: true }).format(new Date()) + " IST";
   }
 
+  function validatedBookingApiBaseUrl(value) {
+    try {
+      var parsed = new URL(String(value || "").trim());
+      if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) return "";
+      parsed.search = ""; parsed.hash = "";
+      return parsed.href.replace(/\/+$/, "");
+    } catch (e) { return ""; }
+  }
+  function bookingApiCfg() {
+    var settings = S.settings || {};
+    var baseUrl = validatedBookingApiBaseUrl(settings.bookingApiUrl);
+    return {
+      enabled: !!settings.bookingApiEnabled && !!baseUrl,
+      baseUrl: baseUrl,
+      apiKey: baseUrl ? (settings.bookingApiKey || "") : "",
+      includePast: settings.bookingApiIncludePast !== false,
+      includeCurrent: settings.bookingApiIncludeCurrent !== false
+    };
+  }
+  function bookingPublicView(booking) {
+    if (!booking) return null;
+    var guest = getGuest(booking.g) || {};
+    var room = getRoom(booking.room) || {};
+    var nights = Math.max(0, Number(booking.out || 0) - Number(booking.in || 0));
+    return {
+      bookingId: booking.id,
+      status: booking.st,
+      roomNumber: booking.room == null ? "" : String(booking.room),
+      roomType: room.t || "",
+      stay: {
+        arrivalDate: ymd(Number(booking.in) || 0),
+        departureDate: ymd(Number(booking.out) || 0),
+        arrivalLabel: fmtDate(Number(booking.in) || 0),
+        departureLabel: fmtDate(Number(booking.out) || 0),
+        nights: nights,
+        plannedCheckInTime: booking.checkInTime || null,
+        plannedCheckOutTime: booking.checkOutTime || null,
+        actualCheckInAt: booking.actualCheckInAt || null,
+        actualCheckOutAt: booking.actualCheckOutAt || null
+      },
+      guest: {
+        guestId: guest.id == null ? null : guest.id,
+        name: guest.n || booking.g || "",
+        phone: guest.ph || "",
+        email: guest.em || "",
+        vehicles: Array.isArray(guest.veh) ? guest.veh.map(function (v) { return { registration: v.reg || "", type: v.ty || "" }; }) : [],
+        occupants: Array.isArray(guest.occ) ? guest.occ.map(function (o) { return { name: o.n || "", relation: o.rel || "" }; }) : []
+      },
+      _scope: "booking-guest-stay-contact-only"
+    };
+  }
+  function listBookingsForApi(filter) {
+    filter = filter || {};
+    var cfg = bookingApiCfg();
+    var out = S.bookings.slice().filter(function (booking) {
+      if (booking.st === "done" && cfg.includePast === false) return false;
+      if ((booking.st === "res" || booking.st === "in") && cfg.includeCurrent === false) return false;
+      if (filter.status && booking.st !== filter.status) return false;
+      if (filter.bookingId != null && String(booking.id) !== String(filter.bookingId)) return false;
+      return true;
+    }).map(bookingPublicView);
+    out.sort(function (a, b) {
+      var order = { in: 0, res: 1, done: 2 };
+      var da = order[a.status] != null ? order[a.status] : 9;
+      var db = order[b.status] != null ? order[b.status] : 9;
+      return da - db || (Number(b.bookingId) || 0) - (Number(a.bookingId) || 0);
+    });
+    return {
+      ok: true, scope: "booking-guest-stay-contact-only",
+      generatedAt: new Date().toISOString(), count: out.length,
+      currentCount: out.filter(function (x) { return x.status === "res" || x.status === "in"; }).length,
+      pastCount: out.filter(function (x) { return x.status === "done"; }).length,
+      bookings: out
+    };
+  }
+  function getBookingForApi(id) {
+    var result = listBookingsForApi({ bookingId: id });
+    return result.bookings.length ? { ok: true, scope: result.scope, booking: result.bookings[0] } :
+      { ok: false, error: "Booking not found", scope: result.scope };
+  }
+  async function pushBookingsToRemote() {
+    var cfg = bookingApiCfg();
+    if (!cfg.enabled || !cfg.baseUrl) return { ok: false, error: "Enable Booking API and configure an HTTPS base URL in Settings." };
+    var feed = listBookingsForApi();
+    var body = { scope: feed.scope, propertyName: S.settings.name || "", generatedAt: feed.generatedAt, bookings: feed.bookings };
+    try {
+      var headers = { "Content-Type": "application/json", Accept: "application/json" };
+      if (cfg.apiKey) headers.Authorization = "Bearer " + cfg.apiKey;
+      var response = await fetch(cfg.baseUrl + "/bookings/sync", { method: "POST", headers: headers, body: JSON.stringify(body) });
+      var text = await response.text(), data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text.slice(0, 500) }; }
+      if (!response.ok) return { ok: false, status: response.status, error: (data && data.error) || response.statusText };
+      return { ok: true, status: response.status, data: data };
+    } catch (error) { return { ok: false, error: String(error && error.message || error) }; }
+  }
+  function openBookingApiPreview() {
+    var feed = listBookingsForApi();
+    var rows = feed.bookings.slice(0, 40).map(function (b) {
+      return '<div class="list-item"><span>#' + esc(String(b.bookingId)) + ' · ' + esc(String(b.status)) + ' · ' +
+        esc(String(b.guest.name)) + ' · Room ' + esc(String(b.roomNumber)) + '</span><small>' +
+        esc(String(b.stay.arrivalLabel)) + ' → ' + esc(String(b.stay.departureLabel)) + '</small></div>';
+    }).join("");
+    openModal("Booking API Preview", "Guest contact and stay data only · Government IDs, photos and financials excluded",
+      '<div class="dim">Current: ' + feed.currentCount + ' · Past: ' + feed.pastCount + ' · Total: ' + feed.count + '</div>' +
+      '<div class="list-rows" style="max-height:50vh;overflow:auto;margin:12px 0">' + (rows || '<div class="empty-state">No bookings</div>') + '</div>' +
+      '<button class="btn full" type="button" data-action="booking-api-copy">Copy Safe Booking JSON</button>' +
+      '<button class="btn full ghost" type="button" data-action="booking-api-push" style="margin-top:8px">Push to HTTPS Endpoint</button>');
+  }
+  async function copyBookingApiJson() {
+    var text = JSON.stringify(listBookingsForApi(), null, 2);
+    try { await navigator.clipboard.writeText(text); toast("Safe booking JSON copied."); }
+    catch (e) { var area = document.createElement("textarea"); area.value = text; document.body.appendChild(area); area.select(); document.execCommand("copy"); area.remove(); toast("Safe booking JSON copied."); }
+  }
+  window.AureliaBookingApi = Object.freeze({
+    validatedBookingApiBaseUrl: validatedBookingApiBaseUrl,
+    bookingPublicView: bookingPublicView,
+    listBookingsForApi: listBookingsForApi,
+    getBookingForApi: getBookingForApi,
+    pushBookingsToRemote: pushBookingsToRemote
+  });
+
   const nativeActionsAvailable = () => !!(window.Capacitor?.Plugins?.AureliaNativeActions &&
     typeof window.Capacitor.Plugins.AureliaNativeActions.postMessage === "function");
   const nativeAction = action => {
