@@ -3632,6 +3632,7 @@ module.exports = QRCode;
     },
 
     upi() {
+      window.AureliaPmsContext?.importLegacyAlerts?.();
       const openFolios = S.bookings.filter(b => bookingDue(b) > 0);
       const openTables = S.tables.filter(t => (t.o || []).length > 0);
       const folioRows = openFolios.map(b => `
@@ -5662,6 +5663,11 @@ module.exports = QRCode;
     if (act === "save-settings") {
       const upi = document.getElementById("set-upi").value.trim();
       if (upi && !/^[^\s@]+@[^\s@]+$/.test(upi)) { toast("Enter a valid UPI ID (e.g. hotel@bank)."); return; }
+      const currentUpi = String(S.settings.upi || "").trim();
+      const upiState = window.AureliaUPI?.getState?.();
+      const hasOpenUpiRequests = (upiState?.sessions || []).some(row => ["CREATED", "QUEUED", "ACTIVE", "PROCESSING", "OBSERVED", "REVIEW_REQUIRED"].includes(row.status));
+      if (upi !== currentUpi && (!upiState?.loaded || upiState?.storageError)) { toast("Open Aurelia UPI and verify encrypted payment storage before changing the receiving UPI ID."); return; }
+      if (upi !== currentUpi && hasOpenUpiRequests) { toast("Resolve all active and queued Aurelia UPI requests before changing the receiving UPI ID."); return; }
       S.settings.name = document.getElementById("set-name").value.trim() || "Aurelia PMS";
       S.settings.tag = document.getElementById("set-tag").value.trim();
       S.settings.phone = document.getElementById("set-phone").value.trim();
@@ -5841,6 +5847,7 @@ module.exports = QRCode;
     render: () => render(),
     go: tab => { S.tab = tab; closeModal(); render(); },
     isPaymentTab: () => S.tab === "upi",
+    importLegacyAlerts: () => importLegacyUpiAlerts(),
     launchUpi: uri => {
       try { window.location.assign(String(uri)); return true; } catch (_) { return false; }
     },
@@ -5944,22 +5951,26 @@ module.exports = QRCode;
     qrGeneration: "LOCAL", currency: "INR"
   });
 
-  window.addEventListener("load", () => {
-    if (S.tab === "upi" && window.AureliaUPI) render();
-    if (window.AureliaUPI && Array.isArray(S.upiAlerts) && S.upiAlerts.length && !S.legacyAlertsImported) {
-      const alerts = S.upiAlerts.slice();
-      Promise.all(alerts.map(alert => {
+  async function importLegacyUpiAlerts() {
+    if (!window.AureliaUPI || S.legacyAlertsImported || S.legacyAlertsImporting) return;
+    const alerts = (Array.isArray(S.upiAlerts) ? S.upiAlerts : []).filter(alert => alert && alert.status !== "RECONCILED");
+    if (!alerts.length) { S.legacyAlertsImported = true; return; }
+    S.legacyAlertsImporting = true;
+    try {
+      const results = await Promise.all(alerts.map(alert => {
         const amountPaise = Math.round(Number(alert.amount) * 100);
-        if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) return Promise.resolve(false);
+        if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) throw new Error("Legacy UPI alert has an invalid amount.");
         return window.AureliaUPI.importSignal({
           id: alert.id, amountPaise, utr: alert.utr || "",
           source: alert.app || "LEGACY_PMS_ALERT",
           receivedAt: alert.at || new Date().toISOString(),
           rawText: "UPI payment received INR " + (amountPaise / 100).toFixed(2) + (alert.utr ? " UTR " + alert.utr : "")
-        }).catch(error => { console.warn("Legacy UPI alert import deferred:", error); return false; });
-      })).then(() => { S.legacyAlertsImported = true; persistMutation(); });
-    }
-  });
+        });
+      }));
+      if (results.length === alerts.length) { S.legacyAlertsImported = true; await persistMutation(); }
+    } catch (error) { console.warn("Legacy UPI alert import deferred:", error); }
+    finally { S.legacyAlertsImporting = false; }
+  }
 
   /* Boot only after the durable store has been checked and any legacy data migrated. */
   loadState().finally(() => {
