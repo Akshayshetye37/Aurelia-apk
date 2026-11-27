@@ -23,8 +23,27 @@ function validateEnvelope(payload) {
   if (typeof payload !== "string") throw fail("DRIVE_BACKUP_INVALID", "Backup payload is invalid.");
   let parsed;
   try { parsed = JSON.parse(payload); } catch { throw fail("DRIVE_BACKUP_INVALID", "Backup envelope is not valid JSON."); }
-  if (parsed?.format !== "AURELIA-PMS-ENCRYPTED-BACKUP" || ![1, 2].includes(parsed.v) || parsed.cipher !== "AES-256-GCM" || typeof parsed.ciphertext !== "string" || !parsed.ciphertext.length) {
+  if (parsed?.format !== "AURELIA-PMS-ENCRYPTED-BACKUP" || ![1, 2, 3].includes(parsed.v) || parsed.cipher !== "AES-256-GCM" || typeof parsed.ciphertext !== "string" || !parsed.ciphertext.length) {
     throw fail("DRIVE_BACKUP_NOT_ENCRYPTED", "Google Drive accepts only Aurelia encrypted backup envelopes.");
+  }
+  if (parsed.v === 3) {
+    const manifest = parsed.manifest;
+    const recordKeys = ["rooms", "b", "g", "t", "sales", "exp", "inv", "led", "aud"];
+    const validBase64 = value => typeof value === "string" && value.length > 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+    const validCounts = manifest?.recordCounts && recordKeys.every(key => Number.isSafeInteger(manifest.recordCounts[key]) && manifest.recordCounts[key] >= 0);
+    if (parsed.application !== "com.aurelia.pms" || parsed.kdf !== "PBKDF2-HMAC-SHA256" ||
+        !Number.isSafeInteger(parsed.iterations) || parsed.iterations < 600000 || parsed.iterations > 1000000 ||
+        typeof parsed.name !== "string" || !/^aurelia-backup-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{64}\\.json$/i.test(parsed.name) ||
+        !validBase64(parsed.salt) || parsed.salt.length !== 24 ||
+        !validBase64(parsed.iv) || parsed.iv.length !== 16 ||
+        !validBase64(parsed.wrapIv) || parsed.wrapIv.length !== 16 ||
+        !validBase64(parsed.wrappedKey) || parsed.wrappedKey.length !== 64 ||
+        !manifest || manifest.formatVersion !== 3 || manifest.name !== parsed.name ||
+        !/^[a-f0-9]{64}$/i.test(manifest.payloadSha256 || "") ||
+        !Number.isSafeInteger(manifest.payloadBytes) || manifest.payloadBytes < 0 || manifest.payloadBytes > MAX_DRIVE_BACKUP_BYTES ||
+        !validCounts) {
+      throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope metadata is invalid.");
+    }
   }
   const size = new TextEncoder().encode(payload).byteLength;
   if (size < 100 || size > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope is incomplete or exceeds the 50 MiB limit.");
@@ -90,12 +109,42 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     if (!file) throw fail("DRIVE_RESPONSE_INVALID", "Google Drive did not confirm the uploaded backup.");
     return file;
   }
+  async function readBoundedResponseText(response) {
+    const contentLength = Number(response.headers?.get?.("content-length") || 0);
+    if (contentLength > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_TOO_LARGE", "Google Drive backup exceeds the 50 MiB import safety limit.");
+    const reader = response.body?.getReader?.();
+    if (reader) {
+      const chunks = [];
+      let total = 0;
+      try {
+        while (true) {
+          const item = await reader.read();
+          if (item.done) break;
+          const chunk = item.value;
+          total += Number(chunk?.byteLength) || 0;
+          if (total > MAX_DRIVE_BACKUP_BYTES) {
+            try { await reader.cancel(); } catch {}
+            throw fail("DRIVE_BACKUP_TOO_LARGE", "Google Drive backup exceeds the 50 MiB import safety limit.");
+          }
+          chunks.push(chunk);
+        }
+      } finally {
+        try { reader.releaseLock?.(); } catch {}
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+      catch { throw fail("DRIVE_BACKUP_INVALID", "Google Drive backup is not valid UTF-8."); }
+    }
+    const payload = await response.text();
+    if (new TextEncoder().encode(payload).byteLength > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_TOO_LARGE", "Google Drive backup exceeds the 50 MiB import safety limit.");
+    return payload;
+  }
   async function download(token, fileId) {
     if (typeof fileId !== "string" || !/^[A-Za-z0-9_-]{10,200}$/.test(fileId)) throw fail("DRIVE_FILE_ID_INVALID", "Google Drive backup identifier is invalid.");
     const response = await request("/files/" + encodeURIComponent(fileId) + "?alt=media", token);
-    const contentLength = Number(response.headers?.get?.("content-length") || 0);
-    if (contentLength > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_TOO_LARGE", "Google Drive backup exceeds the 50 MiB import safety limit.");
-    const payload = await response.text();
+    const payload = await readBoundedResponseText(response);
     validateEnvelope(payload);
     return payload;
   }
