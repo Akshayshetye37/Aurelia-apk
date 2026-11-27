@@ -14,6 +14,7 @@ test('SQLCipher repository provides versioned workspace read, copy-first migrati
   assert.match(repository, /migration_verified/);
   assert.match(repository, /workspace_integrity/);
   assert.match(repository, /workspace_migration_snapshot_mismatch/);
+  assert.match(repository, /authority\.isNull\("migrationId"\)/);
   assert.match(repository, /reserved_migration_backup/);
   assert.match(repository, /insertOrThrow\("pms_legacy_backup"/);
   assert.match(repository, /ENTITY_VERSION_CONFLICT/);

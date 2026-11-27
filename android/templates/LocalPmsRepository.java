@@ -160,7 +160,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       String authorityState = authority.optString("state", "legacy");
       if ("canonical".equals(authorityState)) {
         JSONObject existing = getWorkspaceState();
-        if (existing != null && migrationId.equals(authority.optString("migrationId", ""))
+        String committedMigrationId = authority.isNull("migrationId") ? "" : authority.optString("migrationId", "");
+        if (existing != null && migrationId.equals(committedMigrationId)
             && digest.equals(existing.optString("sha256", ""))) {
           db.setTransactionSuccessful();
           return workspaceMigrationResult(true, migrationId, digest, existing.optLong("version", 1));
@@ -273,7 +274,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.insertWithOnConflict("pms_meta", null, workspaceIntegrity, SQLiteDatabase.CONFLICT_REPLACE);
       verifyIntegrityInsideTransaction(db);
       db.setTransactionSuccessful();
-      return workspaceMigrationResult(false, authority.optString("migrationId", ""), digest, next);
+      String committedMigrationId = authority.isNull("migrationId") ? "" : authority.optString("migrationId", "");
+      return workspaceMigrationResult(false, committedMigrationId, digest, next);
     } catch (Exception e) {
       throw e instanceof RuntimeException ? (RuntimeException) e : failure("workspace_write_failed", e);
     } finally { db.endTransaction(); }
