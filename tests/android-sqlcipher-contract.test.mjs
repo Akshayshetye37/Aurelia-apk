@@ -279,4 +279,3 @@ test('JSON handler encoder round-trips hostile strings without breaking inline J
   const decoded = encoded.replace(/&(quot|lt|gt|amp);/g, (_, entity) => ({ quot: '"', lt: '<', gt: '>', amp: '&' })[entity]);
   assert.equal(JSON.parse(decoded), input);
 });
-});
