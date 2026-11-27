@@ -3957,8 +3957,10 @@ module.exports = QRCode;
             <div class="card">
               <h3 style="font-size:22px;margin-bottom:8px">Guest Payment Methods</h3>
               <div class="list-rows">
-                <div class="list-item"><div class="item-main"><strong>UPI payment link / QR</strong><small>Guest opens the shared exact-amount link on their own phone and pays through their chosen UPI app.</small></div><span class="tag ready">Available</span></div>
-                <div class="list-item"><div class="item-main"><strong>Debit / credit card</strong><small>No online card-acquiring gateway configured. external card flow in the supplied source requires a physical POS terminal.</small></div><span class="tag out">Unavailable</span></div>
+                <div class="list-item"><div class="item-main"><strong>Aurelia UPI · QR &amp; guest payment request</strong><small>Exact INR amount, folio-linked session, WhatsApp share and manual receiving-bank verification.</small></div><span class="tag ready">Available</span></div>
+                <div class="list-item"><div class="item-main"><strong>Cash</strong><small>Available for every room folio and dining ticket. Staff confirmation is required before posting.</small></div><span class="tag ready">Available</span></div>
+                <div class="list-item"><div class="item-main"><strong>Bank transfer</strong><small>Record after verifying the credit in the receiving bank account. UTR/reference is optional.</small></div><span class="tag ready">Available</span></div>
+                <div class="list-item"><div class="item-main"><strong>Debit / credit card</strong><small>No POS terminal or online card-acquiring gateway is configured. Card details are never collected by Aurelia.</small></div><span class="tag out">Unavailable</span></div>
               </div>
               <div class="checkout-note" style="margin-top:10px">Never enter or store card number, expiry date, CVV, or PIN in Aurelia. Card payments can be enabled only after a compliant online gateway is selected and integrated.</div>
             </div>
@@ -3984,6 +3986,11 @@ module.exports = QRCode;
                 <label class="btn sm ghost" style="cursor:pointer">Restore JSON<input type="file" accept=".json,application/json" hidden id="restore-json-input"></label>
                 <button class="btn sm ghost" type="button" data-action="health-check">Health Check</button>
                 <button class="btn sm danger" type="button" data-action="reset-demo">Reset Sample Data</button>
+              </div>
+              <div class="checkout-note" style="margin-top:12px">
+                Device backup: ${S.deviceBackup?.verified ? "Verified · " + esc(S.deviceBackup.file || "latest restore point") : "No verified native restore point recorded"}.
+                ${S.deviceBackup?.folder ? " Backup folder selected." : " Select a device folder to enable managed restore points."}
+              </div>
               </div>
             </div>
           </div>
@@ -5775,22 +5782,41 @@ module.exports = QRCode;
     if (e.target.id === "restore-json-input") {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-      file.text().then(txt => {
+      file.text().then(async txt => {
         const parsed = JSON.parse(txt);
-        const data = parsed && parsed.data ? parsed.data : parsed;
-        if (!validatePersistedState(data)) {
-          toast("Invalid or incomplete Aurelia PMS backup file.");
-          return;
+        if (parsed && parsed.integrity) {
+          if (parsed.integrity.algorithm !== "SHA-256" ||
+              await sha256Hex(JSON.stringify(Object.fromEntries(Object.entries(parsed).filter(([key]) => key !== "integrity")))) !== parsed.integrity.digest) {
+            throw new Error("Backup checksum does not match its contents.");
+          }
         }
-        const previous = S;
-        try { normalizeLoadedState(data); }
-        catch (_) { S = previous; toast("Backup validation failed; existing records were left unchanged."); return; }
-        saveState(true).then(saved => {
-          if (!saved) { S = previous; toast("Restore blocked: device storage is unavailable."); return; }
+        const sourceData = parsed && parsed.data ? parsed.data : parsed;
+        const data = sourceData && Array.isArray(sourceData.bookings) ? sourceData : migrateLegacyProjectState(sourceData);
+        if (!validatePersistedState(data)) { toast("Invalid or incomplete Aurelia PMS backup file."); return; }
+        const archive = parsed && parsed.photoArchive ? parsed.photoArchive : {};
+        validatePhotoArchive(data, archive);
+        if (Object.keys(archive).length && !nativeActionsAvailable()) throw new Error("This backup contains original guest ID photos. Restore it from the installed Android app to preserve those photos.");
+        const previous = JSON.stringify(S);
+        let previousPhotos = {};
+        try {
+          if (Object.keys(archive).length) {
+            previousPhotos = await nativePhotoAction("photoArchive");
+            await nativePhotoAction("photoRestore", { archive });
+          }
+          normalizeLoadedState(data);
+          const saved = await saveState(true);
+          if (!saved) throw new Error("Device storage did not verify the restored PMS records.");
           render();
-          toast("Backup restored and saved to device");
-        });
-      }).catch(() => toast("Could not parse backup JSON."));
+          toast("Backup restored and saved to device.");
+        } catch (restoreError) {
+          try {
+            normalizeLoadedState(JSON.parse(previous));
+            if (Object.keys(archive).length) await nativePhotoAction("photoRestore", { archive: previousPhotos || {} });
+            await saveState(true);
+          } catch (rollbackError) { console.error("JSON restore rollback failed", rollbackError); }
+          toast("Restore blocked; the previous workspace was retained where possible. " + String(restoreError.message || restoreError));
+        }
+      }).catch(error => toast("Could not restore JSON backup: " + String(error.message || error)));
       e.target.value = "";
     }
   });
