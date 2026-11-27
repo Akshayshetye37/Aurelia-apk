@@ -3763,12 +3763,13 @@ window.printGuestPreview=function(){
  const getTable=id=>(S.t||[]).find(x=>String(x.n)===String(id));
  window.AureliaPmsContext={
   getSettings:()=>({name:S.set&&S.set.name||'Aurelia',upi:S.set&&S.set.upi||''}),
-  getBookings:()=>(S.b||[]).filter(b=>Number(dueB(b))>0).map(b=>({id:b.id,guestName:b.g,room:b.room,balancePaise:moneyPaise(dueB(b))})),
+  getBookings:()=>(S.b||[]).filter(b=>Number(dueB(b))>0).map(b=>({id:b.id,guestName:b.g,room:b.room,balancePaise:moneyPaise(dueB(b)),guestPhone:(S.g||[]).find(g=>cleanGuestName(g.n)===cleanGuestName(b.g))?.ph||b.ph||b.phone||''})),
   getTables:()=>(S.t||[]).filter(t=>Array.isArray(t.o)&&t.o.length>0).map(t=>({id:String(t.n),amountPaise:moneyPaise(t.o.reduce((sum,x)=>sum+(Number(x[1])||0),0)),guestName:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].name)||'Dining guest',phone:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].phone)||''})),
   toast:message=>toast(message),
   render:()=>render(),
   go:tab=>{S.tab=tab;S.sub=null;render()},
   launchUpi:uri=>nat({type:'openUrl',url:uri}),
+  launchExternalUrl:url=>nat({type:'openUrl',url:String(url||'')}),
   openNotificationSettings:()=>nat({type:'openNotificationAccessSettings'}),
   applyFolioPayment:async(session,utr)=>{
    const id=Number(session.bookingId),booking=getBooking(id),amount=Number(session.amountPaise)/100;
@@ -3825,7 +3826,7 @@ window.printGuestPreview=function(){
   const booking=getBooking(id);if(!booking){toast('Guest folio not found');return}
   const amount=moneyPaise(dueB(booking));if(!amount){toast('This folio has no outstanding balance');return}
   if(!window.AureliaUPI){toast('Aurelia UPI is still loading');return}
-  window.AureliaUPI.openCollection({kind:'folio',bookingId:booking.id,guestName:booking.g,room:booking.room,amountPaise:amount,note:'Folio '+(booking.iv||booking.id)});
+  window.AureliaUPI.openCollection({kind:'folio',bookingId:booking.id,guestName:booking.g,guestPhone:(S.g||[]).find(g=>cleanGuestName(g.n)===cleanGuestName(booking.g))?.ph||booking.ph||booking.phone||'',room:booking.room,amountPaise:amount,note:'Folio '+(booking.iv||booking.id)});
  };
  window.openAureliaUpiForDining=function(){
   const table=(S.t||[])[Number(S.tb)-1];if(!table||!Array.isArray(table.o)||!table.o.length){toast('Add dining items before creating a collection');return}
