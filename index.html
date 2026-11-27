@@ -1005,6 +1005,20 @@ body[data-theme="light"] .chip.on { background: #143d2d; color: #fff; border-col
 <!-- Toast -->
 <div id="toast" role="status" aria-live="polite"></div>
 
+<script id="aurelia-safe-storage">
+(function(){
+  function canReadLS(){try{window.localStorage.getItem("__aurelia_ls_test__");return true}catch(e){return false}}
+  function canWriteLS(){var key="__aurelia_ls_test__";try{window.localStorage.setItem(key,"1");var ok=window.localStorage.getItem(key)==="1";window.localStorage.removeItem(key);return ok}catch(e){try{window.localStorage.removeItem(key)}catch(_){}return false}}
+  var readable=canReadLS(),writable=canWriteLS();
+  function unavailable(cause){var error=new Error("Persistent device storage is unavailable. This change cannot survive closing the app.");error.code="AURELIA_PERSISTENCE_UNAVAILABLE";if(cause)error.cause=cause;return error}
+  window.__aureliaStorage={
+    getItem:function(key){if(!readable)throw unavailable();try{return window.localStorage.getItem(key)}catch(e){throw unavailable(e)}},
+    setItem:function(key,value){if(!writable)throw unavailable();var text=String(value);try{window.localStorage.setItem(key,text);if(window.localStorage.getItem(key)!==text)throw new Error("Persistent storage read-back did not match the saved value.")}catch(e){throw unavailable(e)}},
+    removeItem:function(key){if(!readable)throw unavailable();try{window.localStorage.removeItem(key)}catch(e){throw unavailable(e)}},
+    memoryOnly:false,isAvailable:function(){return writable}
+  };
+})();
+</script>
 <script>
 (function () {
   "use strict";
@@ -2312,6 +2326,7 @@ module.exports = QRCode;
 
   /* Helpers */
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const jsArg=value=>esc(JSON.stringify(String(value==null?"":value)));
   const IST_TZ = "Asia/Kolkata";
   const istDateParts = (date = new Date()) => {
     const parts = new Intl.DateTimeFormat("en-GB", { timeZone: IST_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
@@ -2582,7 +2597,7 @@ module.exports = QRCode;
   }
 
   function readLegacyStorage() {
-    try { return { raw: window.localStorage.getItem(STORAGE_KEY), error: null }; }
+    try { return { raw: (window.__aureliaStorage || window.localStorage).getItem(STORAGE_KEY), error: null }; }
     catch (error) { return { raw: null, error }; }
   }
 
@@ -2721,7 +2736,7 @@ module.exports = QRCode;
   async function loadState() {
     const legacy = readLegacyStorage();
     let projectLegacy = { raw: null, error: null };
-    try { projectLegacy.raw = window.localStorage.getItem("aurelia_lodge_v2"); }
+    try { projectLegacy.raw = (window.__aureliaStorage || window.localStorage).getItem("aurelia_lodge_v2"); }
     catch (error) { projectLegacy.error = error; }
     let deviceDbReadCompleted = false;
     let deviceRecordPresent = false;
@@ -2755,7 +2770,7 @@ module.exports = QRCode;
           const normalized = JSON.stringify(S);
           await writeDeviceRecord(persistenceDb, normalized);
           try {
-            window.localStorage.setItem(STORAGE_KEY, normalized);
+            (window.__aureliaStorage || window.localStorage).setItem(STORAGE_KEY, normalized);
             if (window.localStorage.getItem(STORAGE_KEY) !== normalized) throw new Error("Migrated state read-back did not match.");
           } catch (_) { /* IndexedDB remains the authoritative committed copy. */ }
           await requestPersistentStorage();
@@ -2836,7 +2851,7 @@ module.exports = QRCode;
     const serialized = JSON.stringify(S);
     let legacyMirrorError = null;
     try {
-      window.localStorage.setItem(STORAGE_KEY, serialized);
+      (window.__aureliaStorage || window.localStorage).setItem(STORAGE_KEY, serialized);
       if (window.localStorage.getItem(STORAGE_KEY) !== serialized) throw new Error("Browser storage read-back verification failed.");
     } catch (error) { legacyMirrorError = error; }
 
