@@ -98,3 +98,30 @@ test('UPI workspace inherits the PMS content width and card surfaces', async () 
   assert.match(css, /\.pms-upi-content\{width:100%;min-width:0\}/);
   assert.match(css, /background:var\(--bg-card\)/);
 });
+
+
+test('blocked persistence retains the original load or migration diagnostic instead of replacing it with a generic save warning', () => {
+  const guard = html.slice(html.indexOf('function saveState('), html.indexOf('async function persistMutation'));
+  assert.match(guard, /if \(!persistenceMessage\)/);
+});
+
+test('print action targets one active invoice or receipt and avoids fixed-position duplicate pages', () => {
+  assert.match(html, /function printActiveDocument\(/);
+  assert.match(html, /print-target/);
+  assert.match(html, /printing-document/);
+  assert.doesNotMatch(html, /\.print-area \{ position: fixed/);
+});
+
+test('occupied dining tables are visually distinct from the single selected table', () => {
+  assert.match(html, /\.table-tile\.has-order:not\(\.selected\)/);
+  assert.match(html, /\.table-tile\.selected/);
+});
+
+test('property logo is validated, persisted in property settings and rendered in the PMS identity', () => {
+  assert.match(html, /logoDataUrl/);
+  assert.match(html, /id="set-logo"/);
+  assert.match(html, /async function optimizePropertyLogo\(/);
+  assert.match(html, /propertyLogoMarkup\(/);
+  assert.match(html, /image\/png.*image\/jpeg.*image\/webp/);
+});
+
