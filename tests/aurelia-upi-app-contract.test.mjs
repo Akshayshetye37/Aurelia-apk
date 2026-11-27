@@ -153,3 +153,13 @@ test('incoming UPI alert assignment dropdown uses exact guest-identity candidate
   assert.match(domain, /senderName === guestName/);
   assert.match(domain, /session\.kind !== "folio"/);
 });
+
+test('UPI overview separates exact guest-matched alerts from verified PMS settlement history', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  assert.match(app, /function renderIncomingAlerts\(\)/);
+  assert.match(app, /row\.matchDecision === "REVIEW_REQUIRED" && row\.suggestedSessionId/);
+  assert.match(app, /<h3>Incoming UPI Alerts<\/h3>/);
+  assert.match(app, /function renderVerifiedHistory\(\)/);
+  assert.match(app, /row\.status === "APPLIED_TO_PMS"/);
+  assert.match(app, /<h3>Verified Settlement History<\/h3>/);
+});
