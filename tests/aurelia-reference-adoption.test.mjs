@@ -2,43 +2,45 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const root = new URL('../', import.meta.url);
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-const css = await readFile(new URL('../assets/aurelia-reference-adoption.css', import.meta.url), 'utf8');
-const runtime = await readFile(new URL('../assets/aurelia-reference-adoption.js', import.meta.url), 'utf8');
 
-test('reference adoption loads local design assets without external font or chart dependencies', () => {
-  assert.match(html, /aurelia-reference-adoption\.css/);
-  assert.match(html, /aurelia-reference-adoption\.js/);
-  assert.doesNotMatch(css, /fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net/);
+test('uploaded mobile workspace is the active PMS shell, not a parallel reference mockup', () => {
+  assert.match(html, /id="main-view"/);
+  assert.match(html, /id="mobile-dock"/);
+  assert.match(html, /id="modal-root"/);
+  assert.match(html, /function render\(\)/);
+  assert.match(html, /const VIEWS = \{/);
 });
 
-test('desktop navigation exposes all existing PMS modules in the reference information architecture', () => {
-  for (const key of ['home', 'rooms', 'stays', 'dining', 'upi', 'guests', 'hk', 'inv', 'exp', 'rep', 'aud', 'io', 'set']) {
-    assert.ok(runtime.includes("'" + key + "'") || runtime.includes('"' + key + '"'), 'missing navigation key: ' + key);
+test('all operational PMS destinations remain in the uploaded router', () => {
+  for (const key of ['home', 'rooms', 'stays', 'dining', 'upi', 'guests', 'hk', 'inv', 'exp', 'rep', 'aud', 'set']) {
+    assert.ok(html.includes(key), 'missing PMS destination: ' + key);
   }
-  assert.match(runtime, /Front Desk/);
-  assert.match(runtime, /Operations/);
-  assert.match(runtime, /Governance/);
+  assert.match(html, /Front Desk/);
+  assert.match(html, /Housekeeping/);
+  assert.match(html, /Inventory/);
+  assert.match(html, /Finance/);
 });
 
-test('secondary navigation delegates to the existing More subview state instead of replacing the PMS router', () => {
-  assert.match(runtime, /S\.tab\s*=\s*['"]more['"]/);
-  assert.match(runtime, /S\.sub\s*=\s*key/);
-  assert.match(runtime, /typeof render\s*===\s*['"]function['"]/);
-  assert.doesNotMatch(runtime, /localStorage\.setItem|STORAGE_KEY|function persist/);
+test('the mobile dock remains six destinations and uses the uploaded navigation labels', () => {
+  assert.match(html, /MOBILE_TABS/);
+  assert.match(html, /Overview/);
+  assert.match(html, /Bookings/);
+  assert.match(html, /Folios/);
+  assert.match(html, /Dining/);
+  assert.match(html, /Settings/);
 });
 
-test('desktop and mobile navigation are responsive, accessible and keep the six-item dock', () => {
-  assert.match(css, /@media\s*\(max-width:\s*900px\)/);
-  assert.match(css, /\.aurelia-design-sidebar/);
-  assert.match(css, /:focus-visible/);
-  assert.match(css, /prefers-reduced-motion/);
-  assert.match(html, /id="dock"/);
-  assert.match(runtime, /aria-current/);
+test('uploaded app keeps its own responsive layout and local emerald/gold design tokens', () => {
+  assert.match(html, /--bg:\s*#081711/);
+  assert.match(html, /--gold:\s*#e2c783/);
+  assert.match(html, /@media\s*\(max-width:/);
+  assert.doesNotMatch(html, /aurelia-reference-adoption\.js|aurelia-design-sidebar/);
 });
 
-test('new reservation action delegates to the existing reservation function', () => {
-  assert.match(runtime, /typeof resv\s*===\s*['"]function['"]/);
-  assert.match(runtime, /resv\(\)/);
+test('new collection and reservation actions delegate to real PMS functions', () => {
+  assert.match(html, /function openNewBookingModal/);
+  assert.match(html, /window\.openAureliaUpiForFolio = function/);
+  assert.match(html, /window\.openAureliaUpiForDining = function/);
+  assert.match(html, /applyFolioPayment/);
 });

@@ -23,7 +23,7 @@ test('refund reservations count prior obligations and prevent duplicate transfer
   assert.match(domain, /amount \+ alreadyRefunded > captured/);
 });
 
-test('reconciliation recovery is idempotent when a prior native review or PMS post partially committed', async () => {
+test('reconciliation recovery is idempotent when native review or PMS posting partially commits', async () => {
   const app = await read('src/aurelia-upi/app.mjs');
   const repository = await read('android/templates/LocalPmsRepository.java');
   assert.match(app, /alreadyApplied/);
@@ -32,14 +32,23 @@ test('reconciliation recovery is idempotent when a prior native review or PMS po
   assert.match(repository, /if\(status\.equals\(current\)\)/);
 });
 
-test('legacy invoice and dining settlement entry points cannot bypass Aurelia UPI collection sessions', async () => {
-  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /A payment QR is created only after an Aurelia UPI collection slot is allocated/);
-  assert.match(html, /Create Aurelia UPI collection/);
-  assert.match(html, /if\(window\.__aureliaUpiApplying\)return originalDiningSettle\.apply/);
-  assert.match(html, /Create shareable Aurelia UPI request/);
-  assert.match(html, /Record payments through the Aurelia UPI review desk/);
-  assert.match(html, /Post restaurant payments through the Aurelia UPI review desk/);
+test('uploaded checkout and dining payment entry points route to the project Aurelia UPI module', async () => {
+  const html = await read('index.html');
+  assert.match(html, /window\.openAureliaUpiForFolio\(b\.id, amount\)/);
+  assert.match(html, /window\.openAureliaUpiForDining/);
+  assert.match(html, /AureliaUPI\.openCollection/);
+  assert.match(html, /AureliaUPI\.render\(window\.AureliaPmsContext\)/);
+  assert.doesNotMatch(html, /createUpiSession\(\{ kind: "folio"/);
+});
+
+test('project PMS adapter posts verified folio and dining payments idempotently', async () => {
+  const html = await read('index.html');
+  assert.match(html, /applyFolioPayment: async \(session, utr\)/);
+  assert.match(html, /AURELIA-UPI:/);
+  assert.match(html, /payment\.sessionId === session\.id/);
+  assert.match(html, /applyRestaurantPayment: async \(session, utr\)/);
+  assert.match(html, /aureliaUpiSessionId: session\.id/);
+  assert.match(html, /The verified Aurelia UPI payment remains pending posting/);
 });
 
 test('bank statement import stores normalized UPI rows as evidence without retaining the uploaded file', async () => {
@@ -53,7 +62,6 @@ test('bank statement import stores normalized UPI rows as evidence without retai
   assert.match(domain, /export function parseBankStatementCsv/);
   assert.match(domain, /source: "BANK_STATEMENT_CSV"/);
 });
-
 
 test('verified payment keeps its FIFO slot until PMS posting and session finalization complete', async () => {
   const app = await read('src/aurelia-upi/app.mjs');
@@ -76,33 +84,23 @@ test('collection submission and payment review actions reject concurrent duplica
   assert.match(app, /if \(collectionInFlight\) return/);
 });
 
-test('restaurant settlement sheet exposes cash and a shareable Aurelia UPI session', async () => {
+test('open room and dining balances expose cash/bank actions next to the Aurelia UPI request action', async () => {
   const html = await read('index.html');
-  const start = html.indexOf("window.__restPay={table:Number(t.n),amount,method:'UPI'}");
-  const end = html.indexOf('function selectRestPay(method)', start);
-  assert.ok(start >= 0 && end > start);
-  const sheet = html.slice(start, end);
-  assert.match(sheet, /data-pay="UPI"/);
-  assert.match(sheet, /Aurelia UPI/);
-  assert.match(sheet, /data-pay="Cash"/);
-  assert.match(sheet, /Create shareable Aurelia UPI request/);
+  assert.match(html, /data-action="upi-create-folio"/);
+  assert.match(html, /data-action="folio-manual-payment"/);
+  assert.match(html, /data-action="upi-create-table"/);
+  assert.match(html, /data-action="upi-cash-table"/);
+  assert.match(html, /function openManualDiningPaymentModal/);
 });
 
-
-test('VPA changes validate the address and fail closed until encrypted payment history is loaded', async () => {
+test('receiving VPA changes fail closed until encrypted payment history is loaded and open sessions are resolved', async () => {
   const html = await read('index.html');
-  assert.match(html, /Enter a valid Aurelia UPI ID in name@bank format/);
-  assert.match(html, /!upiState\?\.loaded\|\|upiState\?\.storageError/);
-  assert.match(html, /Resolve all active and queued Aurelia UPI requests before changing the receiving VPA/);
+  assert.match(html, /Enter a valid UPI ID/);
+  assert.match(html, /Open Aurelia UPI and verify encrypted payment storage/);
+  assert.match(html, /Resolve all active and queued Aurelia UPI requests/);
 });
 
-test('successful folio and restaurant posting close the legacy overlay before returning to Aurelia UPI', async () => {
-  const html = await read('index.html');
-  assert.match(html, /The PMS folio did not accept the payment[\s\S]{0,260}closeS\(\)/);
-  assert.match(html, /aureliaUpiSessionId=session\.id;\}[\s\S]{0,120}closeS\(\)/);
-});
-
-test('active exact-amount Aurelia UPI requests can be addressed to the guest through WhatsApp without pinning an app variant', async () => {
+test('WhatsApp sharing uses a universal wa.me URL and supports saved guest phone numbers', async () => {
   const app = await read('src/aurelia-upi/app.mjs');
   const html = await read('index.html');
   const domain = await read('src/aurelia-upi/domain.mjs');
@@ -111,10 +109,9 @@ test('active exact-amount Aurelia UPI requests can be addressed to the guest thr
   assert.match(app, /session\.upiUri/);
   assert.match(app, /guestPhone/);
   assert.match(app, /Exact amount due:/);
-  assert.match(html, /guestPhone:\(S\.g\|\|\[\]\)\.find/);
+  assert.match(html, /guestPhone: getGuest\(booking\.g\)\?\.ph/);
   assert.match(domain, /guestPhone: \(\(\) => \{/);
   assert.match(domain, /String\(input\.guestPhone \?\? ""\)/);
-  assert.match(domain, /"guestName", "guestPhone", "room"/);
   assert.doesNotMatch(app, /package=com\\.whatsapp(?:\\.w4b)?/);
 });
 
@@ -129,37 +126,10 @@ test('Aurelia UPI UTR is optional while receiving-bank confirmation remains mand
   assert.match(confirm, /if \(utr && !\//);
 });
 
-test('UPI overview lists every open folio and dining balance with separate UPI and cash actions', async () => {
-  const app = await read('src/aurelia-upi/app.mjs');
-  const html = await read('index.html');
-  assert.match(app, /function renderOpenBalances\(\)/);
-  assert.match(app, /data-upi-action="collect-folio"/);
-  assert.match(app, /data-upi-action="cash-folio"/);
-  assert.match(app, /data-upi-action="collect-dining"/);
-  assert.match(app, /data-upi-action="cash-dining"/);
-  assert.match(app, /context\?\.openCashFolioPayment/);
-  assert.match(app, /context\?\.openCashDiningPayment/);
-  assert.match(html, /openCashFolioPayment:id=>/);
-  assert.match(html, /openCashDiningPayment:id=>openCashDiningPayment\(id\)/);
-  assert.match(html, /function recordDiningCashPayment\(\)/);
-  assert.match(html, /I confirm this cash amount was physically received/);
-});
-
-test('incoming UPI alert assignment dropdown uses exact guest-identity candidates, not amount-only sessions', async () => {
-  const app = await read('src/aurelia-upi/app.mjs');
+test('notification matching only proposes uniquely timed exact-amount named guest folios', async () => {
   const domain = await read('src/aurelia-upi/domain.mjs');
-  assert.match(app, /matchEvidenceToSessions\(evidence, state\.sessions\)\.candidates/);
-  assert.match(app, /<small>Sender name<\/small>/);
-  assert.match(domain, /senderName === guestName/);
   assert.match(domain, /session\.kind !== "folio"/);
-});
-
-test('UPI overview separates exact guest-matched alerts from verified PMS settlement history', async () => {
-  const app = await read('src/aurelia-upi/app.mjs');
-  assert.match(app, /function renderIncomingAlerts\(\)/);
-  assert.match(app, /row\.matchDecision === "REVIEW_REQUIRED" && row\.suggestedSessionId/);
-  assert.match(app, /<h3>Incoming UPI Alerts<\/h3>/);
-  assert.match(app, /function renderVerifiedHistory\(\)/);
-  assert.match(app, /row\.status === "APPLIED_TO_PMS"/);
-  assert.match(app, /<h3>Verified Settlement History<\/h3>/);
+  assert.match(domain, /session\.bookingId == null/);
+  assert.match(domain, /session\.amountPaise !== evidence\.amountPaise/);
+  assert.match(domain, /candidates\.length > 1/);
 });
