@@ -37,7 +37,7 @@ test('legacy invoice and dining settlement entry points cannot bypass Aurelia UP
   assert.match(html, /A payment QR is created only after an Aurelia UPI collection slot is allocated/);
   assert.match(html, /Create Aurelia UPI collection/);
   assert.match(html, /if\(window\.__aureliaUpiApplying\)return originalDiningSettle\.apply/);
-  assert.match(html, /window\.openAureliaUpiForDining\(\);return false/);
+  assert.match(html, /Create shareable Aurelia UPI request/);
   assert.match(html, /Record payments through the Aurelia UPI review desk/);
   assert.match(html, /Post restaurant payments through the Aurelia UPI review desk/);
 });
@@ -76,7 +76,7 @@ test('collection submission and payment review actions reject concurrent duplica
   assert.match(app, /if \(collectionInFlight\) return/);
 });
 
-test('restaurant settlement sheet exposes Aurelia UPI only', async () => {
+test('restaurant settlement sheet exposes cash and a shareable Aurelia UPI session', async () => {
   const html = await read('index.html');
   const start = html.indexOf("window.__restPay={table:Number(t.n),amount,method:'UPI'}");
   const end = html.indexOf('function selectRestPay(method)', start);
@@ -84,7 +84,7 @@ test('restaurant settlement sheet exposes Aurelia UPI only', async () => {
   const sheet = html.slice(start, end);
   assert.match(sheet, /data-pay="UPI"/);
   assert.match(sheet, /Aurelia UPI/);
-  assert.doesNotMatch(sheet, /data-pay="Cash"|Cash/);
+  assert.match(sheet, /data-pay="Cash"/);\n  assert.match(sheet, /Create shareable Aurelia UPI request/);
 });
 
 
