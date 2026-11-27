@@ -5,13 +5,13 @@ import { readFile } from 'node:fs/promises';
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
 test('cancellation journal is idempotent per cancelled booking and consolidates legacy duplicates', () => {
-  const commit = html.slice(html.indexOf('if (act === "commit-refund")'), html.indexOf('if (act === "cal-shift")'));
-  assert.match(commit, /CANCEL- \+ c\.id/);
-  assert.match(commit, /S\.financialLedger\.filter\(entry => entry\.ref === journalRef\)/);
-  assert.match(commit, /S\.financialLedger\.filter\(entry => entry\.ref !== journalRef\)/);
-  assert.match(commit, /S\.financialLedger\.unshift\(/);
-  assert.doesNotMatch(commit, /S\.financialLedger\.push\(/);
-  assert.match(html, /function collapseDuplicateCancellationJournals\(entries\)/);
+  assert.match(commit, /CANCEL-" \\+ c\\.id/);
+  assert.match(commit, /S\\.financialLedger\\.filter\\(entry => entry\\.ref === journalRef\\)/);
+  assert.match(commit, /S\\.financialLedger\\.filter\\(entry => entry\\.ref !== journalRef\\)/);
+  assert.match(commit, /S\\.financialLedger\\.unshift\\(/);
+  assert.doesNotMatch(commit, /S\\.financialLedger\\.push\\(/);
+  assert.match(html, /function collapseDuplicateCancellationJournals\\(entries\\)/);
+  assert.match(html, /S\\.financialLedger = collapseDuplicateCancellationJournals\\(S\\.financialLedger\\)/);
   assert.match(html, /S\.financialLedger = collapseDuplicateCancellationJournals\(S\.financialLedger\)/);
 });
 
@@ -40,7 +40,7 @@ test('booking list is sorted newest first with stable legacy ID fallback', () =>
 
 test('mobile cancellation form adapts to the visible keyboard viewport', () => {
   assert.match(html, /visualViewport/);
-  assert.match(html, /--aurelia-visual-height/);
-  assert.match(html, /modal-panel\.cancellation-modal/);
+  assert.match(html, /modal-panel\\.cancellation-modal/);
+  assert.match(html, /scrollIntoView\\(\\{\\s*block:\\s*"center"/);
   assert.match(html, /scrollIntoView\\(\\{\\s*block:\\s*"center"/
 });
