@@ -200,6 +200,7 @@ function renderMetric(label, value, note) {
 
 function renderSessionRow(session, compact = false) {
   const canCancel = ["CREATED", "QUEUED", "ACTIVE"].includes(session.status);
+  const canShare = session.status === "ACTIVE" && !!session.upiUri;
   return '<article class="au-row"><div class="au-row-main"><div class="au-row-title">' +
     '<strong>' + esc(session.guestName || (session.kind === "restaurant" ? "Dining collection" : "Aurelia UPI collection")) + '</strong>' +
     badge(session.status) + '</div><div class="au-row-meta">' +
@@ -207,6 +208,7 @@ function renderSessionRow(session, compact = false) {
     (session.room ? ' · Room ' + esc(session.room) : "") +
     (session.tableId ? ' · Table ' + esc(session.tableId) : "") +
     '</div></div><div class="au-row-end"><strong>' + esc(formatPaise(session.amountPaise)) + '</strong>' +
+    (canShare ? '<button class="au-link" type="button" data-upi-action="whatsapp" data-id="' + esc(session.id) + '">Send payment link on WhatsApp</button>' : "") +
     (state.payments.some(payment => payment.sessionId === session.id && payment.status === "CONFIRMED_PENDING_PMS")
       ? '<button class="au-link" type="button" data-upi-action="retry-posting" data-id="' + esc(session.id) + '">Retry PMS posting</button>' : "") +
     (canCancel ? '<button class="au-link" type="button" data-upi-action="cancel" data-id="' + esc(session.id) + '">Cancel</button>' : "") +
@@ -251,6 +253,7 @@ function renderActiveSession(session) {
     '<div class="au-active-bottom"><div><small>Receiving UPI ID</small><strong>' + esc(session.vpa) + '</strong></div>' +
     '<div><small>' + timerLabel + '</small><strong id="au-countdown" data-status="' + esc(session.status) + '" data-expires="' + target + '">' + timerText + '</strong></div></div>' +
     (session.status === SESSION_STATUS.ACTIVE ? '<div class="au-active-qr"><img alt="Aurelia UPI exact-amount QR" data-aurelia-upi-qr="1" data-upi-payload="' + esc(session.upiUri) + '"></div>' +
+      '<button class="au-primary au-wide" type="button" data-upi-action="whatsapp" data-id="' + esc(session.id) + '">Send exact-amount link to guest on WhatsApp</button>' +
       '<button class="au-secondary au-wide" type="button" data-upi-action="open" data-id="' + esc(session.id) + '">Open UPI app</button>' +
       '<button class="au-link au-wide" type="button" data-upi-action="customer-paid" data-id="' + esc(session.id) + '">Customer says payment sent</button>' :
       '<div class="au-warning">Payment is not settled. Verify the actual credit in the receiving bank account before posting it to a folio.</div>') +
@@ -276,7 +279,8 @@ function renderCollect() {
     '<label id="au-booking-wrap"><span>Guest folio</span><select name="bookingId" id="au-booking"><option value="">Select a guest folio</option>' + bookingOptions + '</select></label>' +
     '<label id="au-table-wrap"><span>Dining table</span><select name="tableId" id="au-table"><option value="">Select a table</option>' + tableOptions + '</select></label>' +
     '<div class="au-form-grid"><label><span>Guest / payer name</span><input name="guestName" maxlength="100" value="' + esc(draft.guestName || "") + '" placeholder="Guest name"></label>' +
-    '<label><span>Room / reference</span><input name="room" maxlength="64" value="' + esc(draft.room || "") + '" placeholder="Room or internal reference"></label></div>' +
+    '<label><span>Guest WhatsApp number</span><input name="guestPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" value="' + esc(draft.guestPhone || "") + '" placeholder="+91 98765 43210"></label></div>' +
+    '<label><span>Room / reference</span><input name="room" maxlength="64" value="' + esc(draft.room || "") + '" placeholder="Room or internal reference"></label>' +
     '<label><span>Amount (INR)</span><input name="amount" id="au-amount" inputmode="decimal" type="text" required value="' + esc(draft.amount || "") + '" placeholder="0.00"></label>' +
     '<label><span>Payment note</span><input name="note" maxlength="80" value="' + esc(draft.note || "Aurelia UPI payment") + '" placeholder="Booking or bill reference"></label>' +
     '<div class="au-config-preview"><span>Receiving account</span><strong>' + esc(currentVpa || "Configure UPI ID in More → Settings") + '</strong><small>' + esc(config.name || "Aurelia") + ' · INR only</small></div>' +
@@ -373,6 +377,7 @@ async function createCollection(form) {
   let bookingId = data.get("bookingId") || null;
   let tableId = data.get("tableId") || null;
   let guestName = String(data.get("guestName") || "").trim();
+  let guestPhone = String(data.get("guestPhone") || "").trim();
   let room = String(data.get("room") || "").trim();
 
   if (kind === "folio") {
@@ -380,6 +385,7 @@ async function createCollection(form) {
     if (!booking) throw new Error("Select a valid guest folio.");
     if (amountPaise > booking.balancePaise) throw new Error("Collection amount exceeds the current folio balance.");
     guestName = guestName || booking.guestName;
+    guestPhone = guestPhone || booking.guestPhone || "";
     room = room || booking.room;
   }
   if (kind === "restaurant") {
@@ -391,7 +397,7 @@ async function createCollection(form) {
 
   const now = Date.now();
   const session = createPaymentSession({
-    kind, bookingId, tableId, guestName, room, amountPaise, vpa: vpaValue,
+    kind, bookingId, tableId, guestName, guestPhone, room, amountPaise, vpa: vpaValue,
     payeeName: config.name || "Aurelia",
     note: String(data.get("note") || "Aurelia UPI payment").trim()
   }, now);
@@ -954,6 +960,46 @@ async function openSession(session) {
   }
 }
 
+function normalizeWhatsAppNumber(value) {
+  const digits = String(value || "").replace(/\\D/g, "");
+  return digits.length >= 10 && digits.length <= 15 ? digits : "";
+}
+
+async function shareSessionOnWhatsApp(sessionId) {
+  const session = state.sessions.find(row => row.id === sessionId);
+  if (!session || session.status !== SESSION_STATUS.ACTIVE || !session.upiUri) {
+    throw new Error("Only an active Aurelia UPI request can be shared with the guest.");
+  }
+  const phone = normalizeWhatsAppNumber(session.guestPhone);
+  const message = [
+    "Aurelia PMS · Aurelia UPI payment request",
+    "Guest: " + (session.guestName || "Guest"),
+    "Folio: " + (session.note || session.reference),
+    "Exact amount due: " + formatPaise(session.amountPaise),
+    "UPI payment link: " + session.upiUri,
+    "Tap this link on your phone, choose your preferred UPI app, and approve the exact amount.",
+    "Payment is confirmed only after the receiving bank credit is verified."
+  ].join("\\n");
+  if (!phone) {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      await navigator.share({ title: "Aurelia PMS · Aurelia UPI", text: message });
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(message);
+      notify("Payment message copied. Add the guest's WhatsApp number and send it.");
+      return;
+    }
+    throw new Error("Add the guest's WhatsApp number in the guest profile.");
+  }
+  const url = "https://wa.me/" + phone + "?text=" + encodeURIComponent(message);
+  const opened = await context?.launchExternalUrl?.(url);
+  if (!opened && typeof window !== "undefined") {
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (!popup) window.location.href = url;
+  }
+}
+
 function onActionClick(event) {
   const view = event.target.closest("[data-upi-view]");
   if (view) {
@@ -981,6 +1027,7 @@ function onActionClick(event) {
       return;
     }
     if (action === "open") { await openSession(state.sessions.find(row => row.id === id)); return; }
+    if (action === "whatsapp") { await shareSessionOnWhatsApp(id); return; }
     if (action === "customer-paid") { await markCustomerReportedPaid(id); return; }
     if (action === "cancel") { await cancelSession(id); return; }
     if (action === "import-evidence") { await importEvidence(); return; }
@@ -1036,9 +1083,11 @@ function onBookingChange(event) {
   const amount = document.getElementById("au-amount");
   const guest = document.querySelector('#au-collect-form [name="guestName"]');
   const room = document.querySelector('#au-collect-form [name="room"]');
+  const phone = document.querySelector('#au-collect-form [name="guestPhone"]');
   if (booking) {
     if (amount) amount.value = (booking.balancePaise / 100).toFixed(2);
     if (guest) guest.value = booking.guestName || "";
+    if (phone) phone.value = booking.guestPhone || "";
     if (room) room.value = booking.room || "";
   }
 }
@@ -1111,6 +1160,7 @@ function openCollection(options = {}) {
     bookingId: options.bookingId ?? "",
     tableId: options.tableId ?? "",
     guestName: options.guestName || "",
+    guestPhone: options.guestPhone || "",
     room: options.room || "",
     amount: options.amountPaise != null ? (Number(options.amountPaise) / 100).toFixed(2) : "",
     note: options.note || "Aurelia UPI payment"
