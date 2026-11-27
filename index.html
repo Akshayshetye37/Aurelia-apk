@@ -637,7 +637,10 @@ function recordFolioCash(i){
  if(!Number.isFinite(amount)||amount<=0){toast('Enter a valid cash amount');return}
  if(amount>due+0.009){toast('Cash amount cannot exceed the folio balance');return}
  if(!document.getElementById('folio-cash-confirm')?.checked){toast('Confirm that cash was physically received');return}
- b.p=(Number(b.p)||0)+amount;S.today=(Number(S.today)||0)+amount;aud('Payment',K(amount)+' by Cash · Room '+b.room);persist();closeS();render();toast(K(amount)+' cash payment recorded');
+ const previousPaid=Number(b.p)||0,previousToday=Number(S.today)||0,previousAudit=(S.aud||[]).slice();
+ b.p=previousPaid+amount;S.today=previousToday+amount;aud('Payment',K(amount)+' by Cash · Room '+b.room);
+ if(!persist()){b.p=previousPaid;S.today=previousToday;S.aud=previousAudit;return}
+ closeS();render();toast(K(amount)+' cash payment recorded');
  if(dueB(b)<=0.009)outB(i);else folio(i);
 }
 function out(i,T){const b=bk(i);if(!b||dueB(b)>0.009){toast('Collect the outstanding balance before check-out');return}outB(i)}
@@ -695,12 +698,12 @@ function recordDiningCashPayment(){
  const entered=Math.round((Number(document.getElementById('dining-cash-amount')?.value)||0)*100)/100;
  if(!(entered>0)||Math.abs(entered-amount)>0.009){toast('Enter the exact dining bill amount');return}
  if(!document.getElementById('dining-cash-confirm')?.checked){toast('Confirm that cash was physically received');return}
- const previousOrder=t.o.map(item=>item.slice()),previousToday=Number(S.today)||0;
+ const previousOrder=t.o.map(item=>item.slice()),previousToday=Number(S.today)||0,previousSales=Array.isArray(S.sales)?S.sales.slice():[],previousAudit=(S.aud||[]).slice();
  S.sales=Array.isArray(S.sales)?S.sales:[];
  const sale={id:'RS-'+Date.now(),t:t.n,guest:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].name)||'Walk-in',phone:(S.tableGuests&&S.tableGuests[t.n]&&S.tableGuests[t.n].phone)||'',items:previousOrder.map(item=>({name:item[0],unit:Number(item[1])||0,qty:1})),a:amount,m:'Cash',ref:'CASH-'+Date.now(),at:new Date().toISOString(),status:'paid',postedToHotel:false};
  S.sales.push(sale);S.today=previousToday+amount;t.o=[];
  aud('Dining cash payment',sale.guest+' · Table '+t.n+' · '+K(amount));
- if(!persist()){t.o=previousOrder;S.today=previousToday;S.sales.pop();return}
+ if(!persist()){t.o=previousOrder;S.today=previousToday;S.sales=previousSales;S.aud=previousAudit;return}
  closeS();render();toast('Cash dining payment recorded · '+K(amount));
 }
 document.addEventListener('pointerdown',e=>{const t=e.target.closest('button,.chip,.room');if(!t)return;const r=t.getBoundingClientRect(),s=Math.max(r.width,r.height)*2.2,d=document.createElement('span');d.className='rp';d.style.cssText=`width:${s}px;height:${s}px;left:${e.clientX-r.left-s/2}px;top:${e.clientY-r.top-s/2}px`;if(getComputedStyle(t).position==='static')t.style.position='relative';t.style.overflow='hidden';t.appendChild(d);setTimeout(()=>d.remove(),800)});
