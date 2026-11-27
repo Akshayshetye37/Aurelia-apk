@@ -100,3 +100,27 @@ test('successful folio and restaurant posting close the legacy overlay before re
   assert.match(html, /The PMS folio did not accept the payment[\s\S]{0,260}closeS\(\)/);
   assert.match(html, /aureliaUpiSessionId=session\.id;\}[\s\S]{0,120}closeS\(\)/);
 });
+
+test('active exact-amount Aurelia UPI requests can be addressed to the guest through WhatsApp without pinning an app variant', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  const html = await read('index.html');
+  const domain = await read('src/aurelia-upi/domain.mjs');
+  assert.match(app, /data-upi-action="whatsapp"/);
+  assert.match(app, /https:\/\/wa\.me\//);
+  assert.match(app, /session\.upiUri/);
+  assert.match(app, /guestPhone/);
+  assert.match(app, /Exact amount due:/);
+  assert.match(html, /guestPhone:\(S\.g\|\|\[\]\)\.find/);
+  assert.match(domain, /guestPhone: safeText\(input\.guestPhone/);
+  assert.match(domain, /"guestName", "guestPhone", "room"/);
+  assert.doesNotMatch(app, /package=com\\.whatsapp(?:\\.w4b)?/);
+});
+
+test('Aurelia UPI UTR is optional while receiving-bank confirmation remains mandatory', async () => {
+  const app = await read('src/aurelia-upi/app.mjs');
+  const review = app.slice(app.indexOf('function renderReviewCard'), app.indexOf('function renderReview'));
+  const confirm = app.slice(app.indexOf('async function confirmEvidence'), app.indexOf('async function retryPendingPosting'));
+  assert.match(review, /Enter UTR if available/);
+  assert.match(confirm, /Confirm that you checked the credit in the receiving bank account/);
+  assert.match(confirm, /if \(utr && !\//);
+});
