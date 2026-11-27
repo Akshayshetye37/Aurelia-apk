@@ -3,155 +3,73 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const upi = await readFile(new URL('../src/aurelia-upi/app.mjs', import.meta.url), 'utf8');
+const domain = await readFile(new URL('../src/aurelia-upi/domain.mjs', import.meta.url), 'utf8');
 
-test('Aurelia UPI is a first-class app destination, not a settings-section dropdown', () => {
-  assert.match(html, /\['upi','Aurelia UPI'\]/);
-  assert.match(html, /V\.upi\s*=/);
-  assert.match(html, /AureliaUPI\.render/);
-  assert.doesNotMatch(html, /aurelia-section-menu|installSectionMenu/);
+test('uploaded PMS Folios destination mounts the project Aurelia UPI payment desk', () => {
+  assert.match(html, /MOBILE_TABS/);
+  assert.match(html, /\["upi", "Folios"/);
+  assert.match(html, /window\.AureliaUPI \? window\.AureliaUPI\.render\(window\.AureliaPmsContext\)/);
+  assert.match(html, /id="aurelia-upi-root"/);
 });
 
-test('thermal receipts have independent 80 mm and 58 mm paper profiles', () => {
-  assert.match(html, /aureliaPrintThermalReceipt/);
-  assert.match(html, /size:'\+width\+'mm 200mm/i);
-  assert.match(html, /value=["']80["']/);
-  assert.match(html, /value=["']58["']/);
-  assert.match(html, /thermal-receipt/);
+test('checkout and invoice collection use an exact-amount UPI session rather than a static untracked QR', () => {
+  assert.match(html, /function recordCheckoutPayment\(bookingId\)/);
+  assert.match(html, /window\.openAureliaUpiForFolio\(b\.id, amount\)/);
+  assert.match(html, /Create Aurelia UPI Request/);
+  assert.match(html, /Create Aurelia UPI QR & Guest Payment Request/);
+  assert.match(upi, /createPaymentSession/);
 });
 
-test('A4 document printing remains separate from thermal receipt printing', () => {
-  assert.match(html, /printGuestPreview/);
-  assert.match(html, /aurelia-thermal-print/);
-  assert.match(html, /aureliaPrintThermalReceipt/);
+test('UPI payment posting requires explicit receiving-bank verification and cannot auto-settle from alerts', () => {
+  assert.match(upi, /Confirm that you checked the credit in the receiving bank account/);
+  assert.match(upi, /manualVerified: true/);
+  assert.match(upi, /notificationEvidenceCanSettle: false/);
+  assert.match(domain, /session\.kind !== "folio"/);
+  assert.match(domain, /session\.amountPaise !== evidence\.amountPaise/);
 });
 
-test('legacy direct checkout cannot bypass explicit UPI receipt confirmation', () => {
-  assert.match(html, /aurelia-upi-settlement-guard/);
-  assert.match(html, /Verify and post the Aurelia UPI payment before checkout/);
-  assert.match(html, /Only manually verified Aurelia UPI payments can be posted/);
-  assert.match(html, /AureliaPaymentPolicy/);
+test('all PMS collection methods remain available without POS or card acquiring', () => {
+  assert.match(html, /<option value="upi">Aurelia UPI/);
+  assert.match(html, /<option value="cash">Cash/);
+  assert.match(html, /<option value="bank">Bank Transfer/);
+  assert.match(html, /Cash \/ Bank/);
+  assert.match(html, /upi-cash-table/);
+  assert.match(html, /providerGatewaysEnabled: false/);
+  assert.doesNotMatch(html, /data-method="CARD"|value="card"|Visa|Mastercard/);
 });
 
-test('Aurelia payment policy supports UPI and cash without payment gateways', () => {
-  assert.match(html, /enabledMethods:Object\.freeze\(\['AURELIA_UPI','CASH'\]\)/);
-  assert.match(html, /automaticSettlement:false/);
-  assert.match(html, /notificationEvidenceCanSettle:false/);
-  assert.match(html, /providerGatewaysEnabled:\s*false/);
+test('thermal receipts and A4 invoices remain separate document workflows', () => {
+  assert.match(html, /function openThermalModal/);
+  assert.match(html, /thermal-paper/);
+  assert.match(html, /function openInvoiceModal/);
+  assert.match(html, /data-action="print-now"/);
 });
 
-test('Aurelia UPI QR generation is local and does not call a hosted QR service', () => {
-  assert.match(html, /data-aurelia-upi-qr/);
-  assert.doesNotMatch(html, /api\.qrserver\.com/);
+test('incoming alerts are routed into review evidence and never posted automatically', () => {
+  assert.match(upi, /async function importSignal/);
+  assert.match(upi, /async function confirmEvidence/);
+  assert.match(upi, /notificationEvidenceCanSettle: false/);
+  assert.match(html, /importLegacyUpiAlerts/);
+});
+
+test('VPA changes fail closed until encrypted payment history is loaded and open sessions are resolved', () => {
+  assert.match(html, /Open Aurelia UPI and verify encrypted payment storage/);
+  assert.match(html, /Resolve all active and queued Aurelia UPI requests/);
+  assert.match(html, /Enter a valid UPI ID/);
+});
+
+test('local QR and UPI assets are bundled without a hosted QR or chart dependency', () => {
   assert.match(html, /\.\/assets\/qrcode\.min\.js/);
   assert.match(html, /\.\/src\/aurelia-upi\/app\.mjs/);
+  assert.match(html, /\.\/assets\/aurelia-upi\.css/);
+  assert.doesNotMatch(html, /api\.qrserver\.com|cdn\.jsdelivr\.net|fonts\.googleapis\.com/);
 });
 
-test('legacy payment signals are review-only and cannot auto-post a folio payment', () => {
-  assert.match(html, /function addSig\(o\)/);
-  assert.match(html, /function sigA\(id,i\).*AureliaUPI\.importSignal/);
-  assert.match(html, /Only manually verified Aurelia UPI payments can be posted/);
-  assert.doesNotMatch(html, /addPay\(p,s\.amt,'UPI',[^;]*true\)/);
-});
-
-test('Aurelia UPI uses one configured VPA and no demo receiving address', () => {
-  assert.match(html, /Aurelia UPI ID \(VPA\)/);
-  assert.doesNotMatch(html, /hariom@upi/);
-});
-
-test('Aurelia PMS shell uses the supplied mobile navigation and local design assets', () => {
-  assert.match(html, /aurelia-shell-header/);
-  assert.match(html, /AURELIA PMS/);
-  assert.match(html, /INR · AURELIA UPI ONLY/);
-  assert.match(html, /aurelia-theme-switch/);
-  assert.match(html, /aurelia-profile-button/);
-  assert.match(html, /aurelia-quick-action primary/);
-  assert.match(html, /onclick="go\('upi'\)"/);
-  assert.match(html, /Aurelia UPI<\/b>/);
-  assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['upi','Aurelia UPI'\],\['more','More'\]\]/);
-  assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|fonts\.gstatic\.com/);
-});
-
-test('Aurelia PMS shell theme is packaged locally without external font or CSS runtime', async () => {
-  const theme = await readFile(new URL('../assets/aurelia-sovereign-theme.css', import.meta.url), 'utf8');
-  assert.match(theme, /--gold:#f7d387/);
-  assert.match(theme, /--em:#68dbad/);
-  assert.match(theme, /grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
-  assert.match(theme, /body\[data-theme="light"\]/);
-});
-
-test('New booking action tracks the real dock edge without double-counting safe area', () => {
-  assert.match(html, /function positionBookingAction\(\)/);
-  assert.match(html, /window\.innerHeight\|\|document\.documentElement\.clientHeight/);
-  assert.match(html, /new ResizeObserver\(positionBookingAction\)/);
-  assert.match(html, /new MutationObserver\(observeDock\)/);
-  assert.match(html, /--aurelia-booking-bottom/);
-  assert.equal(html.includes('bottom:var(--aurelia-booking-bottom,148px) + env(safe-area-inset-bottom'), false);
-  assert.equal(html.includes('#hor-book{bottom:var(--aurelia-booking-bottom,148px)!important}'), true);
-});
-
-
-test('Aurelia dashboard identity replaces the legacy homestay defaults in every initializer', () => {
-  assert.match(html, /set:\{name:'Aurelia PMS',tag:'Property management, thoughtfully connected\.'/);
-  assert.match(html, /S\.set=\{name:'Aurelia PMS',tag:'Property management, thoughtfully connected\.'/);
-  assert.match(html, /set:\{name:'Aurelia PMS',phone:/);
-  assert.doesNotMatch(html, /Hari Om Retreat|hariom@upi/i);
-});
-
-test('dashboard greeting and header clock share India/device time and refresh on resume', () => {
-  assert.match(html, /function aureliaIndiaClock\(now=new Date\(\)\)/);
-  assert.match(html, /Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/);
-  assert.match(html, /'Asia\/Kolkata'/);
-  assert.match(html, /h=aureliaIndiaClock\(\)\.hour/);
-  assert.match(html, /id="aurelia-dashboard-greeting"/);
-  assert.match(html, /clock\.title='Time zone: '\+time\.timeZone/);
-  assert.match(html, /setInterval\(tickClock,15000\)/);
-  assert.match(html, /document\.addEventListener\('visibilitychange'/);
-  assert.match(html, /window\.addEventListener\('focus',tickClock\)/);
-});
-
-test('PMS startup does not mutate non-existent demo bookings, guests or dining tables', () => {
-  assert.equal(html.includes('S.t[2].demo=1'), false);
-  assert.equal(html.includes('S.b[1].pays='), false);
-  assert.equal(html.includes('214000+i*7919'), false);
-});
-
-test('reference workspace design adds desktop sidebar navigation without replacing the PMS router', () => {
-  assert.match(html, /aurelia-design-sidebar/);
-  assert.match(html, /aurelia-design-nav/);
-  assert.match(html, /data-aurelia-tab/);
-  assert.match(html, /if\(typeof go==='function'\)go\(button\.dataset\.aureliaTab\)/);
-  assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['upi','Aurelia UPI'\],\['more','More'\]\]/);
-  assert.match(html, /id="aurelia-design-new"/);
-  assert.match(html, /const clock=app\.querySelector\('#aurelia-shell-clock'\);if\(clock&&actions/);
-  assert.match(html, /if\(typeof resv==='function'\)resv\(\)/);
-});
-
-test('reference workspace keeps six-destination mobile dock and responsive desktop-to-mobile transition', () => {
-  assert.match(html, /\.aurelia-design-shell\{display:flex;min-height:100vh;width:100%\}/);
-  assert.match(html, /\.aurelia-design-sidebar\{/);
-  assert.match(html, /@media\(max-width:900px\)[\s\S]*?\.aurelia-design-sidebar\{display:none\}/);
-  assert.match(html, /@media\(max-width:900px\)[\s\S]*?\.dock\{display:grid\}/);
-  assert.match(html, /grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
-  assert.match(html, /#hor-book\{display:none!important\}/);
-  assert.match(html, /#hor-book\{display:flex!important\}/);
-});
-
-test('reference workspace aligns with the uploaded emerald and champagne-gold palette while keeping fonts offline', () => {
-  assert.match(html, /--bg:#081711;--s1:#10271d;--s2:#173628/);
-  assert.match(html, /--gold:#e2c783/);
-  assert.match(html, /--serif:"EB Garamond",Georgia,serif/);
-  assert.match(html, /--sans:Manrope,system-ui,-apple-system,"Segoe UI",sans-serif/);
-  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
-  assert.match(html, /Content-Security-Policy/);
-});
-
-test('reference workspace preserves PMS app boot, local persistence and critical operations modules', () => {
-  assert.match(html, /function render\(\)/);
-  assert.match(html, /function loadAll\(\)/);
-  assert.match(html, /function persist\(\)/);
-  assert.match(html, /aurelia-persistence-and-stay-extension/);
-  assert.match(html, /aurelia-upi-integration/);
-  assert.match(html, /aurelia-modern-operations/);
-  assert.match(html, /aurelia-thermal-receipt/);
-  assert.match(html, /scripts\/stay-extension\.js/);
+test('legacy main-branch state is migrated without deleting the original source record', () => {
+  assert.match(html, /function migrateLegacyProjectState\(value\)/);
+  assert.match(html, /aurelia_lodge_v2/);
+  assert.match(html, /LEGACY-MIGRATION-/);
+  assert.match(html, /legacyInventoryLedger/);
+  assert.doesNotMatch(html, /removeItem\("aurelia_lodge_v2"\)/);
 });
