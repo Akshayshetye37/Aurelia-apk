@@ -3977,7 +3977,10 @@ module.exports = QRCode;
             <div class="card">
               <h3 style="font-size:22px;margin-bottom:8px">Backup, Restore &amp; Data Care</h3>
               <div class="row-wrap">
-                <button class="btn sm" type="button" data-action="backup-download">Download JSON Backup</button>
+                <button class="btn sm" type="button" data-action="backup-download">Download Verified JSON</button>
+                <button class="btn sm ghost" type="button" data-action="backup-device">Create Device Restore Point</button>
+                <button class="btn sm ghost" type="button" data-action="backup-folder">Choose Backup Folder</button>
+                <button class="btn sm ghost" type="button" data-action="backup-recover">Restore Latest Device Backup</button>
                 <label class="btn sm ghost" style="cursor:pointer">Restore JSON<input type="file" accept=".json,application/json" hidden id="restore-json-input"></label>
                 <button class="btn sm ghost" type="button" data-action="health-check">Health Check</button>
                 <button class="btn sm danger" type="button" data-action="reset-demo">Reset Sample Data</button>
@@ -5710,19 +5713,10 @@ module.exports = QRCode;
       return;
     }
 
-    if (act === "backup-download") {
-      const blob = new Blob([JSON.stringify({ v: 3, exportedAt: new Date().toISOString(), data: S }, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "aurelia-pms-backup-" + ymd(0) + ".json";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-      toast("JSON backup downloaded");
-      return;
-    }
+    if (act === "backup-download") { downloadVerifiedBackup(); return; }
+    if (act === "backup-device") { createNativeDeviceBackup(); return; }
+    if (act === "backup-folder") { chooseNativeBackupFolder(); return; }
+    if (act === "backup-recover") { recoverLatestNativeBackup(); return; }
 
     if (act === "health-check") {
       const missingRooms = S.bookings.filter(b => !getRoom(b.room)).length;
@@ -5830,6 +5824,166 @@ module.exports = QRCode;
     if (el) el.textContent = new Intl.DateTimeFormat("en-IN", { timeZone: IST_TZ, hour: "2-digit", minute: "2-digit", hour12: true }).format(new Date()) + " IST";
   }
 
+  const nativeActionsAvailable = () => !!(window.Capacitor?.Plugins?.AureliaNativeActions &&
+    typeof window.Capacitor.Plugins.AureliaNativeActions.postMessage === "function");
+  const nativeAction = action => {
+    try {
+      const api = window.Capacitor?.Plugins?.AureliaNativeActions;
+      if (!api || typeof api.postMessage !== "function") return false;
+      api.postMessage({ message: JSON.stringify(action) }).catch(error => console.error("Aurelia native action failed", error));
+      return true;
+    } catch (_) { return false; }
+  };
+  let pendingDeviceBackup = null, pendingBackupFolder = null, pendingDeviceRecovery = null, photoRequestSequence = 0;
+  const pendingPhotoRequests = new Map();
+  window.aureliaNativePhotoResult = (id, ok, payload) => {
+    const pending = pendingPhotoRequests.get(String(id));
+    if (!pending) return;
+    pendingPhotoRequests.delete(String(id));
+    if (ok) {
+      if (pending.type === "photoArchive" && typeof payload === "string") {
+        try { payload = JSON.parse(payload); } catch (error) { pending.reject(error); return; }
+      }
+      pending.resolve(payload);
+    } else pending.reject(new Error(payload || "Native photo archive operation failed."));
+  };
+  function nativePhotoAction(type, extra = {}) {
+    return new Promise((resolve, reject) => {
+      if (!nativeActionsAvailable()) { reject(new Error("Native photo archive is available only in the Android app.")); return; }
+      const requestId = "aurelia-photo-" + Date.now() + "-" + (++photoRequestSequence);
+      pendingPhotoRequests.set(requestId, { resolve, reject, type });
+      if (!nativeAction({ type, requestId, ...extra })) {
+        pendingPhotoRequests.delete(requestId); reject(new Error("Could not contact native photo storage.")); return;
+      }
+      setTimeout(() => {
+        const pending = pendingPhotoRequests.get(requestId);
+        if (pending) { pendingPhotoRequests.delete(requestId); pending.reject(new Error("Native photo storage timed out.")); }
+      }, 30000);
+    });
+  }
+  function photoKeysIn(value, out = new Set(), seen = new Set()) {
+    if (!value || typeof value !== "object" || seen.has(value)) return out;
+    seen.add(value);
+    if (!Array.isArray(value) && typeof value.imgKey === "string" && value.imgKey) out.add(value.imgKey);
+    Object.values(value).forEach(child => photoKeysIn(child, out, seen));
+    return out;
+  }
+  function validatePhotoArchive(data, archive) {
+    const missing = [];
+    for (const key of photoKeysIn(data)) if (typeof archive?.[key] !== "string" || !/^data:image\//i.test(archive[key])) missing.push(key);
+    if (missing.length) throw new Error(missing.length + " original guest ID photo(s) are missing. Backup/restore was not completed.");
+    if (archive && (typeof archive !== "object" || Array.isArray(archive))) throw new Error("Photo archive is invalid.");
+    return true;
+  }
+  async function sha256Hex(value) {
+    if (!window.crypto?.subtle || typeof TextEncoder !== "function") throw new Error("SHA-256 verification is unavailable in this WebView.");
+    const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+  }
+  async function createVerifiedBackupSnapshot() {
+    const data = JSON.parse(JSON.stringify(S));
+    const dataHash = await sha256Hex(JSON.stringify(data));
+    let photoArchive = {};
+    if (nativeActionsAvailable()) photoArchive = await nativePhotoAction("photoArchive");
+    validatePhotoArchive(data, photoArchive || {});
+    const snapshot = { v: 5, workspace: "aurelia-uploaded-pms", exportedAt: new Date().toISOString(), data, photoArchive: photoArchive || {} };
+    snapshot.integrity = { algorithm: "SHA-256", digest: await sha256Hex(JSON.stringify(snapshot)) };
+    if (dataHash !== await sha256Hex(JSON.stringify(S))) throw new Error("PMS records changed while the backup was being prepared. Try again.");
+    return { payload: JSON.stringify(snapshot, null, 2), name: "aurelia-pms-backup-" + ymd(0) + "-" + dataHash.slice(0, 12) + ".json" };
+  }
+  async function downloadVerifiedBackup() {
+    try {
+      const snapshot = await createVerifiedBackupSnapshot();
+      const blob = new Blob([snapshot.payload], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob), anchor = document.createElement("a");
+      anchor.href = url; anchor.download = snapshot.name; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      toast("Verified JSON backup download started.");
+    } catch (error) { toast("Backup blocked: " + String(error.message || error)); }
+  }
+  async function createNativeDeviceBackup() {
+    if (!nativeActionsAvailable()) { toast("Native device backup is available in the installed Android app. Use Download JSON Backup in this browser."); return; }
+    if (pendingDeviceBackup) return;
+    try {
+      const snapshot = await createVerifiedBackupSnapshot();
+      const requestId = "aurelia-backup-" + Date.now();
+      pendingDeviceBackup = { requestId, name: snapshot.name };
+      if (!nativeAction({ type: "backupDeviceNow", requestId, name: snapshot.name, payload: snapshot.payload })) {
+        pendingDeviceBackup = null; toast("Could not start the native backup."); return;
+      }
+      toast("Creating and verifying the device restore point…");
+    } catch (error) { pendingDeviceBackup = null; toast("Device backup blocked: " + String(error.message || error)); }
+  }
+  function chooseNativeBackupFolder() {
+    if (!nativeActionsAvailable()) { toast("Choose a device backup folder from the installed Android app."); return; }
+    const requestId = "aurelia-folder-" + Date.now();
+    pendingBackupFolder = requestId;
+    if (!nativeAction({ type: "chooseDeviceBackupFolder", requestId })) {
+      pendingBackupFolder = null; toast("Could not open the Android folder picker.");
+    }
+  }
+  function recoverLatestNativeBackup() {
+    if (!nativeActionsAvailable()) { toast("Automatic device recovery is available in the installed Android app. Use Restore JSON here."); return; }
+    const requestId = "aurelia-recover-" + Date.now();
+    pendingDeviceRecovery = requestId;
+    if (!nativeAction({ type: "recoverLatestBackup", requestId, exclude: [] })) {
+      pendingDeviceRecovery = null; toast("Could not start device recovery.");
+    }
+  }
+  window.aureliaNativeDeviceBackupResult = async (id, ok, error) => {
+    if (!pendingDeviceBackup || String(id) !== String(pendingDeviceBackup.requestId)) return;
+    const completed = pendingDeviceBackup; pendingDeviceBackup = null;
+    if (!ok) { toast("Device backup failed: " + String(error || "unknown error")); return; }
+    S.deviceBackup = { ...(S.deviceBackup || {}), verified: true, last: new Date().toISOString(), file: completed.name };
+    await persistMutation();
+    toast("Verified device restore point saved.");
+  };
+  window.aureliaNativeBackupFolderResult = async (id, ok, label) => {
+    if (!pendingBackupFolder || String(id) !== String(pendingBackupFolder)) return;
+    pendingBackupFolder = null;
+    S.deviceBackup = { ...(S.deviceBackup || {}), folder: !!ok, folderLabel: String(label || "") };
+    await persistMutation();
+    toast(ok ? "Device backup folder selected." : (String(label || "Folder selection cancelled.")));
+  };
+  window.aureliaNativeDeviceBackupStatusResult = async (id, selected, backupExists) => {
+    if (pendingBackupFolder && String(id) !== String(pendingBackupFolder)) return;
+    S.deviceBackup = { ...(S.deviceBackup || {}), folder: !!selected, backupExists: !!backupExists };
+    await persistMutation();
+  };
+  window.aureliaNativeRecoveryBackupResult = async (id, ok, payload, fileName) => {
+    if (!pendingDeviceRecovery || String(id) !== String(pendingDeviceRecovery)) return;
+    pendingDeviceRecovery = null;
+    if (!ok) { toast("No verified device backup could be recovered. " + String(fileName || "")); return; }
+    const previousState = JSON.stringify(S);
+    let previousPhotos = {};
+    try {
+      const snapshot = JSON.parse(String(payload || ""));
+      if (!snapshot || !snapshot.data || ![4, 5].includes(Number(snapshot.v))) throw new Error("Unsupported backup structure.");
+      if (snapshot.integrity) {
+        if (snapshot.integrity.algorithm !== "SHA-256" || await sha256Hex(JSON.stringify(Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== "integrity")))) !== snapshot.integrity.digest) {
+          throw new Error("Backup checksum does not match its contents.");
+        }
+      } else if (snapshot.v === 5) throw new Error("The uploaded-workspace backup has no integrity checksum.");
+      const restoredData = Array.isArray(snapshot.data.bookings) ? snapshot.data : migrateLegacyProjectState(snapshot.data);
+      validatePhotoArchive(restoredData, snapshot.photoArchive || {});
+      previousPhotos = await nativePhotoAction("photoArchive");
+      if (snapshot.photoArchive) await nativePhotoAction("photoRestore", { archive: snapshot.photoArchive });
+      normalizeLoadedState(restoredData);
+      const saved = await saveState(true);
+      if (!saved) throw new Error("Restored PMS records could not be durably saved.");
+      S.deviceBackup = { ...(S.deviceBackup || {}), recoveredAt: new Date().toISOString(), recoveredFile: String(fileName || "") };
+      await persistMutation();
+      render(); toast("Device backup restored and verified.");
+    } catch (error) {
+      try {
+        normalizeLoadedState(JSON.parse(previousState));
+        if (nativeActionsAvailable()) await nativePhotoAction("photoRestore", { archive: previousPhotos || {} });
+        await saveState(true);
+      } catch (rollbackError) { console.error("Device restore rollback failed", rollbackError); }
+      toast("Restore blocked; the previous workspace was retained where possible. " + String(error.message || error));
+    }
+  };
+
   window.AureliaPmsContext = {
     getSettings: () => ({ name: S.settings.name || "Aurelia PMS", upi: S.settings.upi || "" }),
     getBookings: () => S.bookings.filter(booking => bookingDue(booking) > 0).map(booking => {
@@ -5852,9 +6006,11 @@ module.exports = QRCode;
     isPaymentTab: () => S.tab === "upi",
     importLegacyAlerts: () => importLegacyUpiAlerts(),
     launchUpi: uri => {
+      if (nativeAction({ type: "openUrl", url: String(uri) })) return true;
       try { window.location.assign(String(uri)); return true; } catch (_) { return false; }
     },
     launchExternalUrl: url => {
+      if (nativeAction({ type: "openUrl", url: String(url) })) return true;
       try {
         const opened = window.open(String(url), "_blank", "noopener,noreferrer");
         if (!opened) window.location.assign(String(url));
@@ -5862,6 +6018,7 @@ module.exports = QRCode;
       } catch (_) { try { window.location.assign(String(url)); return true; } catch (_) { return false; } }
     },
     openNotificationSettings: async () => {
+      if (nativeAction({ type: "openNotificationAccessSettings" })) return true;
       const plugin = window.Capacitor?.Plugins?.CapacitorPmsStorage;
       if (plugin && typeof plugin.openNotificationAccessSettings === "function") {
         try { await plugin.openNotificationAccessSettings(); return true; } catch (_) { return false; }
@@ -5979,6 +6136,7 @@ module.exports = QRCode;
 
   /* Boot only after the durable store has been checked and any legacy data migrated. */
   loadState().finally(() => {
+    S.deviceBackup = S.deviceBackup && typeof S.deviceBackup === "object" ? S.deviceBackup : { folder: false, verified: false, last: null };
     render();
     updateClock();
     setInterval(updateClock, 30000);
