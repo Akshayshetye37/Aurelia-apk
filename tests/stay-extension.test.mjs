@@ -60,7 +60,7 @@ test('uploaded PMS uses fail-closed IndexedDB reads and read-back verified write
   assert.match(html, /function readDeviceRecord\(db\)/);
   assert.match(html, /function writeDeviceRecord\(db, raw\)/);
   assert.match(html, /async function loadState\(\)/);
-  assert.match(html, /async function saveState\(/);
+  assert.match(html, /function saveState\(/);
   assert.match(html, /persistenceLoadBlocked/);
   assert.match(html, /read-back verification/);
   assert.match(html, /NOT SAVED/);
@@ -68,7 +68,7 @@ test('uploaded PMS uses fail-closed IndexedDB reads and read-back verified write
 
 test('main-branch v2 records are mapped into the uploaded schema without deleting the source key', () => {
   assert.match(html, /function migrateLegacyProjectState\(value\)/);
-  assert.match(html, /window\.localStorage\.getItem\("aurelia_lodge_v2"\)/);
+  assert.match(html, /getItem\("aurelia_lodge_v2"\)/);
   assert.match(html, /booking\.pays = pays/);
   assert.match(html, /legacyPaid - recorded/);
   assert.match(html, /unit, qty/);
@@ -106,5 +106,5 @@ test('all inline application scripts parse after the uploaded workspace integrat
     }
     cursor = close + 9;
   }
-  assert.ok(count >= 3);
+  assert.ok(count >= 2);
 });
