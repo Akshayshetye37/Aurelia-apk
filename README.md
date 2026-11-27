@@ -156,7 +156,7 @@ Follow the [build and verification instructions](#build-and-verification) above.
 
 The accepted offline-first, local-versus-server, storage, financial-integrity, offline-licensing and anti-cloning decisions are documented in [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md). Android release patching now enables R8 minification/resource shrinking, disables release debuggability and WebView debugging, disables Android automatic app-data backup, and removes broad camera/legacy shared-storage permissions. Contract tests cover the manifest and release-hardening helpers (`npm test`).
 
-The native SQLCipher repository foundation now requires a user unlock before it can obtain the one random 256-bit DEK. An 8–12 digit PIN and a high-entropy recovery key each have independent PBKDF2-HMAC-SHA256/AES-GCM envelopes for that same DEK; strong biometric unlock uses an authentication-per-use Android Keystore AES-GCM key. PIN and recovery secrets are entered in native dialogs, and the recovery key is displayed once for offline safekeeping. A local exponential delay is applied after failed unlock attempts. OTP/SMS is not accepted by the key manager and cannot derive, replace, wrap or regenerate the DEK. This is **not yet the canonical application store**: native storage is not wired to live business reads/writes, legacy-data migration and rollback are not connected to the live UI, and the HTML application still uses browser-side persistence. Do not cut over live data until native compilation, biometric/lockout negative cases, migration gates and physical-device checks pass. R8 does not protect WebView JavaScript; production JavaScript minification/obfuscation and signed offline licensing also remain outstanding.
+The native SQLCipher repository foundation exists but is **not yet the canonical application store**. The previous PIN/recovery-key unlock implementation conflicts with the final product decision and must not be presented as approved: Aurelia will not ask users to create or enter a separate database PIN, recovery PIN, recovery passphrase or user-held recovery key. The approved local unlock design is Google account authentication (where Google Mode is used), followed by Android's native device-credential authentication (PIN, pattern or password, with supported biometric authentication) to authorize an Android Keystore-protected database key. Google Sign-In does not itself unlock a device-bound key. This replacement design is not yet implemented or device-qualified, and existing encrypted data must never be deleted or re-keyed as a shortcut. The HTML application still uses browser-side persistence; do not claim SQLCipher is canonical until live business reads/writes, transactional migration, rollback and physical-device tests pass. R8 does not protect WebView JavaScript; production JavaScript minification/obfuscation and signed offline licensing also remain outstanding.
 
 This repository is a source project, not a declaration of production readiness. Review [docs/SECURITY.md](docs/SECURITY.md), verify the exact release build and test on supported physical devices before distribution. Do not place provider secrets in browser storage, source files, APK resources or client-side configuration.
 
@@ -246,25 +246,19 @@ These decisions are not evidence that the features are already implemented. Befo
 
 Until these gates pass, describe the relevant capability as planned or in progress, not production-ready.
 
-### Cloud consent and Google Drive backup location — final product decision
+### Cloud backup and Google Drive access — superseded by SAF decision
 
-This section supersedes any earlier wording in this README that suggests showing a multi-provider picker during Google Sign-In.
-
-- After Google Sign-In and owner/property authorization, show one Aurelia Google Drive consent explanation with **Allow** and **Deny**.
-- **Allow** starts Google's actual Drive authorization flow. **Deny** continues into the PMS without cloud backup.
-- Do not show a cloud-provider chooser during login. Do not automatically connect another cloud provider.
-- If the user denies or skips Drive authorization, they can connect Google Drive later under **Settings → Backup & Storage**. Cloud connection and management remain in Settings.
-- Google Sign-In and Google Drive authorization remain separate grants. Signing in does not itself authorize Drive.
-- The recommended backup destination is a user-visible folder in the signed-in user's Drive: **My Drive/Aurelia PMS Backups/[Property Name]/**. Aurelia creates and manages its own folder and backup files there.
-- Prefer the narrow Google Drive drive.file scope for files created by Aurelia (and files explicitly opened/shared with Aurelia through supported flows). Do not request broad full-Drive access merely to manage Aurelia's own backup folder.
-- Do not use the hidden appDataFolder as the default destination for the primary owner-facing backup archive: it is not visible in Drive's normal UI and is intended for app-specific data. It may be considered separately for internal app metadata, not as a substitute for a visible owner-managed backup location.
-- Each backup is a versioned, authenticated encrypted archive. Encrypt locally before upload; never upload plaintext PMS data, database keys, PINs, recovery secrets or provider tokens.
-- Maintain a backup manifest containing only the necessary metadata (for example schema version, property identifier, backup identifier, creation time, archive size and integrity/authentication metadata). Do not expose guest or financial details in filenames.
-- Keep multiple verified restore points with a documented retention policy. Upload to a temporary/new version, verify the stored object, then mark that version as successful. Never overwrite the only known-good backup before a new upload is verified.
-- Settings must show provider connection status, destination folder, last successful backup, backup history, manual backup, restore and disconnect actions. Disconnecting Drive must not delete local data.
-- Restore must authenticate/decrypt and validate the archive, preserve a local restore point, stage and verify the restored database and financial totals, and only then commit. A failed restore must leave current data intact.
-- The user-visible folder can be deleted or modified by its owner. Aurelia must detect missing or inaccessible backup files and report the condition; it must not claim a backup exists merely because a previous upload once succeeded.
-- Cloud backup is optional. Local PMS operation and local encrypted export/restore remain available when Drive is denied, disconnected, unavailable or out of quota.
+- Google Sign-In authenticates the Aurelia owner; it does not grant Drive access.
+- Aurelia's approved zero-server backup direction is Android Storage Access Framework (SAF), using a user-selected Google Drive folder where the installed Drive DocumentsProvider is available. This is not Drive REST API access and does not request broad Drive OAuth scopes.
+- After Google Sign-In and owner/property authorization, show one first-time Aurelia explanation asking permission to search for an existing backup in a folder the user selects. Deny is remembered and must not trigger another automatic popup or dashboard warning. The user can later initiate discovery or configure backup under Settings → Backup & Storage.
+- Allow launches the Android folder picker. The owner selects the folder; Aurelia persists the URI permission where supported and searches only that selected folder. Never claim to search all of Drive.
+- On a new device, the owner signs in, authorizes the property, then selects the backup folder again because SAF URI permissions do not automatically transfer between devices.
+- A matching backup is presented with Skip on the left and Restore on the right. Discovery never causes automatic restoration.
+- Aurelia creates its own Aurelia Backups / property-specific subfolder after the owner grants access, where provider capabilities permit. It must test read/write access before reporting setup success.
+- Encrypt backup archives before writing them. Never write plaintext PMS data, database keys or authentication tokens to the selected folder.
+- Keep Android Auto Backup supplementary only; never rely on its quota as the primary PMS backup.
+- Do not use Drive REST API or Drive OAuth scopes for PMS backup unless Google has expressly approved the exact app-content backup use case in writing. SAF must not be described as a policy workaround; review Google's current applicable terms for the actual app behavior.
+- Cross-device restore remains blocked until the DEK can be recovered securely without a user-held recovery PIN/passphrase/key. Google Sign-In plus the replacement phone's screen lock does not by itself recover a key protected by the original phone's Android Keystore.
 
 ### Google Drive application-data policy gate — clarification
 
@@ -298,3 +292,52 @@ This section supersedes earlier backup-login UX wording wherever it conflicts wi
 - Do not introduce a Property Recovery PIN, recovery passphrase or user-held recovery key. A secure encryption-key recovery design that meets this product constraint remains a prerequisite for claiming cross-device encrypted restore; Google Sign-In by itself does not recover a device-bound encryption key.
 - Android Auto Backup, if configured, is supplementary only. Do not rely on its 25 MB quota or claim it guarantees a complete PMS backup. SAF backup is a separate user-authorized destination and background execution/provider availability must be tested on supported physical devices.
 
+
+## Final authentication, device unlock and data-protection decisions — 28 November 2026
+
+This section is the authoritative product decision and supersedes earlier README wording that conflicts with it.
+
+### Authentication policy
+
+- Google Sign-In through Android Credential Manager is the only account-login method in Google Mode.
+- Firebase Authentication validates the Google ID token; Aurelia then independently verifies owner/property membership. An authenticated but unauthorized Google account receives no property access and must not silently create a property.
+- No Aurelia email/password login, email verification link, email OTP, SMS OTP, verification email/message, separate Aurelia password, recovery PIN, recovery passphrase or user-held recovery key.
+- Local Mode remains permanent and available without Google Sign-In. It uses the same PMS business rules and must not be a restricted demo.
+- Google identity, Aurelia owner identity, tenant/property identity and device/installation identity remain separate.
+
+### Device screen-lock authorization
+
+- After Google authentication and owner/property authorization, a device with an existing local encrypted property must request Android's genuine native device credential prompt before opening the database.
+- Accept the device's configured PIN, pattern or password and supported biometric authenticators through AndroidX BiometricPrompt / Android Keystore. Do not create or store an Aurelia-specific passcode.
+- Use an authentication-bound Android Keystore key to protect access to the random 256-bit SQLCipher DEK. The screen-lock credential is an authorization factor handled by Android; it is not the DEK and must never be copied into Aurelia storage.
+- After successful authentication, make the database available only for the lifetime of the authenticated app process/session. Lock and clear in-memory key material on process termination and explicit lock. Do not re-prompt for ordinary navigation or temporary app switching while the same authorized process remains alive.
+- If device authentication is unavailable, cancelled, fails, or the Keystore key is invalidated, keep the database locked and preserve the encrypted database. Never generate a replacement DEK for an existing database.
+- Google Sign-In proves account control; it does not prove that a device belongs exclusively to that owner and does not, by itself, unlock a device-bound key.
+
+### Storage and secret boundaries
+
+- HTML and JavaScript are presentation/client code only. They must not be the canonical store for guest, booking, folio, payment, identity-document or other property business data.
+- The target canonical store is native SQLCipher SQLite, accessed through a narrow validated Capacitor bridge. Browser storage may be used only for non-sensitive UI preferences or a deliberately temporary migration/cache layer; it must not remain the authority for business records after cutover.
+- Keep the random 256-bit DEK protected by Android Keystore. Never expose it to WebView JavaScript, localStorage, HTML, logs, crash messages, analytics or exported files.
+- Google Drive is an optional encrypted backup destination via the approved SAF user-selected-folder flow. It is not live storage and must never receive plaintext PMS data.
+- Keep provider/API secrets out of HTML, JavaScript, APK resources and source control. Use server-side secret management for future backend credentials.
+- Production errors shown to users must be generic, actionable and non-sensitive. Never expose stack traces, filesystem paths, SQL statements, tokens, keys, guest details, payment details or raw provider responses in popups. Redact sensitive values from logs and crash diagnostics.
+- Keep R8/resource shrinking, release debuggable=false, WebView debugging disabled, restrictive WebView settings, reviewed CSP, dependency pinning and private/restricted repository access. Minification/obfuscation raises reverse-engineering cost but cannot make shipped app logic impossible to inspect.
+
+### Backup and restore UX
+
+- After Google Sign-In and owner/property authorization, show one first-time backup-discovery consent popup with Deny on the left and Allow on the right.
+- Allow opens the Android SAF folder picker; Aurelia searches only the folder the user selects.
+- Deny is remembered. Do not automatically prompt again and do not show a persistent dashboard warning. The user can later choose Find Existing Backup or Set Up Automatic Backup in Settings → Backup & Storage.
+- If a matching valid backup is found, show Skip on the left and Restore on the right. Never restore automatically.
+- If no backup is found, proceed to normal property selection/creation without claiming that all Drive storage was searched.
+- Validate owner/property binding, archive authentication, schema compatibility, database integrity and financial ledger continuity before restore. Stage restore and preserve current data on failure.
+- Android Auto Backup is supplementary only and is not a guaranteed full PMS backup.
+
+### Explicit unresolved security gate: replacement-device key recovery
+
+A Keystore key protected by the original device's screen lock is device-bound. A new phone's Google Sign-In and its own screen lock cannot decrypt the old phone's DEK. SAF transfers encrypted backup files, not Keystore private keys. Therefore cross-device encrypted restore must not be advertised as working until a secure, reviewed key-transfer/recovery design is approved that does not introduce a user-held recovery PIN, passphrase or recovery key. Do not weaken encryption, store the DEK beside the backup, derive it from a Google ID token, or silently create a new DEK to bypass this limitation.
+
+### Implementation status and release gates
+
+These are accepted requirements, not claims of implementation. The inspected main branch does not yet have Credential Manager/Firebase Google Sign-In wired into the app, the native SQLCipher repository is not yet the live canonical PMS store, and the prior PIN/recovery unlock implementation must be replaced through a data-preserving migration. Before release, verify Google sign-in and owner authorization, device-credential prompt behavior, Keystore key invalidation, process lifecycle, SQLCipher live read/write cutover, browser-data migration/rollback, encrypted SAF backup, cross-device restore key recovery, redacted error handling and physical-device behavior. No production-ready claim is permitted before these gates pass.
