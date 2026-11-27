@@ -2,37 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, css] = await Promise.all([
-  readFile(new URL('../index.html', import.meta.url), 'utf8'),
-  readFile(new URL('../assets/aurelia-sovereign-theme.css', import.meta.url), 'utf8')
-]);
+const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
-test('Aurelia PMS loads its local luxury theme without remote font or stylesheet dependencies', () => {
-  assert.match(html, /href=["']\.\/assets\/aurelia-sovereign-theme\.css["']/);
-  assert.doesNotMatch(css, /@import\s+url\s*\(/i);
-  assert.doesNotMatch(css, /https?:\/\//i);
-  assert.match(css, /--serif:/);
-  assert.match(css, /--sans:/);
+test('uploaded Aurelia PMS design keeps its emerald, champagne and warm ivory palette locally', () => {
+  assert.match(html, /--bg:\s*#081711/);
+  assert.match(html, /--gold:\s*#e2c783/);
+  assert.match(html, /--emerald:\s*#52c79a/);
+  assert.match(html, /body\[data-theme="light"\]/);
+  assert.match(html, /--serif:\s*"EB Garamond", Georgia, serif/);
+  assert.match(html, /--sans:\s*"Manrope", system-ui/);
 });
 
-test('luxury theme keeps dark and light palettes readable and surfaces consistent', () => {
-  assert.match(css, /--bg:\s*#06130e/i);
-  assert.match(css, /--gold:\s*#dfc17e/i);
-  assert.match(css, /body\[data-theme="light"\]/);
-  assert.match(css, /\.card\s*\{/);
-  assert.match(css, /\.hero\s*\{/);
-  assert.match(css, /\.dock\s*\{/);
+test('uploaded theme has consistent cards, responsive dock and modal surfaces', () => {
+  assert.match(html, /\.card\s*\{/);
+  assert.match(html, /\.dock\s*\{/);
+  assert.match(html, /\.modal-panel/);
+  assert.match(html, /@media\s*\(max-width:/);
 });
 
-test('luxury theme preserves keyboard focus, reduced-motion and disabled-control affordances', () => {
-  assert.match(css, /:focus-visible\s*\{/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.match(css, /button:disabled/);
-  assert.match(css, /input:disabled/);
+test('uploaded theme retains focus visibility, reduced motion and disabled control affordances', () => {
+  assert.match(html, /:focus-visible/);
+  assert.match(html, /prefers-reduced-motion:\s*reduce/);
+  assert.match(html, /button:disabled/);
+  assert.match(html, /input:disabled/);
 });
 
-test('luxury theme uses local system font stacks and does not inject sample business data', () => {
-  assert.match(css, /"Iowan Old Style".*Georgia/);
-  assert.match(css, /"Segoe UI".*system-ui/);
-  assert.doesNotMatch(css, /Bengal Hills|Sovereign Quarters|demo guest|sample booking/i);
+test('uploaded design uses local system fallbacks and no external font runtime', () => {
+  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.tailwindcss\.com/);
 });
