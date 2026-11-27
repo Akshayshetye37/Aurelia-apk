@@ -994,10 +994,7 @@ async function shareSessionOnWhatsApp(sessionId) {
   }
   const url = "https://wa.me/" + phone + "?text=" + encodeURIComponent(message);
   const opened = await context?.launchExternalUrl?.(url);
-  if (!opened && typeof window !== "undefined") {
-    const popup = window.open(url, "_blank", "noopener,noreferrer");
-    if (!popup) window.location.href = url;
-  }
+  if (!opened && typeof window !== "undefined") window.location.assign(url);
 }
 
 function onActionClick(event) {
