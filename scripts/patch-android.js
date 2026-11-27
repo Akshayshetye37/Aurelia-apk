@@ -222,6 +222,10 @@ import java.util.concurrent.Executors;
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
+  private static final int MAX_ID_SCAN_BYTES = 12 * 1024 * 1024;
+  private static final int MAX_ID_SCAN_BASE64_CHARS = 16 * 1024 * 1024;
+  private static final long MAX_ID_SCAN_PIXELS = 16L * 1024L * 1024L;
+  private static final int MAX_ID_SCAN_DIMENSION = 8192;
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
   private byte[] pendingBytes = new byte[0];
@@ -718,24 +722,46 @@ public class MainActivity extends BridgeActivity {
           });
         } else if ("recognizeId".equals(type)) {
           String imageData = obj.optString("data", "");
+          if (imageData.isEmpty() || imageData.length() > MAX_ID_SCAN_BASE64_CHARS) throw new IllegalArgumentException("ID scan image exceeds the encoded input limit.");
           byte[] imageBytes = Base64.decode(imageData, Base64.DEFAULT);
-          Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-          if (bitmap == null) throw new IllegalArgumentException("Could not decode ID image");
+          if (imageBytes.length == 0 || imageBytes.length > MAX_ID_SCAN_BYTES) {
+            java.util.Arrays.fill(imageBytes, (byte) 0);
+            throw new IllegalArgumentException("ID scan image exceeds the decoded input limit.");
+          }
+          Bitmap bitmap = null;
+          try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+                bounds.outWidth > MAX_ID_SCAN_DIMENSION || bounds.outHeight > MAX_ID_SCAN_DIMENSION) {
+              throw new IllegalArgumentException("ID scan image dimensions are invalid or too large.");
+            }
+            int sampleSize = 1;
+            while (((long) bounds.outWidth / sampleSize) * ((long) bounds.outHeight / sampleSize) > MAX_ID_SCAN_PIXELS) sampleSize *= 2;
+            BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
+            decodeOptions.inSampleSize = sampleSize;
+            bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, decodeOptions);
+          } finally {
+            java.util.Arrays.fill(imageBytes, (byte) 0);
+          }
+          if (bitmap == null) throw new IllegalArgumentException("Could not decode ID image.");
           InputImage image = InputImage.fromBitmap(bitmap, 0);
           TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+          Bitmap scannedBitmap = bitmap;
           recognizer.process(image)
             .addOnSuccessListener(result -> {
               JSONObject payload = new JSONObject();
-              try { payload.put("status", "OK"); payload.put("text", result.getText()); payload.put("imageWidth", bitmap.getWidth()); payload.put("imageHeight", bitmap.getHeight()); org.json.JSONArray lineItems = new org.json.JSONArray(); for (com.google.mlkit.vision.text.Text.TextBlock block : result.getTextBlocks()) { for (com.google.mlkit.vision.text.Text.Line line : block.getLines()) { android.graphics.Rect box = line.getBoundingBox(); JSONObject item = new JSONObject(); item.put("text", line.getText()); if (box != null) { item.put("left", box.left); item.put("top", box.top); item.put("right", box.right); item.put("bottom", box.bottom); } item.put("confidence", line.getConfidence()); item.put("rotation", line.getAngle()); lineItems.put(item); } } payload.put("lines", lineItems); } catch (Exception ignored) { }
+              try { payload.put("status", "OK"); payload.put("text", result.getText()); payload.put("imageWidth", scannedBitmap.getWidth()); payload.put("imageHeight", scannedBitmap.getHeight()); org.json.JSONArray lineItems = new org.json.JSONArray(); for (com.google.mlkit.vision.text.Text.TextBlock block : result.getTextBlocks()) { for (com.google.mlkit.vision.text.Text.Line line : block.getLines()) { android.graphics.Rect box = line.getBoundingBox(); JSONObject item = new JSONObject(); item.put("text", line.getText()); if (box != null) { item.put("left", box.left); item.put("top", box.top); item.put("right", box.right); item.put("bottom", box.bottom); } item.put("confidence", line.getConfidence()); item.put("rotation", line.getAngle()); lineItems.put(item); } } payload.put("lines", lineItems); } catch (Exception ignored) { }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
-              bitmap.recycle();
+              scannedBitmap.recycle();
               recognizer.close();
             })
             .addOnFailureListener(error -> {
               JSONObject payload = new JSONObject();
               try { payload.put("status", "ERROR"); payload.put("message", error == null ? "Text recognition failed" : String.valueOf(error.getMessage())); } catch (Exception ignored) { }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
-              bitmap.recycle();
+              scannedBitmap.recycle();
               recognizer.close();
             });
         } else if ("deviceBackupStatus".equals(type)) {
@@ -813,6 +839,11 @@ public class MainActivity extends BridgeActivity {
         else if ("backupDeviceNow".equals(operationType)) backupResult(operationRequestId, false, message);
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
         else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false)");
+        else if ("recognizeId".equals(operationType)) {
+          JSONObject payload = new JSONObject();
+          try { payload.put("status", "ERROR"); payload.put("message", message); } catch (Exception ignored) { }
+          js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(operationRequestId) + "," + q(payload.toString()) + ")");
+        }
       }
     }
 
