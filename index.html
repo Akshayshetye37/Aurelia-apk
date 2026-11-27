@@ -5729,6 +5729,8 @@ module.exports = QRCode;
           return;
         }
       }
+      const previousSettings = { ...S.settings };
+      const previousAudit = S.audit.slice();
       S.settings.name = document.getElementById("set-name").value.trim() || "Aurelia PMS";
       S.settings.tag = document.getElementById("set-tag").value.trim();
       S.settings.phone = document.getElementById("set-phone").value.trim();
@@ -5748,6 +5750,8 @@ module.exports = QRCode;
       S.settings.checkOutTime = document.getElementById("set-cout").value || "11:00";
       addAudit("Settings updated", "Property identity saved");
       if (!(await persistMutation())) {
+        S.settings = previousSettings;
+        S.audit = previousAudit;
         toast("Property identity was not saved. Existing device data has been preserved.");
         return;
       }
