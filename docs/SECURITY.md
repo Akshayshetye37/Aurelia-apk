@@ -2,6 +2,17 @@
 
 This document records a preliminary static review of Aurelia PMS source. It is not a substitute for an independent security audit, penetration test, or release qualification.
 
+## Candidate implementation update — 28 November 2026
+
+This section applies only to the isolated `feature/native-device-auth-sqlcipher-cutover` branch and draft PR #94. It does not describe the unchanged `main` branch.
+
+- **Native database protection:** Android device-authenticated SQLCipher DEK access and the native workspace read/migration/write path are connected to native app startup. CI has verified Java compilation on prior candidate heads; the latest candidate's compile check is still pending. Physical-device qualification is not complete.
+- **Booking API credentials:** the browser bearer-token field and request header have been removed. Legacy `bookingApiKey` values are deleted during state normalization and settings save. Privileged API authentication must be performed by a trusted HTTPS backend.
+- **Backup restore input:** malformed SAF backup exclusion JSON and invalid excluded filenames now fail closed. This does not encrypt the backup archive.
+- **Invoice printing:** the native WebView print callback is guarded so one page-load callback sequence dispatches at most one Android print job; failures are logged and shown to the user. The browser print flow remains separate.
+- **Still open:** selected-folder JSON backups contain plaintext PMS and photo data; portable authenticated backup encryption and cross-device key recovery are not implemented. Google Credential Manager/Firebase owner authorization, domain-repository UI cutover, legacy SQLCipher database transition and physical-device tests also remain open.
+
+
 ## Current application identity and integrity
 
 - The maintained application entry point is `index.html`.
