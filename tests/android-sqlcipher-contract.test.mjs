@@ -295,3 +295,11 @@ test('legacy SQLCipher databases migrate only through the existing biometric env
   assert.match(plugin, /BIOMETRIC_STRONG/);
   assert.doesNotMatch(unlockManager, /PBKDF2|unlockWithPin|unlockWithRecovery/);
 });
+
+
+test('legacy key migration cannot be bypassed by a concurrent unlock call', () => {
+  const start = plugin.indexOf('public void ensureDatabaseUnlocked');
+  const end = plugin.indexOf('private void authenticateLegacyBiometric', start);
+  const method = plugin.slice(start, end);
+  assert.ok(method.indexOf('if (databaseAuthInFlight)') < method.indexOf('if (PmsUnlockManager.isUnlocked())'));
+});
