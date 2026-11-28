@@ -6814,21 +6814,29 @@ module.exports = QRCode;
   /* Boot only after the durable store has been checked and any legacy data migrated. */
   loadState().then(async loaded => {
     if (!loaded) return loaded;
-    try {
-      if (nativeStorageMigrationPending) await migrateNativeWorkspace();
-      if (nativeStorageActive) {
+    if (nativeStorageMigrationPending) {
+      try { await migrateNativeWorkspace(); }
+      catch (migrationError) {
+        persistenceLoadBlocked = true;
+        nativeStorageActive = false;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER MIGRATION BLOCKED — original browser records were retained and no canonical cutover was accepted. " + String(migrationError.message || "Migration verification failed").slice(0, 160));
+        return false;
+      }
+    }
+    if (nativeStorageActive) {
+      try {
         const { bootstrapNativePmsDomains } = await import("./src/storage/pms-native-domain-bootstrap.mjs");
         nativeDomainPersistence = await bootstrapNativePmsDomains({ plugin: nativePmsPlugin, state: S });
         nativeDomainSyncPending = false;
         window.AureliaPmsDomainPersistence = nativeDomainPersistence;
+      } catch (bootstrapError) {
+        persistenceLoadBlocked = true;
+        nativeDomainBootstrapFailed = true;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER DOMAIN PROJECTION BLOCKED — the workspace remains in SQLCipher, but domain/outbox verification failed. No browser fallback or domain read cutover was accepted. " + String(bootstrapError.message || "Domain bootstrap failed").slice(0, 160));
+        return false;
       }
-      return true;
-    } catch (bootstrapError) {
-      persistenceLoadBlocked = true;
-      nativeDomainBootstrapFailed = nativeStorageActive;
-      setPersistenceState("unavailable", "NATIVE_SQLCIPHER DOMAIN PROJECTION BLOCKED — the workspace remains in SQLCipher, but domain/outbox verification failed. No browser fallback or domain read cutover was accepted. " + String(bootstrapError.message || "Domain bootstrap failed").slice(0, 160));
-      return false;
     }
+    return true;
   }).finally(() => {
     S.deviceBackup = S.deviceBackup && typeof S.deviceBackup === "object" ? S.deviceBackup : { folder: false, verified: false, last: null };
     render();
