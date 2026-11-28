@@ -125,3 +125,19 @@ A device-bound Android Keystore key from the old phone cannot be used by the new
 - Protect app signing credentials outside source control and use protected release signing.
 
 No production-readiness claim is permitted until Credential Manager/Firebase, native screen-lock-bound DEK access, SQLCipher live-store migration, backup encryption, replacement-device key recovery, error redaction and physical-device verification pass.
+
+
+## Legacy SQLCipher unlock transition — 28 November 2026
+
+The current native unlock implementation supports a narrowly scoped automatic transition for an existing v1 database **only when the prior installation has a valid biometric envelope and its original Android Keystore biometric key is still usable**.
+
+1. The app opens the v1 biometric envelope through an auth-per-use BIOMETRIC_STRONG prompt.
+2. The recovered existing 256-bit DEK is rewrapped with the v2 Android Keystore key requiring Android device credential or a strong biometric.
+3. The existing SQLCipher database is opened with that same DEK and its integrity checks must pass.
+4. Only after native database initialization succeeds are the old v1 PIN/recovery/biometric envelopes retired.
+
+No new Aurelia PIN, recovery code, OTP or replacement DEK is generated during this migration. If the v1 biometric envelope/key is missing or invalidated, the app fails closed. Legacy databases with only the old PIN/recovery envelope still require the original legacy unlock factor; there is no cryptographically safe way to recover their DEK without one. They are not overwritten or assigned a new key.
+
+The v2 domain repository adapter now validates the actual native SQLCipher contract (android-sqlcipher, contract version 2, device-authenticated key protection, and successful integrity status). A mismatch blocks domain bootstrap.
+
+This is source/CI qualification only. Migration must still be exercised on a physical device with representative v1 databases before release.
