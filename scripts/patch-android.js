@@ -222,6 +222,10 @@ import java.util.concurrent.Executors;
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
+  private static final int MAX_ID_SCAN_BYTES = 12 * 1024 * 1024;
+  private static final int MAX_ID_SCAN_BASE64_CHARS = 16 * 1024 * 1024;
+  private static final long MAX_ID_SCAN_PIXELS = 16L * 1024L * 1024L;
+  private static final int MAX_ID_SCAN_DIMENSION = 8192;
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
   private byte[] pendingBytes = new byte[0];
@@ -280,7 +284,7 @@ public class MainActivity extends BridgeActivity {
     String saved = prefs.getString("backup_tree_uri", "");
     if (saved.isEmpty()) throw new IllegalStateException("No backup folder is selected.");
     java.util.HashSet<String> excluded = new java.util.HashSet<>();
-    try { org.json.JSONArray values = new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson); for (int i = 0; i < values.length(); i++) excluded.add(values.optString(i)); } catch (Exception ignored) { }
+    org.json.JSONArray values = new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson); for (int i = 0; i < values.length(); i++) { String excludedName = values.getString(i); if (excludedName == null || excludedName.isEmpty() || excludedName.contains("/") || excludedName.contains("\\")) throw new IllegalArgumentException("Invalid excluded backup filename."); excluded.add(excludedName); }
     Uri tree = Uri.parse(saved);
     Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
     String[] projection = { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_LAST_MODIFIED };
@@ -438,7 +442,7 @@ public class MainActivity extends BridgeActivity {
       if (published == null) throw new IllegalStateException("Could not publish the verified backup.");
       writeDocument(published, bytes);
       if (!sha256(bytes).equals(sha256(readDocument(published)))) throw new IllegalStateException("Published backup failed SHA-256 read-back verification.");
-      try { DocumentsContract.deleteDocument(getContentResolver(), stage); } catch (Exception ignored) { }
+      try { if (!DocumentsContract.deleteDocument(getContentResolver(), stage)) android.util.Log.w("AureliaBackup", "Could not remove staging backup file."); } catch (Exception cleanupError) { android.util.Log.w("AureliaBackup", "Could not remove staging backup file.", cleanupError); }
       try {
         pruneBackupFilesToRetention(root, published, 3);
         return null;
@@ -447,8 +451,8 @@ public class MainActivity extends BridgeActivity {
         return "WARN:Backup saved and verified, but retention cleanup was incomplete. Check the folder; older backup files may remain.";
       }
     } catch (Exception e) {
-      if (published != null) try { DocumentsContract.deleteDocument(getContentResolver(), published); } catch (Exception ignored) { }
-      if (stage != null) try { DocumentsContract.deleteDocument(getContentResolver(), stage); } catch (Exception ignored) { }
+      if (published != null) try { if (!DocumentsContract.deleteDocument(getContentResolver(), published)) android.util.Log.w("AureliaBackup", "Could not remove failed published backup."); } catch (Exception cleanupError) { android.util.Log.w("AureliaBackup", "Could not remove failed published backup.", cleanupError); }
+      if (stage != null) try { if (!DocumentsContract.deleteDocument(getContentResolver(), stage)) android.util.Log.w("AureliaBackup", "Could not remove failed backup staging file."); } catch (Exception cleanupError) { android.util.Log.w("AureliaBackup", "Could not remove failed backup staging file.", cleanupError); }
       return e.getMessage() == null ? "Backup write or verification failed." : e.getMessage();
     }
   }
@@ -597,17 +601,27 @@ public class MainActivity extends BridgeActivity {
       printSettings.setAllowFileAccess(false);
       printSettings.setAllowContentAccess(false);
       printSettings.setBlockNetworkLoads(true);
+      java.util.concurrent.atomic.AtomicBoolean printDispatched = new java.util.concurrent.atomic.AtomicBoolean(false);
       printView.setWebViewClient(new android.webkit.WebViewClient() {
         @Override public void onPageFinished(android.webkit.WebView view, String url) {
+          if (!printDispatched.compareAndSet(false, true)) return;
           try {
             android.print.PrintManager manager = (android.print.PrintManager) getSystemService(PRINT_SERVICE);
+            if (manager == null) throw new IllegalStateException("Android print service is unavailable.");
             android.print.PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(title);
-            manager.print(title, adapter, new android.print.PrintAttributes.Builder().setMediaSize(android.print.PrintAttributes.MediaSize.ISO_A4).setResolution(new android.print.PrintAttributes.Resolution("aurelia", "Aurelia", 300, 300)).setMinMargins(android.print.PrintAttributes.Margins.NO_MARGINS).build());
-          } catch (Exception ignored) { }
+            android.print.PrintJob job = manager.print(title, adapter, new android.print.PrintAttributes.Builder().setMediaSize(android.print.PrintAttributes.MediaSize.ISO_A4).setResolution(new android.print.PrintAttributes.Resolution("aurelia", "Aurelia", 300, 300)).setMinMargins(android.print.PrintAttributes.Margins.NO_MARGINS).build());
+            if (job == null) throw new IllegalStateException("Android did not create the invoice print job.");
+          } catch (Exception error) {
+            android.util.Log.e("AureliaPrint", "Unable to create invoice print job", error);
+            android.widget.Toast.makeText(MainActivity.this, "Could not open the invoice print dialog.", android.widget.Toast.LENGTH_LONG).show();
+          }
         }
       });
       printView.loadDataWithBaseURL(null, "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:Arial,sans-serif;color:#222;margin:18px}img{max-width:100%;height:auto}table{width:100%;border-collapse:collapse}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left} .noprint,button{display:none!important}</style></head><body>" + html + "</body></html>", "text/html", "UTF-8", null);
-    } catch (Exception ignored) { }
+    } catch (Exception error) {
+      android.util.Log.e("AureliaPrint", "Unable to prepare invoice print view", error);
+      android.widget.Toast.makeText(MainActivity.this, "Could not prepare the invoice for printing.", android.widget.Toast.LENGTH_LONG).show();
+    }
   }
 
   private void shareImageFile(String name, String mime, byte[] bytes, String phone) {
@@ -625,7 +639,7 @@ public class MainActivity extends BridgeActivity {
       if (phone != null && !phone.isEmpty()) send.putExtra("jid", phone.replaceAll("\\D", "") + "@s.whatsapp.net");
       startActivity(Intent.createChooser(send, "Share invoice"));
     } catch (Exception e) {
-      try { saveDocument("share-fallback", name, mime, bytes, false); } catch (Exception ignored) { }
+      try { saveDocument("share-fallback", name, mime, bytes, false); } catch (Exception fallbackError) { android.util.Log.e("AureliaShare", "Image sharing and save fallback both failed.", fallbackError); android.widget.Toast.makeText(MainActivity.this, "Could not share or save the invoice image.", android.widget.Toast.LENGTH_LONG).show(); }
     }
   }
 
@@ -706,8 +720,8 @@ public class MainActivity extends BridgeActivity {
             throw restoreError;
           } finally {
             java.io.File[] stagedFiles = stageDir.listFiles();
-            if (stagedFiles != null) for (java.io.File stagedFile : stagedFiles) try { stagedFile.delete(); } catch (Exception ignored) { }
-            try { stageDir.delete(); } catch (Exception ignored) { }
+            if (stagedFiles != null) for (java.io.File stagedFile : stagedFiles) try { if (!stagedFile.delete() && stagedFile.exists()) android.util.Log.w("AureliaPhoto", "Could not remove staged photo restore file."); } catch (Exception cleanupError) { android.util.Log.w("AureliaPhoto", "Could not remove staged photo restore file.", cleanupError); }
+            try { if (!stageDir.delete() && stageDir.exists()) android.util.Log.w("AureliaPhoto", "Could not remove photo restore staging directory."); } catch (Exception cleanupError) { android.util.Log.w("AureliaPhoto", "Could not remove photo restore staging directory.", cleanupError); }
           }
         } else if ("chooseDeviceBackupFolder".equals(type)) {
           runOnUiThread(() -> {
@@ -718,22 +732,44 @@ public class MainActivity extends BridgeActivity {
           });
         } else if ("recognizeId".equals(type)) {
           String imageData = obj.optString("data", "");
+          if (imageData.isEmpty() || imageData.length() > MAX_ID_SCAN_BASE64_CHARS) throw new IllegalArgumentException("ID scan image exceeds the encoded input limit.");
           byte[] imageBytes = Base64.decode(imageData, Base64.DEFAULT);
-          Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-          if (bitmap == null) throw new IllegalArgumentException("Could not decode ID image");
+          if (imageBytes.length == 0 || imageBytes.length > MAX_ID_SCAN_BYTES) {
+            java.util.Arrays.fill(imageBytes, (byte) 0);
+            throw new IllegalArgumentException("ID scan image exceeds the decoded input limit.");
+          }
+          Bitmap decodedBitmap = null;
+          try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+                bounds.outWidth > MAX_ID_SCAN_DIMENSION || bounds.outHeight > MAX_ID_SCAN_DIMENSION) {
+              throw new IllegalArgumentException("ID scan image dimensions are invalid or too large.");
+            }
+            int sampleSize = 1;
+            while (((long) bounds.outWidth / sampleSize) * ((long) bounds.outHeight / sampleSize) > MAX_ID_SCAN_PIXELS) sampleSize *= 2;
+            BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
+            decodeOptions.inSampleSize = sampleSize;
+            decodedBitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, decodeOptions);
+          } finally {
+            java.util.Arrays.fill(imageBytes, (byte) 0);
+          }
+          if (decodedBitmap == null) throw new IllegalArgumentException("Could not decode ID image.");
+          final Bitmap bitmap = decodedBitmap;
           InputImage image = InputImage.fromBitmap(bitmap, 0);
           TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
           recognizer.process(image)
             .addOnSuccessListener(result -> {
               JSONObject payload = new JSONObject();
-              try { payload.put("status", "OK"); payload.put("text", result.getText()); payload.put("imageWidth", bitmap.getWidth()); payload.put("imageHeight", bitmap.getHeight()); org.json.JSONArray lineItems = new org.json.JSONArray(); for (com.google.mlkit.vision.text.Text.TextBlock block : result.getTextBlocks()) { for (com.google.mlkit.vision.text.Text.Line line : block.getLines()) { android.graphics.Rect box = line.getBoundingBox(); JSONObject item = new JSONObject(); item.put("text", line.getText()); if (box != null) { item.put("left", box.left); item.put("top", box.top); item.put("right", box.right); item.put("bottom", box.bottom); } item.put("confidence", line.getConfidence()); item.put("rotation", line.getAngle()); lineItems.put(item); } } payload.put("lines", lineItems); } catch (Exception ignored) { }
+              try { payload.put("status", "OK"); payload.put("text", result.getText()); payload.put("imageWidth", bitmap.getWidth()); payload.put("imageHeight", bitmap.getHeight()); org.json.JSONArray lineItems = new org.json.JSONArray(); for (com.google.mlkit.vision.text.Text.TextBlock block : result.getTextBlocks()) { for (com.google.mlkit.vision.text.Text.Line line : block.getLines()) { android.graphics.Rect box = line.getBoundingBox(); JSONObject item = new JSONObject(); item.put("text", line.getText()); if (box != null) { item.put("left", box.left); item.put("top", box.top); item.put("right", box.right); item.put("bottom", box.bottom); } item.put("confidence", line.getConfidence()); item.put("rotation", line.getAngle()); lineItems.put(item); } } payload.put("lines", lineItems); } catch (Exception serializationError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR result.", serializationError); payload = new JSONObject(); try { payload.put("status", "ERROR"); payload.put("message", "Could not serialize OCR result."); } catch (Exception fallbackError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR error result.", fallbackError); } }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
               bitmap.recycle();
               recognizer.close();
             })
             .addOnFailureListener(error -> {
               JSONObject payload = new JSONObject();
-              try { payload.put("status", "ERROR"); payload.put("message", error == null ? "Text recognition failed" : String.valueOf(error.getMessage())); } catch (Exception ignored) { }
+              try { payload.put("status", "ERROR"); payload.put("message", error == null ? "Text recognition failed" : String.valueOf(error.getMessage())); } catch (Exception serializationError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR failure.", serializationError); payload = new JSONObject(); try { payload.put("status", "ERROR"); payload.put("message", "OCR result serialization failed."); } catch (Exception fallbackError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR fallback error.", fallbackError); } }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
               bitmap.recycle();
               recognizer.close();

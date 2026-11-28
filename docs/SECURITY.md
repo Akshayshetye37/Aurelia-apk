@@ -2,6 +2,17 @@
 
 This document records a preliminary static review of Aurelia PMS source. It is not a substitute for an independent security audit, penetration test, or release qualification.
 
+## Candidate implementation update — 28 November 2026
+
+This section applies only to the isolated `feature/native-device-auth-sqlcipher-cutover` branch and draft PR #94. It does not describe the unchanged `main` branch.
+
+- **Native database protection:** Android device-authenticated SQLCipher DEK access and the native workspace read/migration/write path are connected to native app startup. CI has verified Java compilation on prior candidate heads; the latest candidate's compile check is still pending. Physical-device qualification is not complete.
+- **Booking API credentials:** the browser bearer-token field and request header have been removed. Legacy `bookingApiKey` values are deleted during state normalization and settings save. Privileged API authentication must be performed by a trusted HTTPS backend.
+- **Backup restore input:** malformed SAF backup exclusion JSON and invalid excluded filenames now fail closed. This does not encrypt the backup archive.
+- **Invoice printing:** the native WebView print callback is guarded so one page-load callback sequence dispatches at most one Android print job; failures are logged and shown to the user. The browser print flow remains separate.
+- **Still open:** selected-folder JSON backups contain plaintext PMS and photo data; portable authenticated backup encryption and cross-device key recovery are not implemented. Google Credential Manager/Firebase owner authorization, domain-repository UI cutover, legacy SQLCipher database transition and physical-device tests also remain open.
+
+
 ## Current application identity and integrity
 
 - The maintained application entry point is `index.html`.
@@ -114,3 +125,33 @@ A device-bound Android Keystore key from the old phone cannot be used by the new
 - Protect app signing credentials outside source control and use protected release signing.
 
 No production-readiness claim is permitted until Credential Manager/Firebase, native screen-lock-bound DEK access, SQLCipher live-store migration, backup encryption, replacement-device key recovery, error redaction and physical-device verification pass.
+
+
+## Legacy SQLCipher unlock transition — 28 November 2026
+
+The current native unlock implementation supports a narrowly scoped automatic transition for an existing v1 database **only when the prior installation has a valid biometric envelope and its original Android Keystore biometric key is still usable**.
+
+1. The app opens the v1 biometric envelope through an auth-per-use BIOMETRIC_STRONG prompt.
+2. The recovered existing 256-bit DEK is rewrapped with the v2 Android Keystore key requiring Android device credential or a strong biometric.
+3. The existing SQLCipher database is opened with that same DEK and its integrity checks must pass.
+4. Only after native database initialization succeeds are the old v1 PIN/recovery/biometric envelopes retired.
+
+No new Aurelia PIN, recovery code, OTP or replacement DEK is generated during this migration. If the v1 biometric envelope/key is missing or invalidated, the app fails closed. Legacy databases with only the old PIN/recovery envelope still require the original legacy unlock factor; there is no cryptographically safe way to recover their DEK without one. They are not overwritten or assigned a new key.
+
+The v2 domain repository adapter now validates the actual native SQLCipher contract (android-sqlcipher, contract version 2, device-authenticated key protection, and successful integrity status). A mismatch blocks domain bootstrap.
+
+This is source/CI qualification only. Migration must still be exercised on a physical device with representative v1 databases before release.
+
+
+## Encrypted backup status — 28 November 2026
+
+The client now uses an authenticated encrypted archive envelope: a fresh 256-bit DEK per backup, chunked AES-256-GCM, per-chunk authenticated data, property/backup binding, SHA-256 verification, and a server-wrapped DEK. The app's manual and Android SAF backup/restore paths now accept only this encrypted envelope. Plaintext export and restore fallback are blocked.
+
+The key-recovery client requires a fresh Firebase ID token and an HTTPS key-service endpoint. **The server service is not implemented/deployed and Google owner sessions are not configured**, so encrypted backup and restore remain intentionally unavailable until the server-side Firebase membership checks and Cloud KMS wrapping service are deployed. See docs/BACKUP-KEY-RECOVERY-CONTRACT.md. This is a fail-closed transition, not a claim that portable backup recovery is operational.
+
+
+## Native domain/outbox persistence status — 28 November 2026
+
+On Android, after the authenticated SQLCipher workspace has loaded or completed its verified migration, Aurelia now creates an immutable source snapshot and projects rooms, guests, bookings, folios, restaurant tables/sales, inventory, expenses, financial ledger rows, settings and audit records into versioned domain entities. Projection writes entity versions and outbox events through the native SQLCipher transaction API in bounded batches and verifies exact read-back.
+
+After each successful compatibility-workspace save, the current snapshot is synchronized into mutable domain entities and append-only financial/audit entities. Financial ledger and audit divergence is rejected; no historical ledger row is rewritten. If the compatibility workspace commit succeeds but domain synchronization fails, the app reports a pending domain sync and retries on the next save/startup. The compatibility workspace remains the authoritative UI read model; the domain read-path cutover is still OFF. This is an explicit migration stage, not a claim that every UI command now writes directly to a normalized domain repository in a single atomic transaction.

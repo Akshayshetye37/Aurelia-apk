@@ -60,6 +60,44 @@ async function main() {
     if (!fs.existsSync(required)) throw new Error('Prepared web asset is missing: ' + path.relative(outputDir, required));
   }
 
+  // Ship the local PMS repository and domain modules as browser-native ES modules.
+  // Gateway/provider adapters are deliberately excluded from this bundle.
+  const copyDirectory = (source, destination, label) => {
+    if (!fs.existsSync(source)) throw new Error(label + ' source directory is missing: ' + source);
+    fs.cpSync(source, destination, { recursive: true });
+  };
+  const sourceModules = path.join(outputDir, 'src');
+  fs.mkdirSync(sourceModules, { recursive: true });
+  copyDirectory(path.join(root, 'src', 'storage'), path.join(sourceModules, 'storage'), 'PMS storage');
+  copyDirectory(path.join(root, 'src', 'folios'), path.join(sourceModules, 'folios'), 'PMS folio');
+  copyDirectory(path.join(root, 'src', 'bookings'), path.join(sourceModules, 'bookings'), 'PMS booking');
+  copyDirectory(path.join(root, 'src', 'security'), path.join(sourceModules, 'security'), 'PMS security');
+
+  const paymentModules = path.join(sourceModules, 'payments');
+  fs.mkdirSync(paymentModules, { recursive: true });
+  for (const name of [
+    'canonical.mjs',
+    'settlement-gate.mjs',
+    'payment-safety-gate.mjs',
+    'settlement-authorization.mjs',
+    'settlement-trust.mjs',
+    'settlement-service.mjs',
+    'repository-settlement-service.mjs'
+  ]) {
+    const source = path.join(root, 'src', 'payments', name);
+    if (!fs.existsSync(source)) throw new Error('PMS accounting module is missing: ' + source);
+    fs.copyFileSync(source, path.join(paymentModules, name));
+  }
+
+  for (const required of [
+    path.join(sourceModules, 'storage', 'pms-bootstrap-coordinator.mjs'),
+    path.join(sourceModules, 'storage', 'capacitor-pms-storage.mjs'),
+    path.join(sourceModules, 'folios', 'folio-accounting-service.mjs'),
+    path.join(paymentModules, 'repository-settlement-service.mjs')
+  ]) {
+    if (!fs.existsSync(required)) throw new Error('Prepared PMS module is missing: ' + path.relative(outputDir, required));
+  }
+
   const stayExtensionSource = path.join(root, 'scripts', 'stay-extension.js');
   if (!fs.existsSync(stayExtensionSource)) throw new Error('Stay extension rules are missing.');
   const scriptsOutput = path.join(outputDir, 'scripts');

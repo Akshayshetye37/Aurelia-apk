@@ -102,6 +102,238 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     } catch(Exception e){throw failure("pms_entity_read_failed",e);}
   }
 
+
+  /** Reads the complete PMS workspace snapshot from the encrypted canonical store. */
+  synchronized JSONObject getWorkspaceState() {
+    try (Cursor c = getReadableDatabase().rawQuery(
+        "SELECT version,data_json,updated_at FROM pms_entities WHERE entity_type='workspace' AND entity_id='current'", null)) {
+      if (!c.moveToFirst()) return null;
+      String raw = c.getString(1);
+      JSONObject parsed = new JSONObject(raw);
+      String digest = sha256Hex(raw);
+      try (Cursor integrity = getReadableDatabase().rawQuery("SELECT value_json FROM pms_meta WHERE meta_key='workspace_integrity'", null)) {
+        if (!integrity.moveToFirst()) throw new SecurityException("workspace_integrity_metadata_missing");
+        JSONObject marker = new JSONObject(integrity.getString(0));
+        if (!digest.equals(marker.optString("sha256", "")) || marker.optLong("version", -1) != c.getLong(0)) {
+          throw new SecurityException("workspace_integrity_metadata_mismatch");
+        }
+      }
+      JSONObject result = new JSONObject();
+      result.put("raw", raw);
+      result.put("state", parsed);
+      result.put("version", c.getLong(0));
+      result.put("sha256", digest);
+      result.put("updatedAt", c.getLong(2));
+      return result;
+    } catch (Exception e) {
+      throw e instanceof RuntimeException ? (RuntimeException) e : failure("pms_workspace_read_failed", e);
+    }
+  }
+
+  /**
+   * Copy-first migration. The exact browser snapshot, digest, canonical workspace and
+   * authority promotion are committed in one SQLite transaction. Browser data is never deleted.
+   */
+
+  /**
+   * Copy-first migration. The exact browser source bytes, source digest, normalized
+   * canonical workspace and authority promotion commit in one SQLCipher transaction.
+   */
+  synchronized JSONObject migrateWorkspace(String migrationId, String sourceKey, String sourceTimestamp,
+      String sourceRawJson, String canonicalRawJson) {
+    validateIdentity(migrationId, "migration ID");
+    validateIdentity(sourceKey, "source key");
+    if (sourceRawJson == null || sourceRawJson.isEmpty() || sourceRawJson.length() > 64 * 1024 * 1024
+        || canonicalRawJson == null || canonicalRawJson.isEmpty() || canonicalRawJson.length() > 64 * 1024 * 1024
+        || sourceTimestamp == null || !Double.isFinite(parseDate(sourceTimestamp))) {
+      throw new IllegalArgumentException("invalid_workspace_migration");
+    }
+    final JSONObject state;
+    try {
+      new JSONObject(sourceRawJson);
+      state = new JSONObject(canonicalRawJson);
+      if (!(state.opt("rooms") instanceof JSONArray) || !(state.opt("bookings") instanceof JSONArray)
+          || !(state.opt("guests") instanceof JSONArray) || !(state.opt("tables") instanceof JSONArray)
+          || !(state.opt("settings") instanceof JSONObject)) {
+        throw new IllegalArgumentException("workspace_snapshot_schema_invalid");
+      }
+    } catch (RuntimeException e) { throw e; }
+    catch (Exception e) { throw failure("workspace_snapshot_invalid", e); }
+
+    String sourceDigest = sha256Hex(sourceRawJson);
+    String digest = sha256Hex(canonicalRawJson);
+    SQLiteDatabase db = getWritableDatabase();
+    db.beginTransactionNonExclusive();
+    try {
+      JSONObject authority = storageAuthority();
+      String authorityState = authority.optString("state", "legacy");
+      if ("canonical".equals(authorityState)) {
+        JSONObject existing = getWorkspaceState();
+        String committedMigrationId = authority.isNull("migrationId") ? "" : authority.optString("migrationId", "");
+        if (existing != null && migrationId.equals(committedMigrationId)
+            && digest.equals(existing.optString("sha256", ""))) {
+          verifyMigrationSource(db, migrationId, sourceKey, sourceRawJson, sourceDigest);
+          db.setTransactionSuccessful();
+          return workspaceMigrationResult(true, migrationId, digest, sourceDigest, existing.optLong("version", 1));
+        }
+        throw new IllegalStateException("native_workspace_already_canonical");
+      }
+      if ("migrating".equals(authorityState) && !migrationId.equals(authority.optString("migrationId", ""))) {
+        throw new IllegalStateException("different_workspace_migration_in_progress");
+      }
+      verifyOptionalMigrationSource(db, migrationId, sourceKey, sourceRawJson, sourceDigest);
+      try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM pms_entities", null)) {
+        if (!c.moveToFirst() || c.getLong(0) != 0L) throw new IllegalStateException("native_repository_not_empty");
+      }
+      long now = System.currentTimeMillis();
+      ContentValues backup = new ContentValues();
+      backup.put("backup_id", migrationId); backup.put("raw_json", sourceRawJson);
+      backup.put("sha256", sourceDigest); backup.put("created_at", now);
+      db.insertWithOnConflict("pms_legacy_backup", null, backup, SQLiteDatabase.CONFLICT_IGNORE);
+      ContentValues snapshot = new ContentValues();
+      snapshot.put("snapshot_id", migrationId); snapshot.put("source_key", sourceKey);
+      snapshot.put("raw_json", sourceRawJson); snapshot.put("source_timestamp", sourceTimestamp);
+      snapshot.put("created_at", now); snapshot.put("format_version", 2);
+      db.insertWithOnConflict("pms_migration_snapshots", null, snapshot, SQLiteDatabase.CONFLICT_IGNORE);
+
+      ContentValues workspace = new ContentValues();
+      workspace.put("entity_type", "workspace"); workspace.put("entity_id", "current");
+      workspace.put("version", 1); workspace.put("data_json", canonicalRawJson); workspace.put("updated_at", now);
+      db.insertOrThrow("pms_entities", null, workspace);
+
+      ContentValues migration = new ContentValues();
+      migration.put("migration_key", "native-workspace-v1"); migration.put("migration_id", migrationId);
+      migration.put("source_key", sourceKey); migration.put("completed_at", now); migration.put("entity_count", 1);
+      db.insertOrThrow("pms_migrations", null, migration);
+
+      ContentValues verified = new ContentValues();
+      verified.put("meta_key", "migration_verified");
+      verified.put("value_json", new JSONObject().put("value", true).put("migrationId", migrationId)
+          .put("sourceSha256", sourceDigest).put("workspaceSha256", digest).toString());
+      verified.put("updated_at", now);
+      db.insertWithOnConflict("pms_meta", null, verified, SQLiteDatabase.CONFLICT_REPLACE);
+
+      ContentValues workspaceIntegrity = new ContentValues();
+      workspaceIntegrity.put("meta_key", "workspace_integrity");
+      workspaceIntegrity.put("value_json", new JSONObject().put("sha256", digest).put("version", 1).toString());
+      workspaceIntegrity.put("updated_at", now);
+      db.insertWithOnConflict("pms_meta", null, workspaceIntegrity, SQLiteDatabase.CONFLICT_REPLACE);
+
+      ContentValues canonical = new ContentValues();
+      canonical.put("singleton", 1); canonical.put("state", "canonical");
+      canonical.put("migration_id", migrationId); canonical.put("updated_at", now);
+      db.insertWithOnConflict("pms_authority", null, canonical, SQLiteDatabase.CONFLICT_REPLACE);
+
+      verifyIntegrityInsideTransaction(db);
+      try (Cursor check = db.rawQuery("SELECT data_json FROM pms_entities WHERE entity_type='workspace' AND entity_id='current'", null)) {
+        if (!check.moveToFirst() || !canonicalRawJson.equals(check.getString(0))
+            || !digest.equals(sha256Hex(check.getString(0)))) {
+          throw new SecurityException("workspace_migration_readback_mismatch");
+        }
+      }
+      verifyMigrationSource(db, migrationId, sourceKey, sourceRawJson, sourceDigest);
+      db.setTransactionSuccessful();
+      return workspaceMigrationResult(false, migrationId, digest, sourceDigest, 1);
+    } catch (Exception e) {
+      throw e instanceof RuntimeException ? (RuntimeException) e : failure("workspace_migration_failed", e);
+    } finally { db.endTransaction(); }
+  }
+
+  private static void verifyOptionalMigrationSource(SQLiteDatabase db, String migrationId, String sourceKey,
+      String sourceRawJson, String sourceDigest) {
+    try (Cursor c = db.rawQuery("SELECT raw_json,sha256 FROM pms_legacy_backup WHERE backup_id=?", new String[]{migrationId})) {
+      if (c.moveToFirst() && (!sourceRawJson.equals(c.getString(0)) || !sourceDigest.equals(c.getString(1)))) {
+        throw new SecurityException("workspace_migration_backup_mismatch");
+      }
+    }
+    try (Cursor c = db.rawQuery("SELECT raw_json,source_key,format_version FROM pms_migration_snapshots WHERE snapshot_id=?", new String[]{migrationId})) {
+      if (c.moveToFirst() && (!sourceRawJson.equals(c.getString(0)) || !sourceKey.equals(c.getString(1)) || c.getInt(2) != 2)) {
+        throw new SecurityException("workspace_migration_snapshot_mismatch");
+      }
+    }
+  }
+
+  private static void verifyMigrationSource(SQLiteDatabase db, String migrationId, String sourceKey,
+      String sourceRawJson, String sourceDigest) {
+    try (Cursor c = db.rawQuery("SELECT raw_json,sha256 FROM pms_legacy_backup WHERE backup_id=?", new String[]{migrationId})) {
+      if (!c.moveToFirst() || !sourceRawJson.equals(c.getString(0)) || !sourceDigest.equals(c.getString(1))) {
+        throw new SecurityException("workspace_migration_backup_readback_mismatch");
+      }
+    }
+    try (Cursor c = db.rawQuery("SELECT raw_json,source_key,format_version FROM pms_migration_snapshots WHERE snapshot_id=?", new String[]{migrationId})) {
+      if (!c.moveToFirst() || !sourceRawJson.equals(c.getString(0)) || !sourceKey.equals(c.getString(1)) || c.getInt(2) != 2) {
+        throw new SecurityException("workspace_migration_snapshot_readback_mismatch");
+      }
+    }
+  }
+
+  /** Optimistic, read-back verified snapshot write; no browser fallback is permitted. */
+  synchronized JSONObject saveWorkspace(String rawJson, long expectedVersion) {
+    if (rawJson == null || rawJson.isEmpty() || rawJson.length() > 64 * 1024 * 1024 || expectedVersion < 1) {
+      throw new IllegalArgumentException("invalid_workspace_write");
+    }
+    try {
+      JSONObject state = new JSONObject(rawJson);
+      if (!(state.opt("rooms") instanceof JSONArray) || !(state.opt("bookings") instanceof JSONArray)
+          || !(state.opt("guests") instanceof JSONArray) || !(state.opt("tables") instanceof JSONArray)
+          || !(state.opt("settings") instanceof JSONObject)) throw new IllegalArgumentException("workspace_snapshot_schema_invalid");
+    } catch (RuntimeException e) { throw e; }
+    catch (Exception e) { throw failure("workspace_snapshot_invalid", e); }
+
+    SQLiteDatabase db = getWritableDatabase();
+    db.beginTransactionNonExclusive();
+    try {
+      JSONObject authority = storageAuthority();
+      if (!"canonical".equals(authority.optString("state"))) throw new SecurityException("native_workspace_not_canonical");
+      long actual = 0;
+      try (Cursor c = db.rawQuery("SELECT version FROM pms_entities WHERE entity_type='workspace' AND entity_id='current'", null)) {
+        if (c.moveToFirst()) actual = c.getLong(0);
+      }
+      if (actual != expectedVersion) throw new IllegalStateException("ENTITY_VERSION_CONFLICT");
+      long next = actual + 1, now = System.currentTimeMillis();
+      ContentValues update = new ContentValues();
+      update.put("version", next); update.put("data_json", rawJson); update.put("updated_at", now);
+      if (db.update("pms_entities", update, "entity_type='workspace' AND entity_id='current' AND version=?",
+          new String[]{String.valueOf(expectedVersion)}) != 1) throw new IllegalStateException("ENTITY_VERSION_CONFLICT");
+      String digest = sha256Hex(rawJson);
+      try (Cursor check = db.rawQuery("SELECT version,data_json FROM pms_entities WHERE entity_type='workspace' AND entity_id='current'", null)) {
+        if (!check.moveToFirst() || check.getLong(0) != next || !rawJson.equals(check.getString(1))
+            || !digest.equals(sha256Hex(check.getString(1)))) throw new SecurityException("workspace_write_readback_mismatch");
+      }
+      ContentValues workspaceIntegrity = new ContentValues();
+      workspaceIntegrity.put("meta_key", "workspace_integrity");
+      workspaceIntegrity.put("value_json", new JSONObject().put("sha256", digest).put("version", next).toString());
+      workspaceIntegrity.put("updated_at", now);
+      db.insertWithOnConflict("pms_meta", null, workspaceIntegrity, SQLiteDatabase.CONFLICT_REPLACE);
+      verifyIntegrityInsideTransaction(db);
+      db.setTransactionSuccessful();
+      String committedMigrationId = authority.isNull("migrationId") ? "" : authority.optString("migrationId", "");
+      return workspaceMigrationResult(false, committedMigrationId, digest, "", next);
+    } catch (Exception e) {
+      throw e instanceof RuntimeException ? (RuntimeException) e : failure("workspace_write_failed", e);
+    } finally { db.endTransaction(); }
+  }
+
+  private static JSONObject workspaceMigrationResult(boolean replay, String migrationId, String digest, String sourceDigest, long version) {
+    JSONObject result = new JSONObject();
+    try {
+      result.put("alreadyMigrated", replay); result.put("migrationId", migrationId);
+      result.put("sha256", digest); result.put("sourceSha256", sourceDigest); result.put("version", version);
+    } catch (Exception error) { throw new IllegalStateException("workspace_migration_result_failed", error); }
+    return result;
+  }
+
+  private static void verifyIntegrityInsideTransaction(SQLiteDatabase db) throws Exception {
+    try (Cursor integrity = db.rawQuery("PRAGMA integrity_check", null)) {
+      if (!integrity.moveToFirst() || !"ok".equalsIgnoreCase(integrity.getString(0))) {
+        throw new SecurityException("SQLite integrity_check failed during workspace commit.");
+      }
+    }
+    try (Cursor cipher = db.rawQuery("PRAGMA cipher_integrity_check", null)) {
+      if (cipher.moveToFirst()) throw new SecurityException("SQLCipher page authentication failed during workspace commit.");
+    }
+  }
+
   synchronized JSONArray listEntities(String type) {
     validateIdentity(type,"entity type"); JSONArray rows=new JSONArray();
     try(Cursor c=getReadableDatabase().rawQuery("SELECT entity_id,version,data_json,updated_at FROM pms_entities WHERE entity_type=? ORDER BY entity_id",new String[]{type})) {
@@ -439,13 +671,16 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
         JSONObject value=op.getJSONObject("value");
         long now=System.currentTimeMillis();
         if("meta".equals(store)){
-          if("migration_verified".equals(key)||"storage_authority".equals(key)||"canonical_authority".equals(key))
+          if("migration_verified".equals(key)||"workspace_integrity".equals(key)||"storage_authority".equals(key)||"canonical_authority".equals(key))
             throw new SecurityException("reserved_storage_metadata_key");
           ContentValues row=new ContentValues();row.put("meta_key",key);row.put("value_json",value.toString());row.put("updated_at",now);
           db.insertWithOnConflict("pms_meta",null,row,SQLiteDatabase.CONFLICT_REPLACE);
         } else if("legacy_backup".equals(store)){
+          try(Cursor reserved=db.rawQuery("SELECT 1 FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{key})) {
+            if(reserved.moveToFirst())throw new SecurityException("reserved_migration_backup");
+          }
           ContentValues row=new ContentValues();row.put("backup_id",key);row.put("raw_json",value.toString());row.put("sha256",value.optString("sha256",null));row.put("created_at",now);
-          db.insertWithOnConflict("pms_legacy_backup",null,row,SQLiteDatabase.CONFLICT_REPLACE);
+          db.insertOrThrow("pms_legacy_backup",null,row);
         } else {
           throw new SecurityException("generic_write_to_domain_store_forbidden");
         }
@@ -471,7 +706,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static void validateIdentity(String value,String label){if(value==null||value.trim().isEmpty()||value.length()>180||value.matches(".*[\\x00-\\x1f].*"))throw new IllegalArgumentException("invalid_"+label.replace(' ','_'));}
   private static RuntimeException conflict(String code){return new IllegalStateException(code);}
   private static RuntimeException failure(String code,Exception cause){return new IllegalStateException(code,cause);}
-  private static JSONObject migrationResult(boolean replay,String id,int count){JSONObject r=new JSONObject();try{r.put("alreadyMigrated",replay);r.put("migrationId",id);r.put("entityCount",count);}catch(Exception ignored){}return r;}
+  private static JSONObject migrationResult(boolean replay,String id,int count){JSONObject r=new JSONObject();try{r.put("alreadyMigrated",replay);r.put("migrationId",id);r.put("entityCount",count);}catch(Exception error){throw new IllegalStateException("migration_result_failed",error);}return r;}
   private static String safeSerialize(Object value) {
     try { return serializeJsonValue(value); }
     catch (Exception e) { throw new StorageSerializationException("serialize failed", e); }

@@ -12,11 +12,6 @@ import androidx.fragment.app.FragmentActivity;
 import java.util.concurrent.Executor;
 import android.database.sqlite.SQLiteFullException;
 import android.provider.Settings;
-import android.app.AlertDialog;
-import android.text.InputType;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.concurrent.ExecutorService;
@@ -38,6 +33,7 @@ import javax.crypto.spec.GCMParameterSpec;
 public final class CapacitorPmsStoragePlugin extends Plugin {
   private final ExecutorService io = Executors.newSingleThreadExecutor();
   private volatile LocalPmsRepository repository;
+  private boolean databaseAuthInFlight = false;
 
   @Override public void load() { super.load(); }
 
@@ -45,7 +41,13 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     if (repository == null) repository = new LocalPmsRepository(getContext());
     return repository;
   }
-  @Override protected void handleOnDestroy() { io.shutdown(); super.handleOnDestroy(); }
+  @Override protected void handleOnDestroy() {
+    synchronized (this) { if (repository != null) { repository.close(); repository = null; } }
+    // Activity/bridge recreation must not relock a process-scoped authenticated DEK.
+    // Process death clears the static key material; explicit lockDatabase() clears it earlier.
+    io.shutdown();
+    super.handleOnDestroy();
+  }
 
   @PluginMethod public void getOrCreateLocalIdentity(PluginCall call) {
     io.execute(() -> { try {
@@ -84,119 +86,129 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     return new String(c.doFinal(Base64.decode(p[1],Base64.NO_WRAP)),StandardCharsets.UTF_8);
   }
 
-  @PluginMethod public void setupDatabaseUnlock(PluginCall call) {
-    getActivity().runOnUiThread(() -> {
-      LinearLayout layout=new LinearLayout(getContext()); layout.setOrientation(LinearLayout.VERTICAL);
-      int pad=(int)(20*getContext().getResources().getDisplayMetrics().density);
-      layout.setPadding(pad,pad,pad,0);
-      EditText pin=new EditText(getContext()); pin.setHint("New 8-12 digit PIN");
-      pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-      EditText confirm=new EditText(getContext()); confirm.setHint("Confirm PIN");
-      confirm.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-      layout.addView(pin); layout.addView(confirm);
-      AlertDialog dialog=new AlertDialog.Builder(getActivity()).setTitle("Secure Aurelia PMS")
-        .setMessage("Create a database PIN. Your recovery key will be shown once.")
-        .setView(layout).setNegativeButton("Cancel",(d,w)->call.reject("Unlock setup cancelled","PMS_UNLOCK_CANCELLED"))
-        .setPositiveButton("Create secure key",null).create();
-      dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-        String first=pin.getText().toString(),second=confirm.getText().toString();
-        if(!first.equals(second)){confirm.setError("PIN entries do not match");return;}
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-        io.execute(()->{try{
-          String recovery=PmsUnlockManager.setup(getContext(),first);
-          getActivity().runOnUiThread(()->{
-            TextView code=new TextView(getContext()); code.setText(recovery); code.setTextIsSelectable(true);
-            code.setTextSize(16); code.setPadding(pad,pad,pad,pad);
-            new AlertDialog.Builder(getActivity()).setTitle("Save your recovery key")
-              .setMessage("This key is shown once. Store it offline. Anyone with this key can unlock the encrypted PMS database.")
-              .setView(code).setCancelable(false).setPositiveButton("I saved it",(d,w)->{
-                JSObject result=new JSObject();result.put("configured",true);result.put("recoveryKeyDisplayed",true);
-                result.put("pinPolicy","8-12 digits");result.put("kdf","PBKDF2-HMAC-SHA256-600000");call.resolve(result);
-              }).show();
-          });
-        }catch(Exception e){getActivity().runOnUiThread(()->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);confirm.setError(e.getMessage());});}
-        });
-      }));
-      dialog.show();
-    });
-  }
-
-  @PluginMethod public void unlockDatabaseWithPin(PluginCall call) {
-    promptUnlockSecret(call,true);
-  }
-
-  @PluginMethod public void unlockDatabaseWithRecovery(PluginCall call) {
-    promptUnlockSecret(call,false);
-  }
-
-  private void promptUnlockSecret(PluginCall call,boolean pinMode) {
-    getActivity().runOnUiThread(()->{
-      EditText input=new EditText(getContext());
-      input.setHint(pinMode?"Enter database PIN":"Enter recovery key");
-      input.setInputType(pinMode?InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD:
-          InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-      AlertDialog dialog=new AlertDialog.Builder(getActivity())
-        .setTitle(pinMode?"Unlock Aurelia PMS":"Recover Aurelia PMS")
-        .setView(input).setNegativeButton("Cancel",(d,w)->call.reject("Unlock cancelled","PMS_UNLOCK_CANCELLED"))
-        .setPositiveButton("Unlock",null).create();
-      dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-        String secret=input.getText().toString();dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-        io.execute(()->{try{
-          if(pinMode)PmsUnlockManager.unlockWithPin(getContext(),secret);
-          else PmsUnlockManager.unlockWithRecovery(getContext(),secret);
-          JSObject result=new JSObject();result.put("unlocked",true);result.put("factor",pinMode?"pin":"recovery");call.resolve(result);
-          getActivity().runOnUiThread(dialog::dismiss);
-        }catch(Exception e){getActivity().runOnUiThread(()->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);input.setError("Unlock failed or temporarily rate-limited");});}});
-      }));
-      dialog.show();
-    });
-  }
-
-  @PluginMethod public void enableBiometricUnlock(PluginCall call) {
-    io.execute(() -> { try {
-      javax.crypto.Cipher cipher=PmsUnlockManager.prepareBiometricEnrollmentCipher(getContext());
-      getActivity().runOnUiThread(() -> authenticateBiometric(call,cipher,true));
-    } catch(Exception e) { call.reject("Biometric enrollment could not be prepared", "PMS_BIOMETRIC_SETUP_FAILED", e); } });
-  }
-
-  @PluginMethod public void unlockDatabaseWithBiometric(PluginCall call) {
-    io.execute(() -> { try {
-      javax.crypto.Cipher cipher=PmsUnlockManager.prepareBiometricUnlockCipher(getContext());
-      getActivity().runOnUiThread(() -> authenticateBiometric(call,cipher,false));
-    } catch(Exception e) { call.reject("Biometric unlock could not be prepared", "PMS_BIOMETRIC_UNLOCK_FAILED", e); } });
-  }
-
-  private void authenticateBiometric(PluginCall call, javax.crypto.Cipher cipher, boolean enrolling) {
-    if (!(getActivity() instanceof FragmentActivity)) {
-      call.reject("Biometric authentication host is unavailable", "PMS_BIOMETRIC_HOST_UNAVAILABLE"); return;
+  @PluginMethod public void ensureDatabaseUnlocked(PluginCall call) {
+    synchronized (this) {
+      if (databaseAuthInFlight) { call.reject("Android device authentication is already in progress.", "PMS_DEVICE_AUTH_IN_PROGRESS"); return; }
+      if (PmsUnlockManager.isUnlocked()) {
+        JSObject ready = new JSObject(); ready.put("unlocked", true); ready.put("factor", "android-device-credential");
+        call.resolve(ready); return;
+      }
+      databaseAuthInFlight = true;
     }
-    Executor executor=ContextCompat.getMainExecutor(getContext());
-    BiometricPrompt prompt=new BiometricPrompt((FragmentActivity)getActivity(),executor,
-      new BiometricPrompt.AuthenticationCallback() {
-        @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-          super.onAuthenticationSucceeded(result);
-          io.execute(() -> { try {
-            javax.crypto.Cipher authenticated=result.getCryptoObject()==null?null:result.getCryptoObject().getCipher();
-            if(authenticated==null) throw new SecurityException("Authenticated cipher was not returned.");
-            if(enrolling) PmsUnlockManager.saveBiometricEnvelope(authenticated);
-            else PmsUnlockManager.finishBiometricUnlock(authenticated);
-            JSObject out=new JSObject(); out.put(enrolling?"configured":"unlocked",true);
-            out.put("factor","biometric"); call.resolve(out);
-          } catch(Exception e) { call.reject("Biometric DEK operation failed", "PMS_BIOMETRIC_CRYPTO_FAILED", e); } });
+    io.execute(() -> {
+      try {
+        boolean configured = PmsUnlockManager.isConfigured(getContext());
+        if (!configured && PmsUnlockManager.hasLegacyState(getContext())) {
+          if (!PmsUnlockManager.hasLegacyBiometricEnvelope(getContext())) {
+            throw new SecurityException("Legacy SQLCipher data has no usable biometric envelope. The original legacy PIN is required for a one-time migration; no replacement key will be generated.");
+          }
+          javax.crypto.Cipher legacyCipher = PmsUnlockManager.prepareLegacyBiometricUnlockCipher(getContext());
+          if (getActivity() == null) throw new IllegalStateException("Android authentication host is unavailable.");
+          getActivity().runOnUiThread(() -> authenticateLegacyBiometric(call, legacyCipher));
+          return;
         }
-        @Override public void onAuthenticationError(int code, CharSequence message) {
-          super.onAuthenticationError(code,message);
-          call.reject("Biometric authentication cancelled or unavailable", "PMS_BIOMETRIC_AUTH_ERROR");
-        }
-        @Override public void onAuthenticationFailed() { super.onAuthenticationFailed(); }
-      });
-    BiometricPrompt.PromptInfo info=new BiometricPrompt.PromptInfo.Builder()
-      .setTitle(enrolling?"Enable Aurelia biometric unlock":"Unlock Aurelia PMS")
-      .setSubtitle("Authenticate to protect the same encrypted PMS database key")
-      .setNegativeButtonText("Cancel")
-      .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-      .build();
-    prompt.authenticate(info,new BiometricPrompt.CryptoObject(cipher));
+        javax.crypto.Cipher cipher = configured
+            ? PmsUnlockManager.prepareDeviceUnlockCipher(getContext())
+            : PmsUnlockManager.prepareSetupCipher(getContext());
+        boolean enrolling = !configured;
+        if (getActivity() == null) throw new IllegalStateException("Android authentication host is unavailable.");
+        getActivity().runOnUiThread(() -> authenticateDeviceCredential(call, cipher, enrolling));
+      } catch (Exception e) {
+        synchronized (this) { databaseAuthInFlight = false; }
+        call.reject("Aurelia PMS could not securely unlock its encrypted database.", "PMS_DEVICE_AUTH_PREPARATION_FAILED", e);
+      }
+    });
+  }
+
+  private void authenticateLegacyBiometric(PluginCall call, javax.crypto.Cipher cipher) {
+    if (!(getActivity() instanceof FragmentActivity)) {
+      PmsUnlockManager.lock();
+      synchronized (this) { databaseAuthInFlight = false; }
+      call.reject("Android authentication host is unavailable for legacy migration.", "PMS_LEGACY_AUTH_HOST_UNAVAILABLE"); return;
+    }
+    Executor executor = ContextCompat.getMainExecutor(getContext());
+    BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), executor,
+        new BiometricPrompt.AuthenticationCallback() {
+          @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+            super.onAuthenticationSucceeded(result);
+            io.execute(() -> {
+              try {
+                javax.crypto.Cipher authenticated = result.getCryptoObject() == null ? null : result.getCryptoObject().getCipher();
+                if (authenticated == null) throw new SecurityException("Legacy authenticated Keystore cipher was not returned.");
+                PmsUnlockManager.finishLegacyBiometricUnlock(authenticated);
+                javax.crypto.Cipher rewrap = PmsUnlockManager.prepareDeviceRewrapCipher(getContext());
+                if (getActivity() == null) throw new IllegalStateException("Android authentication host was lost during legacy migration.");
+                getActivity().runOnUiThread(() -> authenticateDeviceCredential(call, rewrap, true, true));
+              } catch (Exception error) {
+                PmsUnlockManager.lock();
+                synchronized (CapacitorPmsStoragePlugin.this) { databaseAuthInFlight = false; }
+                call.reject("Legacy SQLCipher data could not be rewrapped with the Android device credential.", "PMS_LEGACY_REWRAP_FAILED", error);
+              }
+            });
+          }
+          @Override public void onAuthenticationError(int code, CharSequence message) {
+            super.onAuthenticationError(code, message);
+            PmsUnlockManager.lock();
+            synchronized (CapacitorPmsStoragePlugin.this) { databaseAuthInFlight = false; }
+            call.reject("Legacy biometric migration was cancelled or unavailable.", "PMS_LEGACY_BIOMETRIC_CANCELLED");
+          }
+          @Override public void onAuthenticationFailed() { super.onAuthenticationFailed(); }
+        });
+    BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Migrate Aurelia PMS database")
+        .setSubtitle("Verify the previously enrolled biometric once, then protect this database with your Android screen lock.")
+        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        .build();
+    prompt.authenticate(info, new BiometricPrompt.CryptoObject(cipher));
+  }
+
+  private void authenticateDeviceCredential(PluginCall call, javax.crypto.Cipher cipher, boolean enrolling) {
+    authenticateDeviceCredential(call, cipher, enrolling, false);
+  }
+
+  private void authenticateDeviceCredential(PluginCall call, javax.crypto.Cipher cipher, boolean enrolling, boolean legacyMigration) {
+    if (!(getActivity() instanceof FragmentActivity)) {
+      PmsUnlockManager.cancelPendingSetup();
+      if (legacyMigration) PmsUnlockManager.lock();
+      synchronized (this) { databaseAuthInFlight = false; }
+      call.reject("Android authentication host is unavailable.", "PMS_DEVICE_AUTH_HOST_UNAVAILABLE"); return;
+    }
+    Executor executor = ContextCompat.getMainExecutor(getContext());
+    BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), executor,
+        new BiometricPrompt.AuthenticationCallback() {
+          @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+            super.onAuthenticationSucceeded(result);
+            io.execute(() -> {
+              try {
+                javax.crypto.Cipher authenticated = result.getCryptoObject() == null ? null : result.getCryptoObject().getCipher();
+                if (authenticated == null) throw new SecurityException("Authenticated Keystore cipher was not returned.");
+                if (enrolling) PmsUnlockManager.saveDeviceEnvelope(authenticated);
+                else PmsUnlockManager.finishDeviceUnlock(authenticated);
+                JSObject out = new JSObject(); out.put("unlocked", true); out.put("factor", "android-device-credential");
+                call.resolve(out);
+              } catch (Exception e) {
+                PmsUnlockManager.cancelPendingSetup();
+                if (legacyMigration) PmsUnlockManager.lock();
+                call.reject("Android device authentication did not unlock the PMS database.", "PMS_DEVICE_AUTH_CRYPTO_FAILED", e);
+              } finally { synchronized (CapacitorPmsStoragePlugin.this) { databaseAuthInFlight = false; } }
+            });
+          }
+          @Override public void onAuthenticationError(int code, CharSequence message) {
+            super.onAuthenticationError(code, message);
+            if (enrolling) PmsUnlockManager.cancelPendingSetup();
+            if (legacyMigration) PmsUnlockManager.lock();
+            synchronized (CapacitorPmsStoragePlugin.this) { databaseAuthInFlight = false; }
+            call.reject("Android device authentication was cancelled or unavailable.", "PMS_DEVICE_AUTH_CANCELLED");
+          }
+          @Override public void onAuthenticationFailed() { super.onAuthenticationFailed(); }
+        });
+    BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Unlock Aurelia PMS")
+        .setSubtitle("Authenticate with your device screen lock or an enrolled strong biometric.")
+        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG
+            | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+        .build();
+    prompt.authenticate(info, new BiometricPrompt.CryptoObject(cipher));
   }
 
   @PluginMethod public void lockDatabase(PluginCall call) {
@@ -210,9 +222,66 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   @PluginMethod public void initializeStorage(PluginCall call) {
-    io.execute(() -> { try { repository().getWritableDatabase(); JSONObject integrity=repository().storageIntegrityCheck();if(!integrity.optBoolean("ok",false))throw new IllegalStateException("SQLite integrity_check failed at startup");JSONObject authority=repository().storageAuthority();if(!"legacy".equals(authority.optString("state"))&&!"migrating".equals(authority.optString("state"))&&!"canonical".equals(authority.optString("state")))throw new IllegalStateException("Invalid SQLite authority state");JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlcipher");r.put("contractVersion",2);r.put("keyProtection","user-unlock-envelopes");r.put("integrity",integrity);r.put("authority",authority);call.resolve(r); }
-      catch(Exception e){call.reject("Native SQLite initialization failed",storageErrorCode(e,"PMS_SQLITE_INIT_FAILED"),e);} });
+    io.execute(() -> { try {
+      repository().getWritableDatabase();
+      JSONObject integrity=repository().storageIntegrityCheck();
+      if(!integrity.optBoolean("ok",false))throw new IllegalStateException("SQLite integrity_check failed at startup");
+      JSONObject authority=repository().storageAuthority();
+      if(!"legacy".equals(authority.optString("state"))&&!"migrating".equals(authority.optString("state"))&&!"canonical".equals(authority.optString("state")))throw new IllegalStateException("Invalid SQLite authority state");
+      // Retire old unlock envelopes only after the existing SQLCipher database opened
+      // with the rewrapped DEK and both SQLCipher integrity checks succeeded.
+      PmsUnlockManager.commitLegacyMigration(getContext());
+      JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlcipher");r.put("contractVersion",2);r.put("keyProtection","android-keystore-auth-per-use-device-credential");r.put("integrity",integrity);r.put("authority",authority);r.put("workspaceEverCanonical",getContext().getSharedPreferences("aurelia_native_storage_v1",android.content.Context.MODE_PRIVATE).getBoolean("workspace_ever_canonical",false));call.resolve(r);
+    } catch(Exception e){call.reject("Native SQLite initialization failed",storageErrorCode(e,"PMS_SQLITE_INIT_FAILED"),e);} });
   }
+
+  @PluginMethod public void getWorkspaceState(PluginCall call) {
+    io.execute(() -> {
+      try {
+        JSONObject workspace = repository().getWorkspaceState();
+        JSObject result = new JSObject();
+        result.put("workspace", workspace == null ? JSONObject.NULL : workspace);
+        call.resolve(result);
+      } catch (Exception e) { call.reject("Canonical PMS workspace read failed.", storageErrorCode(e, "PMS_WORKSPACE_READ_FAILED"), e); }
+    });
+  }
+
+  @PluginMethod public void migrateWorkspace(PluginCall call) {
+    String id = call.getString("migrationId"), source = call.getString("sourceKey");
+    String timestamp = call.getString("sourceTimestamp"), sourceRaw = call.getString("sourceRaw"), raw = call.getString("raw");
+    if (empty(id) || empty(source) || timestamp == null || sourceRaw == null || sourceRaw.isEmpty() || raw == null || raw.isEmpty()) {
+      call.reject("A complete source snapshot is required for migration.", "PMS_WORKSPACE_MIGRATION_INVALID"); return;
+    }
+    io.execute(() -> {
+      try {
+        JSONObject result = repository().migrateWorkspace(id, source, timestamp, sourceRaw, raw);
+        boolean marked = getContext().getSharedPreferences("aurelia_native_storage_v1", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("workspace_ever_canonical", true).putString("workspace_migration_id", id).commit();
+        if (!marked) throw new IllegalStateException("native_workspace_marker_write_failed");
+        call.resolve(new JSObject(result.toString()));
+      } catch (Exception e) { call.reject("PMS migration was not committed; the browser source remains intact.",
+          storageErrorCode(e, "PMS_WORKSPACE_MIGRATION_FAILED"), e); }
+    });
+  }
+
+  @PluginMethod public void saveWorkspace(PluginCall call) {
+    String raw = call.getString("raw");
+    Long expected = call.getLong("expectedVersion");
+    if (raw == null || raw.isEmpty() || expected == null || expected < 1L) {
+      call.reject("A workspace snapshot and expected version are required.", "PMS_WORKSPACE_WRITE_INVALID"); return;
+    }
+    io.execute(() -> {
+      try {
+        JSONObject result = repository().saveWorkspace(raw, expected.longValue());
+        call.resolve(new JSObject(result.toString()));
+      } catch (Exception e) {
+        String code = e.getMessage() != null && e.getMessage().contains("ENTITY_VERSION_CONFLICT")
+            ? "ENTITY_VERSION_CONFLICT" : storageErrorCode(e, "PMS_WORKSPACE_WRITE_FAILED");
+        call.reject("PMS workspace was not saved to SQLCipher.", code, e);
+      }
+    });
+  }
+
   @PluginMethod public void getEntity(PluginCall call) {
     String type=call.getString("entityType"),id=call.getString("entityId");
     if(empty(type)||empty(id)){call.reject("entityType and entityId are required","PMS_INVALID_IDENTITY");return;}

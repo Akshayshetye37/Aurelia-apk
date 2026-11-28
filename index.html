@@ -2557,6 +2557,16 @@ module.exports = QRCode;
   let persistenceLoadBlocked = false;
   let persistentStorageGranted = null;
   let pendingWrite = Promise.resolve();
+  let nativeStorageRequired = false;
+  let nativeStorageActive = false;
+  let nativeStorageMigrationPending = false;
+  let nativeWorkspaceVersion = 0;
+  let nativeMigrationSourceRaw = null;
+  let nativeMigrationSourceKey = "";
+  let nativePmsPlugin = null;
+  let nativeDomainPersistence = null;
+  let nativeDomainSyncPending = false;
+  let nativeDomainBootstrapFailed = false;
 
   function setPersistenceState(state, message) {
     persistenceState = state;
@@ -2598,6 +2608,8 @@ module.exports = QRCode;
     const defaults = createDefaultState();
     S = Object.assign(defaults, value);
     S.settings = Object.assign(defaults.settings, value.settings || {});
+    // Legacy browser-delivered bearer tokens are not safe to retain in PMS state.
+    delete S.settings.bookingApiKey;
     S.restaurant = Object.assign(defaults.restaurant, value.restaurant || {});
     S.autopilot = Object.assign(defaults.autopilot, value.autopilot || {});
     S.menu = Object.assign(defaults.menu, value.menu || {});
@@ -2679,10 +2691,16 @@ module.exports = QRCode;
   }
 
   function markDeviceSaved() {
+    if (nativeStorageActive) {
+      setPersistenceState(nativeDomainSyncPending ? "warning" : "verified",
+        nativeDomainSyncPending
+          ? "PMS workspace is saved in SQLCipher; domain repository/outbox synchronization is pending and will be retried."
+          : "PMS workspace and domain records are saved in the authenticated SQLCipher database.");
+      return;
+    }
     if (persistentStorageGranted !== true) {
-      setPersistenceState("warning", persistentStorageGranted === false
-        ? "Saved on this device. Browser storage-persistence protection was not granted; export regular JSON backups."
-        : "Saved on this device. Browser storage-persistence protection is not confirmed; export regular JSON backups.");
+      setPersistenceState("warning",
+        "PMS records are saved in this browser's IndexedDB. Portable encrypted backups require an authenticated Google owner session and the server-managed key recovery service.");
     } else {
       setPersistenceState("verified", "PMS records are saved in IndexedDB and browser storage-persistence protection was granted.");
     }
@@ -2802,7 +2820,74 @@ module.exports = QRCode;
     };
   }
 
+
+  async function prepareNativeWorkspace() {
+    const capacitor = window.Capacitor;
+    if (!capacitor || typeof capacitor.isNativePlatform !== "function" || !capacitor.isNativePlatform()) return "browser";
+    nativeStorageRequired = true;
+    nativePmsPlugin = capacitor.Plugins && capacitor.Plugins.CapacitorPmsStorage;
+    if (!nativePmsPlugin || typeof nativePmsPlugin.ensureDatabaseUnlocked !== "function"
+        || typeof nativePmsPlugin.initializeStorage !== "function"
+        || typeof nativePmsPlugin.getWorkspaceState !== "function") {
+      throw new Error("NATIVE_SQLCIPHER — the authenticated native PMS storage bridge is unavailable.");
+    }
+    await nativePmsPlugin.ensureDatabaseUnlocked();
+    const initialized = await nativePmsPlugin.initializeStorage();
+    if (!initialized || initialized.success !== true || !initialized.integrity || initialized.integrity.ok !== true) {
+      throw new Error("NATIVE_SQLCIPHER — encrypted database integrity could not be verified.");
+    }
+    const result = await nativePmsPlugin.getWorkspaceState();
+    const workspace = result && result.workspace;
+    if (workspace && typeof workspace.raw === "string") {
+      const version = Number(workspace.version);
+      if (!Number.isSafeInteger(version) || version < 1 || !workspace.sha256) {
+        throw new Error("NATIVE_SQLCIPHER — canonical workspace metadata is invalid.");
+      }
+      normalizeLoadedState(JSON.parse(workspace.raw));
+      nativeWorkspaceVersion = version;
+      nativeStorageActive = true;
+      markDeviceSaved();
+      return "loaded";
+    }
+    if ((initialized.authority && initialized.authority.state === "canonical") || initialized.workspaceEverCanonical === true) {
+      throw new Error("NATIVE_SQLCIPHER — the canonical workspace is missing after a previous cutover; automatic re-import from stale browser data is blocked.");
+    }
+    nativeStorageMigrationPending = true;
+    return "migration";
+  }
+
+  async function migrateNativeWorkspace() {
+    if (!nativeStorageMigrationPending || !nativePmsPlugin) return true;
+    const raw = JSON.stringify(S);
+    const sourceRaw = nativeMigrationSourceRaw || raw;
+    const sourceKey = nativeMigrationSourceKey || (DB_NAME + "/" + DB_STORE + "/" + DB_KEY);
+    const migrationId = "aurelia-workspace-v1";
+    const result = await nativePmsPlugin.migrateWorkspace({
+      migrationId, sourceKey, sourceTimestamp: new Date().toISOString(), sourceRaw, raw
+    });
+    const verified = await nativePmsPlugin.getWorkspaceState();
+    const workspace = verified && verified.workspace;
+    if (!workspace || workspace.raw !== raw || workspace.sha256 !== result.sha256 || !result.sourceSha256
+        || Number(workspace.version) !== Number(result.version) || Number(result.version) !== 1) {
+      throw new Error("NATIVE_SQLCIPHER — migrated workspace failed exact read-back verification.");
+    }
+    nativeWorkspaceVersion = 1;
+    nativeStorageActive = true;
+    nativeStorageMigrationPending = false;
+    if (persistenceDb) { persistenceDb.close(); persistenceDb = null; }
+    markDeviceSaved();
+    return true;
+  }
+
   async function loadState() {
+    try {
+      const nativeStatus = await prepareNativeWorkspace();
+      if (nativeStatus === "loaded") return true;
+    } catch (nativeError) {
+      persistenceLoadBlocked = true;
+      setPersistenceState("unavailable", "NATIVE_SQLCIPHER — encrypted PMS storage could not be unlocked or verified. Existing browser records were not modified. " + String(nativeError.message || "Native storage unavailable").slice(0, 160));
+      return false;
+    }
     const legacy = readLegacyStorage();
     let projectLegacy = { raw: null, error: null };
     try { projectLegacy.raw = (window.__aureliaStorage || window.localStorage).getItem("aurelia_lodge_v2"); }
@@ -2815,6 +2900,8 @@ module.exports = QRCode;
       deviceDbReadCompleted = true;
       deviceRecordPresent = stored != null;
       if (stored != null) {
+        nativeMigrationSourceRaw = typeof stored === "string" ? stored : JSON.stringify(stored);
+        nativeMigrationSourceKey = DB_NAME + "/" + DB_STORE + "/" + DB_KEY;
         const parsed = typeof stored === "string" ? JSON.parse(stored) : stored;
         normalizeLoadedState(parsed);
         const normalized = JSON.stringify(S);
@@ -2825,6 +2912,8 @@ module.exports = QRCode;
       }
 
       if (legacy.raw) {
+        nativeMigrationSourceRaw = legacy.raw;
+        nativeMigrationSourceKey = "legacy-localstorage:" + STORAGE_KEY;
         const parsed = JSON.parse(legacy.raw);
         normalizeLoadedState(parsed);
         await writeDeviceRecord(persistenceDb, JSON.stringify(S));
@@ -2835,6 +2924,8 @@ module.exports = QRCode;
 
       if (projectLegacy.raw) {
         try {
+          nativeMigrationSourceRaw = projectLegacy.raw;
+          nativeMigrationSourceKey = "legacy-project-state:aurelia_lodge_v2";
           normalizeLoadedState(migrateLegacyProjectState(JSON.parse(projectLegacy.raw)));
           const normalized = JSON.stringify(S);
           await writeDeviceRecord(persistenceDb, normalized);
@@ -2856,15 +2947,26 @@ module.exports = QRCode;
       if (projectLegacy.error) throw new Error("Could not read the previous Aurelia PMS data key safely.");
 
       normalizeLoadedState(S);
-      await writeDeviceRecord(persistenceDb, JSON.stringify(S));
+      nativeMigrationSourceRaw = JSON.stringify(S);
+      nativeMigrationSourceKey = "new-empty-workspace";
+      await writeDeviceRecord(persistenceDb, nativeMigrationSourceRaw);
       await requestPersistentStorage();
       markDeviceSaved();
       return true;
     } catch (error) {
       const deviceDbWasOpened = !!persistenceDb;
+      if (nativeStorageRequired && (!deviceDbWasOpened || !deviceDbReadCompleted || deviceRecordPresent)) {
+        if (persistenceDb) { try { persistenceDb.close(); } catch (_) {} }
+        persistenceDb = null;
+        persistenceLoadBlocked = true;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER — IndexedDB did not provide a complete, readable source snapshot. Browser mirrors may be stale; migration and writes are blocked to protect existing PMS records.");
+        return false;
+      }
       persistenceDb = null;
       if (legacy.raw) {
         try {
+          nativeMigrationSourceRaw = legacy.raw;
+          nativeMigrationSourceKey = "legacy-localstorage:" + STORAGE_KEY;
           normalizeLoadedState(JSON.parse(legacy.raw));
           persistenceLoadBlocked = false;
           setPersistenceState("fallback", "IndexedDB is unavailable. Records were loaded from legacy browser storage; persistence is best-effort and may be cleared by the browser. Export a JSON backup.");
@@ -2877,6 +2979,8 @@ module.exports = QRCode;
       }
       if (projectLegacy.raw) {
         try {
+          nativeMigrationSourceRaw = projectLegacy.raw;
+          nativeMigrationSourceKey = "legacy-project-state:aurelia_lodge_v2";
           normalizeLoadedState(migrateLegacyProjectState(JSON.parse(projectLegacy.raw)));
           const normalized = JSON.stringify(S);
           window.localStorage.setItem(STORAGE_KEY, normalized);
@@ -2895,9 +2999,16 @@ module.exports = QRCode;
         setPersistenceState("unavailable", "PERSISTENCE UNAVAILABLE — the previous Aurelia PMS data key could not be read. New writes are blocked to protect existing records.");
         return false;
       }
+      if (nativeStorageRequired && !deviceDbWasOpened) {
+        persistenceLoadBlocked = true;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER — browser source storage could not be read safely; migration was not started and no empty workspace was created.");
+        return false;
+      }
       if (!legacy.error && !deviceRecordPresent && (!deviceDbWasOpened || deviceDbReadCompleted)) {
         try {
           const raw = JSON.stringify(S);
+          nativeMigrationSourceRaw = raw;
+          nativeMigrationSourceKey = "new-empty-workspace";
           window.localStorage.setItem(STORAGE_KEY, raw);
           if (window.localStorage.getItem(STORAGE_KEY) !== raw) throw new Error("Legacy storage read-back verification failed.");
           persistenceLoadBlocked = false;
@@ -2913,6 +3024,14 @@ module.exports = QRCode;
   }
 
   function saveState(forceAfterValidatedRestore = false) {
+    if (nativeStorageRequired && !nativeStorageActive) {
+      setPersistenceState("unavailable", "NATIVE_SQLCIPHER — PMS writes are blocked until the encrypted native workspace has been migrated and verified.");
+      return Promise.resolve(false);
+    }
+    if (nativeDomainBootstrapFailed) {
+      setPersistenceState("unavailable", "NATIVE_SQLCIPHER DOMAIN PROJECTION — PMS writes are blocked because canonical domain records could not be verified.");
+      return Promise.resolve(false);
+    }
     if (persistenceLoadBlocked && !forceAfterValidatedRestore) {
       // Preserve the original load/migration failure so render() cannot hide the
       // actionable storage diagnostic behind a generic save-blocked message.
@@ -2922,6 +3041,34 @@ module.exports = QRCode;
       return Promise.resolve(false);
     }
     const serialized = JSON.stringify(S);
+    if (nativeStorageActive) {
+      pendingWrite = pendingWrite.catch(() => false).then(async () => {
+        try {
+          const result = await nativePmsPlugin.saveWorkspace({ raw: serialized, expectedVersion: nativeWorkspaceVersion });
+          const nextVersion = Number(result && result.version);
+          if (!Number.isSafeInteger(nextVersion) || nextVersion !== nativeWorkspaceVersion + 1 || !result.sha256) {
+            throw new Error("SQLCipher workspace write returned invalid version metadata.");
+          }
+          nativeWorkspaceVersion = nextVersion;
+          markDeviceSaved();
+          if (nativeDomainPersistence && typeof nativeDomainPersistence.syncSnapshot === "function") {
+            try {
+              await nativeDomainPersistence.syncSnapshot(S);
+              nativeDomainSyncPending = false;
+              markDeviceSaved();
+            } catch (domainError) {
+              nativeDomainSyncPending = true;
+              setPersistenceState("warning", "SQLCipher workspace was saved, but domain repository/outbox synchronization is pending. The compatibility workspace remains authoritative; retry by saving again. " + String(domainError.message || "Domain sync failed").slice(0, 140));
+            }
+          }
+          return true;
+        } catch (error) {
+          setPersistenceState("unavailable", "NOT SAVED — SQLCipher rejected the workspace write. Browser storage fallback is disabled to prevent split-brain PMS data.");
+          return false;
+        }
+      });
+      return pendingWrite;
+    }
     let legacyMirrorError = null;
     try {
       (window.__aureliaStorage || window.localStorage).setItem(STORAGE_KEY, serialized);
@@ -2938,7 +3085,7 @@ module.exports = QRCode;
         } catch (error) {
           if (!legacyMirrorError) {
             persistenceLoadBlocked = false;
-            setPersistenceState("fallback", "IndexedDB write failed. Latest records are mirrored to browser storage only; export a JSON backup and check app storage permissions.");
+            setPersistenceState("fallback", "IndexedDB write failed. Latest records are mirrored to browser storage only; plaintext backup export is disabled. Configure the encrypted backup key-recovery service before relying on off-device backups.");
             return true;
           }
           setPersistenceState("unavailable", "NOT SAVED — both IndexedDB and browser storage writes failed. Changes currently exist only in memory.");
@@ -4145,7 +4292,7 @@ module.exports = QRCode;
               <div class="dim" style="margin-bottom:12px">Optional HTTPS-only feed for guest contact and stay details. Government ID numbers/photos, folio balances, payments and dining sales are excluded.</div>
               <label class="fld"><span>Enable Booking API</span><select id="set-booking-api-enabled"><option value="false" ${S.settings.bookingApiEnabled ? "" : "selected"}>Off</option><option value="true" ${S.settings.bookingApiEnabled ? "selected" : ""}>On</option></select></label>
               <label class="fld"><span>HTTPS API Base URL</span><input id="set-booking-api-url" type="url" value="${esc(S.settings.bookingApiUrl || "")}" placeholder="https://api.example.com/v1"></label>
-              <label class="fld"><span>Bearer Token (optional)</span><input id="set-booking-api-key" type="password" autocomplete="off" value="${esc(S.settings.bookingApiKey || "")}" placeholder="Stored only in this device's PMS settings"></label>
+              <p class="checkout-note">Privileged API authentication must be handled by a trusted HTTPS backend. Aurelia never stores reusable API bearer secrets in browser state.</p>
               <div class="row-wrap"><label class="check"><input id="set-booking-api-current" type="checkbox" ${S.settings.bookingApiIncludeCurrent !== false ? "checked" : ""}> Include current stays</label><label class="check"><input id="set-booking-api-past" type="checkbox" ${S.settings.bookingApiIncludePast !== false ? "checked" : ""}> Include past stays</label></div>
               <div class="row-wrap"><button class="btn sm ghost" type="button" data-action="booking-api-preview">Preview Safe Feed</button><button class="btn sm ghost" type="button" data-action="booking-api-push">Push to HTTPS API</button></div>
             </div>
@@ -6022,7 +6169,7 @@ module.exports = QRCode;
       S.settings.logoDataUrl = propertyLogoDataUrl;
       S.settings.bookingApiEnabled = document.getElementById("set-booking-api-enabled")?.value === "true";
       S.settings.bookingApiUrl = validatedApiUrl;
-      S.settings.bookingApiKey = validatedApiUrl ? String(document.getElementById("set-booking-api-key")?.value || "").trim() : "";
+      delete S.settings.bookingApiKey;
       S.settings.bookingApiIncludeCurrent = !!document.getElementById("set-booking-api-current")?.checked;
       S.settings.bookingApiIncludePast = !!document.getElementById("set-booking-api-past")?.checked;
       S.settings.gst = Math.max(0, Number(document.getElementById("set-gst").value) || 0);
@@ -6132,7 +6279,7 @@ module.exports = QRCode;
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       file.text().then(async txt => {
-        const parsed = JSON.parse(txt);
+        const parsed = await decryptBackupPayload(txt);
         if (parsed && parsed.integrity) {
           if (parsed.integrity.algorithm !== "SHA-256" ||
               await sha256Hex(JSON.stringify(Object.fromEntries(Object.entries(parsed).filter(([key]) => key !== "integrity")))) !== parsed.integrity.digest) {
@@ -6156,7 +6303,7 @@ module.exports = QRCode;
           const saved = await saveState(true);
           if (!saved) throw new Error("Device storage did not verify the restored PMS records.");
           render();
-          toast("Backup restored and saved to device.");
+          toast("Encrypted backup restored and saved to device.");
         } catch (restoreError) {
           try {
             normalizeLoadedState(JSON.parse(previous));
@@ -6165,7 +6312,7 @@ module.exports = QRCode;
           } catch (rollbackError) { console.error("JSON restore rollback failed", rollbackError); }
           toast("Restore blocked; the previous workspace was retained where possible. " + String(restoreError.message || restoreError));
         }
-      }).catch(error => toast("Could not restore JSON backup: " + String(error.message || error)));
+      }).catch(error => toast("Could not restore encrypted backup: " + String(error.message || error)));
       e.target.value = "";
     }
   });
@@ -6213,7 +6360,6 @@ module.exports = QRCode;
     return {
       enabled: !!settings.bookingApiEnabled && !!baseUrl,
       baseUrl: baseUrl,
-      apiKey: baseUrl ? (settings.bookingApiKey || "") : "",
       includePast: settings.bookingApiIncludePast !== false,
       includeCurrent: settings.bookingApiIncludeCurrent !== false
     };
@@ -6286,7 +6432,6 @@ module.exports = QRCode;
     var body = { scope: feed.scope, propertyName: S.settings.name || "", generatedAt: feed.generatedAt, bookings: feed.bookings };
     try {
       var headers = { "Content-Type": "application/json", Accept: "application/json" };
-      if (cfg.apiKey) headers.Authorization = "Bearer " + cfg.apiKey;
       var response = await fetch(cfg.baseUrl + "/bookings/sync", { method: "POST", headers: headers, body: JSON.stringify(body) });
       var text = await response.text(), data = null;
       try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text.slice(0, 500) }; }
@@ -6376,6 +6521,40 @@ module.exports = QRCode;
     const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
   }
+  async function encryptedBackupContext() {
+    const owner = window.AureliaOwnerSession;
+    if (!owner || typeof owner.propertyId !== "string" || !owner.propertyId ||
+        typeof owner.getIdToken !== "function") {
+      throw new Error("Encrypted backups require an authenticated Google owner session with an authorized property.");
+    }
+    const { createBackupKeyRecoveryClient } = await import("./src/security/backup-envelope.mjs");
+    const service = window.AureliaBackupKeyRecovery || createBackupKeyRecoveryClient({
+      baseUrl: window.AURELIA_BACKUP_KEY_SERVICE_URL,
+      getIdToken: () => owner.getIdToken()
+    });
+    return { propertyId: owner.propertyId, keyRecovery: service };
+  }
+  function createBackupId() {
+    if (!window.crypto?.getRandomValues) throw new Error("Secure backup ID generation is unavailable.");
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    return "bkp_" + Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+  }
+  async function encryptBackupPayload(snapshot) {
+    const { propertyId, keyRecovery } = await encryptedBackupContext();
+    const { encryptBackupArchive } = await import("./src/security/backup-envelope.mjs");
+    const archive = await encryptBackupArchive({
+      snapshot, propertyId, backupId: createBackupId(), keyRecovery
+    });
+    return JSON.stringify(archive);
+  }
+  async function decryptBackupPayload(payload) {
+    const { propertyId, keyRecovery } = await encryptedBackupContext();
+    const { decryptBackupArchive } = await import("./src/security/backup-envelope.mjs");
+    const archive = JSON.parse(String(payload || ""));
+    return decryptBackupArchive({ archive, expectedPropertyId: propertyId, keyRecovery });
+  }
+
   async function createVerifiedBackupSnapshot() {
     const data = JSON.parse(JSON.stringify(S));
     const dataHash = await sha256Hex(JSON.stringify(data));
@@ -6385,16 +6564,17 @@ module.exports = QRCode;
     const snapshot = { v: 5, workspace: "aurelia-uploaded-pms", exportedAt: new Date().toISOString(), data, photoArchive: photoArchive || {} };
     snapshot.integrity = { algorithm: "SHA-256", digest: await sha256Hex(JSON.stringify(snapshot)) };
     if (dataHash !== await sha256Hex(JSON.stringify(S))) throw new Error("PMS records changed while the backup was being prepared. Try again.");
-    return { payload: JSON.stringify(snapshot, null, 2), name: "aurelia-pms-backup-" + ymd(0) + "-" + dataHash.slice(0, 12) + ".json" };
+    const payload = await encryptBackupPayload(snapshot);
+    return { payload, name: "aurelia-pms-backup-" + ymd(0) + "-" + dataHash.slice(0, 12) + ".aurelia-backup.json" };
   }
   async function downloadVerifiedBackup() {
     try {
       const snapshot = await createVerifiedBackupSnapshot();
-      const blob = new Blob([snapshot.payload], { type: "application/json;charset=utf-8" });
+      const blob = new Blob([snapshot.payload], { type: "application/vnd.aurelia.pms-backup+json" });
       const url = URL.createObjectURL(blob), anchor = document.createElement("a");
       anchor.href = url; anchor.download = snapshot.name; document.body.appendChild(anchor); anchor.click(); anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-      toast("Verified JSON backup download started.");
+      toast("Encrypted Aurelia PMS backup download started.");
     } catch (error) { toast("Backup blocked: " + String(error.message || error)); }
   }
   async function createNativeDeviceBackup() {
@@ -6407,7 +6587,7 @@ module.exports = QRCode;
       if (!nativeAction({ type: "backupDeviceNow", requestId, name: snapshot.name, payload: snapshot.payload })) {
         pendingDeviceBackup = null; toast("Could not start the native backup."); return;
       }
-      toast("Creating and verifying the device restore point…");
+      toast("Encrypting and verifying the device restore point…");
     } catch (error) { pendingDeviceBackup = null; toast("Device backup blocked: " + String(error.message || error)); }
   }
   function chooseNativeBackupFolder() {
@@ -6453,8 +6633,8 @@ module.exports = QRCode;
     const previousState = JSON.stringify(S);
     let previousPhotos = {};
     try {
-      const snapshot = JSON.parse(String(payload || ""));
-      if (!snapshot || !snapshot.data || ![4, 5].includes(Number(snapshot.v))) throw new Error("Unsupported backup structure.");
+      const snapshot = await decryptBackupPayload(String(payload || ""));
+      if (!snapshot || !snapshot.data || ![4, 5].includes(Number(snapshot.v))) throw new Error("Unsupported encrypted backup structure.");
       if (snapshot.integrity) {
         if (snapshot.integrity.algorithm !== "SHA-256" || await sha256Hex(JSON.stringify(Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== "integrity")))) !== snapshot.integrity.digest) {
           throw new Error("Backup checksum does not match its contents.");
@@ -6482,6 +6662,7 @@ module.exports = QRCode;
 
   window.AureliaPmsContext = {
     getSettings: () => ({ name: S.settings.name || "Aurelia PMS", upi: S.settings.upi || "" }),
+    getDomainRepositories: () => nativeDomainPersistence?.repositories || null,
     getBookings: () => S.bookings.filter(booking => bookingDue(booking) > 0).map(booking => {
       const guest = getGuest(booking.g) || {};
       return {
@@ -6631,7 +6812,32 @@ module.exports = QRCode;
   }
 
   /* Boot only after the durable store has been checked and any legacy data migrated. */
-  loadState().finally(() => {
+  loadState().then(async loaded => {
+    if (!loaded) return loaded;
+    if (nativeStorageMigrationPending) {
+      try { await migrateNativeWorkspace(); }
+      catch (migrationError) {
+        persistenceLoadBlocked = true;
+        nativeStorageActive = false;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER MIGRATION BLOCKED — original browser records were retained and no canonical cutover was accepted. " + String(migrationError.message || "Migration verification failed").slice(0, 160));
+        return false;
+      }
+    }
+    if (nativeStorageActive) {
+      try {
+        const { bootstrapNativePmsDomains } = await import("./src/storage/pms-native-domain-bootstrap.mjs");
+        nativeDomainPersistence = await bootstrapNativePmsDomains({ plugin: nativePmsPlugin, state: S });
+        nativeDomainSyncPending = false;
+        window.AureliaPmsDomainPersistence = nativeDomainPersistence;
+      } catch (bootstrapError) {
+        persistenceLoadBlocked = true;
+        nativeDomainBootstrapFailed = true;
+        setPersistenceState("unavailable", "NATIVE_SQLCIPHER DOMAIN PROJECTION BLOCKED — the workspace remains in SQLCipher, but domain/outbox verification failed. No browser fallback or domain read cutover was accepted. " + String(bootstrapError.message || "Domain bootstrap failed").slice(0, 160));
+        return false;
+      }
+    }
+    return true;
+  }).finally(() => {
     S.deviceBackup = S.deviceBackup && typeof S.deviceBackup === "object" ? S.deviceBackup : { folder: false, verified: false, last: null };
     render();
     updateClock();
