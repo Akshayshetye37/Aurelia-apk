@@ -24,8 +24,10 @@ export class CapacitorPmsStorageClient extends PmsRepository {
   async initializeStorage() {
     if (!this.plugin) throw new Error("CapacitorPmsStorage is not registered in this Android WebView");
     const result = await this.plugin.initializeStorage();
-    if (!result || result.success !== true || result.engine !== "android-sqlite" || result.contractVersion !== 1) {
-      throw new Error("Native PMS storage did not confirm the supported SQLite contract");
+    if (!result || result.success !== true || result.engine !== "android-sqlcipher" ||
+        result.contractVersion !== 2 || result.keyProtection !== "android-keystore-auth-per-use-device-credential" ||
+        result.integrity?.ok !== true) {
+      throw new Error("Native PMS storage did not confirm the authenticated SQLCipher v2 contract");
     }
     return result;
   }
