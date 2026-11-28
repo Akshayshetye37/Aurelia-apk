@@ -351,3 +351,31 @@ A Keystore key protected by the original device's screen lock is device-bound. A
 ### Implementation status and release gates
 
 The `fix/native-device-auth-sqlcipher-cutover` implementation branch contains the Android device-authenticated DEK path and the SQLCipher canonical workspace read/write and copy-first browser migration path. It is not yet merged into `main` or production-qualified. Existing legacy PIN/recovery envelopes and pre-existing SQLCipher databases are deliberately blocked from automatic key replacement pending a verified migration path. Google Credential Manager/Firebase owner authorization, encrypted SAF backup, cross-device key recovery and physical-device qualification remain separate release gates. Android Java source compilation is verified by the GitHub Actions native compile workflow; physical-device authentication, Keystore invalidation and lifecycle behavior have not been verified. No production-ready claim is permitted before those gates pass.
+
+
+## Native storage, identity and backup qualification
+
+The current isolated implementation is under review in draft PR #98. Do not treat the following candidate-branch work as merged into main until the PR is approved and merged.
+
+### Implemented on the candidate branch
+
+- Android SQLCipher is the canonical native PMS database after a verified, transactional migration from the existing browser workspace.
+- A random 256-bit database DEK is protected by an Android Keystore auth-per-use key and the Android device credential/strong-biometric prompt. The DEK is not exposed to the WebView.
+- A one-time migration path exists for legacy databases that still have a usable v1 biometric envelope: it rewraps the same DEK, opens the existing database and verifies integrity before retiring old envelopes.
+- PMS domain entities and outbox records are projected from the SQLCipher workspace and synchronized after workspace saves. Financial ledger and audit history are append-only.
+- The compatibility workspace remains the UI read model. Direct domain command/read cutover and a single atomic transaction spanning the compatibility workspace and all domain writes are not yet complete.
+- Client-side encrypted backup envelopes use a fresh per-backup DEK, chunked AES-256-GCM, property/backup-bound authenticated data and a server-wrapped DEK. Plaintext backup export/restore is blocked.
+
+### Explicitly not yet operational
+
+- Google Credential Manager sign-in, Firebase Authentication and trusted owner/property membership authorization are not yet configured or deployed.
+- The Firebase owner-membership provisioning service and Cloud KMS wrap/unwrap service are not deployed. Portable encrypted backup and restore are therefore unavailable until those services exist.
+- Existing legacy databases that have only the old PIN/recovery envelope still require the original legacy unlock factor. No replacement key is generated and the old database is not overwritten.
+- Physical-device qualification (biometric/device credential, process death, device credential change, restore and Keystore invalidation) is outstanding.
+- Full PMS workflow and financial-ledger end-to-end qualification remains outstanding.
+
+See [docs/SECURITY.md](docs/SECURITY.md) and [docs/BACKUP-KEY-RECOVERY-CONTRACT.md](docs/BACKUP-KEY-RECOVERY-CONTRACT.md) for the exact security boundaries and infrastructure contract.
+
+### Candidate-branch verification
+
+The latest candidate commit was verified with Node contract tests, web packaging, dependency audit and Android native Java compilation. These checks do not constitute a signed APK build, physical-device test, deployed Google/Firebase configuration or production backup service.
