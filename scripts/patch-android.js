@@ -222,6 +222,10 @@ import java.util.concurrent.Executors;
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
+  private static final int MAX_ID_SCAN_BYTES = 12 * 1024 * 1024;
+  private static final int MAX_ID_SCAN_BASE64_CHARS = 16 * 1024 * 1024;
+  private static final long MAX_ID_SCAN_PIXELS = 16L * 1024L * 1024L;
+  private static final int MAX_ID_SCAN_DIMENSION = 8192;
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
   private byte[] pendingBytes = new byte[0];
@@ -728,9 +732,31 @@ public class MainActivity extends BridgeActivity {
           });
         } else if ("recognizeId".equals(type)) {
           String imageData = obj.optString("data", "");
+          if (imageData.isEmpty() || imageData.length() > MAX_ID_SCAN_BASE64_CHARS) throw new IllegalArgumentException("ID scan image exceeds the encoded input limit.");
           byte[] imageBytes = Base64.decode(imageData, Base64.DEFAULT);
-          Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-          if (bitmap == null) throw new IllegalArgumentException("Could not decode ID image");
+          if (imageBytes.length == 0 || imageBytes.length > MAX_ID_SCAN_BYTES) {
+            java.util.Arrays.fill(imageBytes, (byte) 0);
+            throw new IllegalArgumentException("ID scan image exceeds the decoded input limit.");
+          }
+          Bitmap decodedBitmap = null;
+          try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+                bounds.outWidth > MAX_ID_SCAN_DIMENSION || bounds.outHeight > MAX_ID_SCAN_DIMENSION) {
+              throw new IllegalArgumentException("ID scan image dimensions are invalid or too large.");
+            }
+            int sampleSize = 1;
+            while (((long) bounds.outWidth / sampleSize) * ((long) bounds.outHeight / sampleSize) > MAX_ID_SCAN_PIXELS) sampleSize *= 2;
+            BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
+            decodeOptions.inSampleSize = sampleSize;
+            decodedBitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, decodeOptions);
+          } finally {
+            java.util.Arrays.fill(imageBytes, (byte) 0);
+          }
+          if (decodedBitmap == null) throw new IllegalArgumentException("Could not decode ID image.");
+          final Bitmap bitmap = decodedBitmap;
           InputImage image = InputImage.fromBitmap(bitmap, 0);
           TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
           recognizer.process(image)
