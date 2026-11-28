@@ -83,13 +83,15 @@ function records(snapshot, migrationId) {
     // Preserve source values verbatim. Do not reconcile p vs pays or infer
     // an opening balance during migration.
     // Legacy financial evidence is retained separately from normalized folios.
-    add("audit", "legacy-folio-source:" + folioId, {
+    const folioSource = {
       id: folioId, bookingId: id,
       legacyPaidTotal: row.p ?? null,
       legacyPaymentRows: clone(Array.isArray(row.pays) ? row.pays : []),
       legacyPaymentHistory: clone(Array.isArray(row.payments) ? row.payments : []),
       legacyCurrencySymbol: snapshot.set?.cur ?? "₹"
-    }, "b");
+    };
+    add("folio", folioId, folioSource, "b");
+    add("audit", "legacy-folio-source:" + folioId, folioSource, "b");
   });
   const tableIds = new Set();
   snapshot.t.forEach((row, index) => {
