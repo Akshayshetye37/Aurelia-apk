@@ -51,8 +51,8 @@ function fakeBridge() {
 test("projects legacy operational domains and preserves financial source values without reconciling them", async () => {
   const bridge = fakeBridge();
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-test" });
-  assert.equal(result.total, 11);
-  assert.equal(result.projected, 11);
+  assert.equal(result.total, 12);
+  assert.equal(result.projected, 12);
   const table = bridge.entities.get("restaurant_table:1");
   assert.deepEqual(table.data, { n: 1, s: 2, o: [["Tea", 20, "din"]] });
   assert.equal(result.manifest.counts.restaurant_table, 1);
@@ -62,6 +62,8 @@ test("projects legacy operational domains and preserves financial source values 
   assert.deepEqual(settings.data.set, { cur: "₹", name: "Aurelia" });
   assert.deepEqual(settings.data.menu, { items: [{ id: "breakfast", name: "Breakfast" }] });
   assert.equal(result.manifest.counts.settings, 1);
+  assert.equal(bridge.entities.get("folio:folio-7").data.legacyPaidTotal, 500);
+  assert.deepEqual(bridge.entities.get("folio:folio-7").data.legacyPaymentRows, [{ a: 200, amountPaise: 20000 }]);
   assert.equal(bridge.entities.get("audit:legacy-folio-source:folio-7").data.legacyPaidTotal, 500);
   assert.deepEqual(bridge.entities.get("audit:legacy-folio-source:folio-7").data.legacyPaymentRows, [{ a: 200, amountPaise: 20000 }]);
   assert.equal(result.manifest.financialReconciliationPerformed, false);
