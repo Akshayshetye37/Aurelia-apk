@@ -148,3 +148,10 @@ This is source/CI qualification only. Migration must still be exercised on a phy
 The client now uses an authenticated encrypted archive envelope: a fresh 256-bit DEK per backup, chunked AES-256-GCM, per-chunk authenticated data, property/backup binding, SHA-256 verification, and a server-wrapped DEK. The app's manual and Android SAF backup/restore paths now accept only this encrypted envelope. Plaintext export and restore fallback are blocked.
 
 The key-recovery client requires a fresh Firebase ID token and an HTTPS key-service endpoint. **The server service is not implemented/deployed and Google owner sessions are not configured**, so encrypted backup and restore remain intentionally unavailable until the server-side Firebase membership checks and Cloud KMS wrapping service are deployed. See docs/BACKUP-KEY-RECOVERY-CONTRACT.md. This is a fail-closed transition, not a claim that portable backup recovery is operational.
+
+
+## Native domain/outbox persistence status — 28 November 2026
+
+On Android, after the authenticated SQLCipher workspace has loaded or completed its verified migration, Aurelia now creates an immutable source snapshot and projects rooms, guests, bookings, folios, restaurant tables/sales, inventory, expenses, financial ledger rows, settings and audit records into versioned domain entities. Projection writes entity versions and outbox events through the native SQLCipher transaction API in bounded batches and verifies exact read-back.
+
+After each successful compatibility-workspace save, the current snapshot is synchronized into mutable domain entities and append-only financial/audit entities. Financial ledger and audit divergence is rejected; no historical ledger row is rewritten. If the compatibility workspace commit succeeds but domain synchronization fails, the app reports a pending domain sync and retries on the next save/startup. The compatibility workspace remains the authoritative UI read model; the domain read-path cutover is still OFF. This is an explicit migration stage, not a claim that every UI command now writes directly to a normalized domain repository in a single atomic transaction.
