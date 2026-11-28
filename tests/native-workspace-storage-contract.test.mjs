@@ -101,4 +101,5 @@ test('native invoice printing creates at most one Android print job per WebView 
   const printMethod = patch.slice(start, end);
   assert.match(printMethod, /AtomicBoolean printDispatched/);
   assert.match(printMethod, /compareAndSet\(false, true\)/);
+  assert.ok(!patch.includes("catch (Exception ignored)"), "native patch must not silently swallow Android failures");
 });
