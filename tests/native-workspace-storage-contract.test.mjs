@@ -79,3 +79,14 @@ test('authenticated DEK survives bridge recreation but is cleared by explicit lo
   assert.match(manager, /static synchronized void lock\(\)/);
   assert.match(manager, /byte\[\] copy = dek\.clone\(\);[\s\S]*?lock\(\);[\s\S]*?unlockedDek = copy/);
 });
+
+
+test('backup restore exclusion metadata fails closed when malformed', async () => {
+  const patch = await read('scripts/patch-android.js');
+  const start = patch.indexOf('private JSONObject readLatestBackupFromSelectedFolder');
+  const end = patch.indexOf('Uri tree = Uri.parse(saved);', start);
+  assert.ok(start >= 0 && end > start, 'backup restore method is present');
+  const exclusionParser = patch.slice(start, end);
+  assert.match(exclusionParser, /new org\\.json\\.JSONArray\\(excludedJson == null \? \"\[\]\" : excludedJson\)/);
+  assert.doesNotMatch(exclusionParser, /catch \\(Exception ignored\\)/);
+});
