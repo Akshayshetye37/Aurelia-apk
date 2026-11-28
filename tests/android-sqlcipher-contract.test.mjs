@@ -280,3 +280,18 @@ test('JSON handler encoder round-trips hostile strings without breaking inline J
   const decoded = encoded.replace(/&(quot|lt|gt|amp);/g, (_, entity) => ({ quot: '"', lt: '<', gt: '>', amp: '&' })[entity]);
   assert.equal(JSON.parse(decoded), input);
 });
+
+
+test('legacy SQLCipher databases migrate only through the existing biometric envelope and verified device-auth rewrap', () => {
+  assert.match(unlockManager, /LEGACY_BIOMETRIC_ALIAS/);
+  assert.match(unlockManager, /hasLegacyBiometricEnvelope/);
+  assert.match(unlockManager, /prepareLegacyBiometricUnlockCipher/);
+  assert.match(unlockManager, /finishLegacyBiometricUnlock/);
+  assert.match(unlockManager, /prepareDeviceRewrapCipher/);
+  assert.match(unlockManager, /commitLegacyMigration/);
+  assert.match(plugin, /authenticateLegacyBiometric/);
+  assert.match(plugin, /PmsUnlockManager\.hasLegacyBiometricEnvelope/);
+  assert.match(plugin, /commitLegacyMigration\(getContext\(\)\)/);
+  assert.match(plugin, /BIOMETRIC_STRONG/);
+  assert.doesNotMatch(unlockManager, /PBKDF2|unlockWithPin|unlockWithRecovery/);
+});
