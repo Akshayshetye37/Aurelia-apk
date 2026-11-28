@@ -65,7 +65,7 @@ function workspace() {
     guests: [{ id: "guest-1", n: "Guest" }],
     tables: [{ n: 1, o: [] }],
     sales: [],
-    inventory: [{ id: "item-1", q: 2, u: 10 }],
+    inventory: [{ id: "item-1", q: 2, ro: 0, u: 10 }],
     expenses: [{ id: "expense-1", amount: 50 }],
     audit: [{ action: "legacy event", at: "2026-11-28T00:00:00.000Z" }],
     settings: { name: "Hotel", cur: "₹" },
