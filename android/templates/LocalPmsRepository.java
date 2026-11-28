@@ -319,7 +319,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     try {
       result.put("alreadyMigrated", replay); result.put("migrationId", migrationId);
       result.put("sha256", digest); result.put("sourceSha256", sourceDigest); result.put("version", version);
-    } catch (Exception ignored) {}
+    } catch (Exception error) { throw new IllegalStateException("workspace_migration_result_failed", error); }
     return result;
   }
 
@@ -706,7 +706,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static void validateIdentity(String value,String label){if(value==null||value.trim().isEmpty()||value.length()>180||value.matches(".*[\\x00-\\x1f].*"))throw new IllegalArgumentException("invalid_"+label.replace(' ','_'));}
   private static RuntimeException conflict(String code){return new IllegalStateException(code);}
   private static RuntimeException failure(String code,Exception cause){return new IllegalStateException(code,cause);}
-  private static JSONObject migrationResult(boolean replay,String id,int count){JSONObject r=new JSONObject();try{r.put("alreadyMigrated",replay);r.put("migrationId",id);r.put("entityCount",count);}catch(Exception ignored){}return r;}
+  private static JSONObject migrationResult(boolean replay,String id,int count){JSONObject r=new JSONObject();try{r.put("alreadyMigrated",replay);r.put("migrationId",id);r.put("entityCount",count);}catch(Exception error){throw new IllegalStateException("migration_result_failed",error);}return r;}
   private static String safeSerialize(Object value) {
     try { return serializeJsonValue(value); }
     catch (Exception e) { throw new StorageSerializationException("serialize failed", e); }
