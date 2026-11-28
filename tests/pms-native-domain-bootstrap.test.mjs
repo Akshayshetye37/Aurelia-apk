@@ -105,8 +105,10 @@ test("native domain bootstrap projects verified SQLCipher workspace once and rep
   changedWorkspace.bookings.push({ id: 8, room: "101", g: "New guest", p: 0, pays: [], st: "res" });
   const second = await bootstrapNativePmsDomains({ plugin, state: changedWorkspace });
   assert.equal(second.projection.alreadyProjected, true);
-  assert.equal(plugin.outbox.length, outboxCount);
-  assert.equal(await second.bridge.fetchEntity("booking", "8"), null);
+  assert.ok(plugin.outbox.length > outboxCount);
+  const newBooking = await second.bridge.fetchEntity("booking", "8");
+  assert.equal(newBooking.data.g, "New guest");
+  assert.equal(newBooking.version, 1);
 });
 
 test("native domain bootstrap refuses a non-SQLCipher or failed-integrity storage adapter", async () => {
