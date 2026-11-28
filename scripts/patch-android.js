@@ -280,7 +280,7 @@ public class MainActivity extends BridgeActivity {
     String saved = prefs.getString("backup_tree_uri", "");
     if (saved.isEmpty()) throw new IllegalStateException("No backup folder is selected.");
     java.util.HashSet<String> excluded = new java.util.HashSet<>();
-    org.json.JSONArray values = new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson); for (int i = 0; i < values.length(); i++) { String excludedName = values.getString(i); if (excludedName == null || excludedName.isEmpty() || excludedName.contains("/") || excludedName.contains("\\\\")) throw new IllegalArgumentException("Invalid excluded backup filename."); excluded.add(excludedName); }
+    org.json.JSONArray values = new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson); for (int i = 0; i < values.length(); i++) { String excludedName = values.getString(i); if (excludedName == null || excludedName.isEmpty() || excludedName.contains("/") || excludedName.contains("\\")) throw new IllegalArgumentException("Invalid excluded backup filename."); excluded.add(excludedName); }
     Uri tree = Uri.parse(saved);
     Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
     String[] projection = { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_LAST_MODIFIED };
