@@ -597,17 +597,27 @@ public class MainActivity extends BridgeActivity {
       printSettings.setAllowFileAccess(false);
       printSettings.setAllowContentAccess(false);
       printSettings.setBlockNetworkLoads(true);
+      java.util.concurrent.atomic.AtomicBoolean printDispatched = new java.util.concurrent.atomic.AtomicBoolean(false);
       printView.setWebViewClient(new android.webkit.WebViewClient() {
         @Override public void onPageFinished(android.webkit.WebView view, String url) {
+          if (!printDispatched.compareAndSet(false, true)) return;
           try {
             android.print.PrintManager manager = (android.print.PrintManager) getSystemService(PRINT_SERVICE);
+            if (manager == null) throw new IllegalStateException("Android print service is unavailable.");
             android.print.PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(title);
-            manager.print(title, adapter, new android.print.PrintAttributes.Builder().setMediaSize(android.print.PrintAttributes.MediaSize.ISO_A4).setResolution(new android.print.PrintAttributes.Resolution("aurelia", "Aurelia", 300, 300)).setMinMargins(android.print.PrintAttributes.Margins.NO_MARGINS).build());
-          } catch (Exception ignored) { }
+            android.print.PrintJob job = manager.print(title, adapter, new android.print.PrintAttributes.Builder().setMediaSize(android.print.PrintAttributes.MediaSize.ISO_A4).setResolution(new android.print.PrintAttributes.Resolution("aurelia", "Aurelia", 300, 300)).setMinMargins(android.print.PrintAttributes.Margins.NO_MARGINS).build());
+            if (job == null) throw new IllegalStateException("Android did not create the invoice print job.");
+          } catch (Exception error) {
+            android.util.Log.e("AureliaPrint", "Unable to create invoice print job", error);
+            android.widget.Toast.makeText(MainActivity.this, "Could not open the invoice print dialog.", android.widget.Toast.LENGTH_LONG).show();
+          }
         }
       });
       printView.loadDataWithBaseURL(null, "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:Arial,sans-serif;color:#222;margin:18px}img{max-width:100%;height:auto}table{width:100%;border-collapse:collapse}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left} .noprint,button{display:none!important}</style></head><body>" + html + "</body></html>", "text/html", "UTF-8", null);
-    } catch (Exception ignored) { }
+    } catch (Exception error) {
+      android.util.Log.e("AureliaPrint", "Unable to prepare invoice print view", error);
+      android.widget.Toast.makeText(MainActivity.this, "Could not prepare the invoice for printing.", android.widget.Toast.LENGTH_LONG).show();
+    }
   }
 
   private void shareImageFile(String name, String mime, byte[] bytes, String phone) {
