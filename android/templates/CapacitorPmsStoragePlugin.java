@@ -88,11 +88,11 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
 
   @PluginMethod public void ensureDatabaseUnlocked(PluginCall call) {
     synchronized (this) {
+      if (databaseAuthInFlight) { call.reject("Android device authentication is already in progress.", "PMS_DEVICE_AUTH_IN_PROGRESS"); return; }
       if (PmsUnlockManager.isUnlocked()) {
         JSObject ready = new JSObject(); ready.put("unlocked", true); ready.put("factor", "android-device-credential");
         call.resolve(ready); return;
       }
-      if (databaseAuthInFlight) { call.reject("Android device authentication is already in progress.", "PMS_DEVICE_AUTH_IN_PROGRESS"); return; }
       databaseAuthInFlight = true;
     }
     io.execute(() -> {
