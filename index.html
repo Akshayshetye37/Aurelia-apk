@@ -6256,7 +6256,7 @@ module.exports = QRCode;
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       file.text().then(async txt => {
-        const parsed = JSON.parse(txt);
+        const parsed = await decryptBackupPayload(txt);
         if (parsed && parsed.integrity) {
           if (parsed.integrity.algorithm !== "SHA-256" ||
               await sha256Hex(JSON.stringify(Object.fromEntries(Object.entries(parsed).filter(([key]) => key !== "integrity")))) !== parsed.integrity.digest) {
@@ -6280,7 +6280,7 @@ module.exports = QRCode;
           const saved = await saveState(true);
           if (!saved) throw new Error("Device storage did not verify the restored PMS records.");
           render();
-          toast("Backup restored and saved to device.");
+          toast("Encrypted backup restored and saved to device.");
         } catch (restoreError) {
           try {
             normalizeLoadedState(JSON.parse(previous));
@@ -6289,7 +6289,7 @@ module.exports = QRCode;
           } catch (rollbackError) { console.error("JSON restore rollback failed", rollbackError); }
           toast("Restore blocked; the previous workspace was retained where possible. " + String(restoreError.message || restoreError));
         }
-      }).catch(error => toast("Could not restore JSON backup: " + String(error.message || error)));
+      }).catch(error => toast("Could not restore encrypted backup: " + String(error.message || error)));
       e.target.value = "";
     }
   });
@@ -6498,6 +6498,40 @@ module.exports = QRCode;
     const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
   }
+  async function encryptedBackupContext() {
+    const owner = window.AureliaOwnerSession;
+    if (!owner || typeof owner.propertyId !== "string" || !owner.propertyId ||
+        typeof owner.getIdToken !== "function") {
+      throw new Error("Encrypted backups require an authenticated Google owner session with an authorized property.");
+    }
+    const { createBackupKeyRecoveryClient } = await import("./src/security/backup-envelope.mjs");
+    const service = window.AureliaBackupKeyRecovery || createBackupKeyRecoveryClient({
+      baseUrl: window.AURELIA_BACKUP_KEY_SERVICE_URL,
+      getIdToken: () => owner.getIdToken()
+    });
+    return { propertyId: owner.propertyId, keyRecovery: service };
+  }
+  function createBackupId() {
+    if (!window.crypto?.getRandomValues) throw new Error("Secure backup ID generation is unavailable.");
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    return "bkp_" + Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+  }
+  async function encryptBackupPayload(snapshot) {
+    const { propertyId, keyRecovery } = await encryptedBackupContext();
+    const { encryptBackupArchive } = await import("./src/security/backup-envelope.mjs");
+    const archive = await encryptBackupArchive({
+      snapshot, propertyId, backupId: createBackupId(), keyRecovery
+    });
+    return JSON.stringify(archive);
+  }
+  async function decryptBackupPayload(payload) {
+    const { propertyId, keyRecovery } = await encryptedBackupContext();
+    const { decryptBackupArchive } = await import("./src/security/backup-envelope.mjs");
+    const archive = JSON.parse(String(payload || ""));
+    return decryptBackupArchive({ archive, expectedPropertyId: propertyId, keyRecovery });
+  }
+
   async function createVerifiedBackupSnapshot() {
     const data = JSON.parse(JSON.stringify(S));
     const dataHash = await sha256Hex(JSON.stringify(data));
@@ -6507,16 +6541,17 @@ module.exports = QRCode;
     const snapshot = { v: 5, workspace: "aurelia-uploaded-pms", exportedAt: new Date().toISOString(), data, photoArchive: photoArchive || {} };
     snapshot.integrity = { algorithm: "SHA-256", digest: await sha256Hex(JSON.stringify(snapshot)) };
     if (dataHash !== await sha256Hex(JSON.stringify(S))) throw new Error("PMS records changed while the backup was being prepared. Try again.");
-    return { payload: JSON.stringify(snapshot, null, 2), name: "aurelia-pms-backup-" + ymd(0) + "-" + dataHash.slice(0, 12) + ".json" };
+    const payload = await encryptBackupPayload(snapshot);
+    return { payload, name: "aurelia-pms-backup-" + ymd(0) + "-" + dataHash.slice(0, 12) + ".aurelia-backup.json" };
   }
   async function downloadVerifiedBackup() {
     try {
       const snapshot = await createVerifiedBackupSnapshot();
-      const blob = new Blob([snapshot.payload], { type: "application/json;charset=utf-8" });
+      const blob = new Blob([snapshot.payload], { type: "application/vnd.aurelia.pms-backup+json" });
       const url = URL.createObjectURL(blob), anchor = document.createElement("a");
       anchor.href = url; anchor.download = snapshot.name; document.body.appendChild(anchor); anchor.click(); anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-      toast("Verified JSON backup download started.");
+      toast("Encrypted Aurelia PMS backup download started.");
     } catch (error) { toast("Backup blocked: " + String(error.message || error)); }
   }
   async function createNativeDeviceBackup() {
@@ -6529,7 +6564,7 @@ module.exports = QRCode;
       if (!nativeAction({ type: "backupDeviceNow", requestId, name: snapshot.name, payload: snapshot.payload })) {
         pendingDeviceBackup = null; toast("Could not start the native backup."); return;
       }
-      toast("Creating and verifying the device restore point…");
+      toast("Encrypting and verifying the device restore point…");
     } catch (error) { pendingDeviceBackup = null; toast("Device backup blocked: " + String(error.message || error)); }
   }
   function chooseNativeBackupFolder() {
@@ -6575,8 +6610,8 @@ module.exports = QRCode;
     const previousState = JSON.stringify(S);
     let previousPhotos = {};
     try {
-      const snapshot = JSON.parse(String(payload || ""));
-      if (!snapshot || !snapshot.data || ![4, 5].includes(Number(snapshot.v))) throw new Error("Unsupported backup structure.");
+      const snapshot = await decryptBackupPayload(String(payload || ""));
+      if (!snapshot || !snapshot.data || ![4, 5].includes(Number(snapshot.v))) throw new Error("Unsupported encrypted backup structure.");
       if (snapshot.integrity) {
         if (snapshot.integrity.algorithm !== "SHA-256" || await sha256Hex(JSON.stringify(Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== "integrity")))) !== snapshot.integrity.digest) {
           throw new Error("Backup checksum does not match its contents.");
