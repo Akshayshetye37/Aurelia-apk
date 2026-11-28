@@ -71,6 +71,7 @@ async function main() {
   copyDirectory(path.join(root, 'src', 'storage'), path.join(sourceModules, 'storage'), 'PMS storage');
   copyDirectory(path.join(root, 'src', 'folios'), path.join(sourceModules, 'folios'), 'PMS folio');
   copyDirectory(path.join(root, 'src', 'bookings'), path.join(sourceModules, 'bookings'), 'PMS booking');
+  copyDirectory(path.join(root, 'src', 'security'), path.join(sourceModules, 'security'), 'PMS security');
 
   const paymentModules = path.join(sourceModules, 'payments');
   fs.mkdirSync(paymentModules, { recursive: true });
