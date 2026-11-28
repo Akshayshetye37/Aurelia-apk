@@ -180,13 +180,15 @@ test('native guest photos are encrypted at rest with a per-install Keystore AES-
   assert.doesNotMatch(patch, /writeText\(photoFile|readText\(file\)/);
 });
 
-test('booking API bearer token is disabled unless the configured endpoint is HTTPS', () => {
+test('booking API endpoint is HTTPS-only and browser bearer credentials are never persisted or sent', () => {
   const html = read('index.html');
   assert.ok(html.includes('function validatedBookingApiBaseUrl(value)'));
   assert.ok(html.includes('parsed.protocol !== "https:"'));
   assert.ok(html.includes('parsed.username || parsed.password'));
   assert.ok(html.includes('enabled: !!settings.bookingApiEnabled && !!baseUrl'));
-  assert.ok(html.includes('apiKey: baseUrl ? (settings.bookingApiKey || "") : ""'));
+  assert.ok(html.includes('delete S.settings.bookingApiKey'));
+  assert.ok(html.includes('Privileged API authentication must be handled by a trusted HTTPS backend'));
+  assert.doesNotMatch(html, /set-booking-api-key|apiKey:\\s*baseUrl|headers\\.Authorization\\s*=\\s*["']Bearer/);
 });
 test('uploaded workspace escapes user data and uses delegated action attributes instead of inline handler strings', () => {
   const html = read('index.html');
