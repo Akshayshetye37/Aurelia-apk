@@ -90,3 +90,14 @@ test('backup restore exclusion metadata fails closed when malformed', async () =
   assert.ok(exclusionParser.includes('new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson);'));
   assert.doesNotMatch(exclusionParser, /catch \\(Exception ignored\\)/);
 });
+
+
+test('native invoice printing creates at most one Android print job per WebView load', async () => {
+  const patch = await read('scripts/patch-android.js');
+  const start = patch.indexOf('private void printHtmlDocument');
+  const end = patch.indexOf('private void shareImageFile', start);
+  assert.ok(start >= 0 && end > start, 'native invoice print method is present');
+  const printMethod = patch.slice(start, end);
+  assert.match(printMethod, /AtomicBoolean printDispatched/);
+  assert.match(printMethod, /compareAndSet\(false, true\)/);
+});
