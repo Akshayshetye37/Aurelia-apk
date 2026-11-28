@@ -94,3 +94,13 @@ test("backup key recovery client requires HTTPS and requests a fresh Firebase to
   assert.equal(requests[0].options.headers.Authorization, "Bearer fresh-token-1");
   assert.equal(requests[1].options.headers.Authorization, "Bearer fresh-token-2");
 });
+
+
+test("PMS UI export and restore paths accept only server-wrapped encrypted backup envelopes", async () => {
+  const html = await (await import("node:fs/promises")).readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /const payload = await encryptBackupPayload\(snapshot\)/);
+  assert.match(html, /const snapshot = await decryptBackupPayload\(String\(payload \|\| ""\)\)/);
+  assert.match(html, /const parsed = await decryptBackupPayload\(txt\)/);
+  assert.match(html, /Encrypted backups require an authenticated Google owner session/);
+  assert.doesNotMatch(html, /return \{ payload: JSON\.stringify\(snapshot, null, 2\)/);
+});
