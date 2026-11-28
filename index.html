@@ -3085,7 +3085,7 @@ module.exports = QRCode;
         } catch (error) {
           if (!legacyMirrorError) {
             persistenceLoadBlocked = false;
-            setPersistenceState("fallback", "IndexedDB write failed. Latest records are mirrored to browser storage only; export a JSON backup and check app storage permissions.");
+            setPersistenceState("fallback", "IndexedDB write failed. Latest records are mirrored to browser storage only; plaintext backup export is disabled. Configure the encrypted backup key-recovery service before relying on off-device backups.");
             return true;
           }
           setPersistenceState("unavailable", "NOT SAVED — both IndexedDB and browser storage writes failed. Changes currently exist only in memory.");
