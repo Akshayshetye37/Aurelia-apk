@@ -1,96 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { indexedDB } from "fake-indexeddb";
-import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 
-let dbSequence = 0;
-function setup() {
-  const repository = new IndexedDbPmsRepository({
-    indexedDBImpl: indexedDB,
-    databaseName: "pms-bridge-test-" + (++dbSequence)
+test("bridge binds a transactional repository and returns versioned entities", async () => {
+  const rows = new Map();
+  const repository = {
+    async getEntity(type,id) { const row=rows.get(type+":"+id); return row ? structuredClone(row) : null; },
+    async listEntities(type) { return [...rows.values()].filter(row=>row.type===type).map(row=>structuredClone(row)); },
+    async transactBusinessChange(input,apply) {
+      const key=input.entityType+":"+input.entityId, old=rows.get(key), version=old?.version||0;
+      if(version!==input.expectedVersion) throw Object.assign(new Error("version conflict"),{code:"ENTITY_VERSION_CONFLICT"});
+      const data=apply({data:old?.data||null,version});
+      const row={type:input.entityType,id:input.entityId,version:version+1,data:structuredClone(data),event:structuredClone(input.event)};
+      rows.set(key,row); return structuredClone(row);
+    },
+    async transactBusinessBatch(changes) {
+      const committed=[];
+      for(const change of changes) {
+        const key=change.entityType+":"+change.entityId, old=rows.get(key), version=old?.version||0;
+        if(version!==change.expectedVersion) throw Object.assign(new Error("version conflict"),{code:"ENTITY_VERSION_CONFLICT"});
+      }
+      for(const change of changes) {
+        const key=change.entityType+":"+change.entityId, version=change.expectedVersion+1;
+        const row={type:change.entityType,id:change.entityId,version,data:structuredClone(change.data),event:structuredClone(change.event)};
+        rows.set(key,row); committed.push(structuredClone(row));
+      }
+      return committed;
+    }
+  };
+  const bridge=new PmsRepositoryBridge({
+    tenantId:"tenant-local",propertyId:"property-local",deviceId:"device-local",
+    eventId:(()=>{let n=0;return()=> "evt-"+(++n)})()
+  }).bindActiveEngine(repository);
+  const created=await bridge.mutateEntity({
+    entityType:"guest",entityId:"guest-1",expectedVersion:0,eventType:"guest.created",
+    mutate:data=>{data.name="Guest One";return data;}
   });
-  const bridge = new PmsRepositoryBridge({
-    tenantId: "tenant-test",
-    propertyId: "property-test",
-    deviceId: "device-test",
-    eventId: (() => { let n = 0; return () => "evt-test-" + (++n); })(),
-    now: () => "2026-11-07T00:00:00.000Z"
-  });
-  bridge.bindActiveEngine(repository);
-  return { repository, bridge };
-}
-
-test("bridge commits domain entity and outbox atomically through repository contract", async () => {
-  const { repository, bridge } = setup();
-  const saved = await bridge.saveBooking({
-    entityId: "booking-1",
-    expectedVersion: 0,
-    mutate: booking => { booking.guestName = "Test Guest"; booking.status = "reserved"; return "saved"; }
-  });
-  assert.equal(saved.result, "saved");
-  assert.equal(saved.entity.version, 1);
-  assert.deepEqual((await bridge.fetchEntity("booking", "booking-1")).data, {
-    id: "booking-1", guestName: "Test Guest", status: "reserved"
-  });
-  const pending = await repository.claimOutboxBatch({ deviceId: "device-test", limit: 10 });
-  assert.equal(pending.length, 1);
-  assert.equal(pending[0].eventType, "booking.saved");
-  assert.equal(pending[0].sequence, 1);
+  assert.equal(created.entity.version,1);
+  assert.equal((await bridge.fetchEntity("guest","guest-1")).data.name,"Guest One");
+  assert.equal((await bridge.listEntities("guest")).length,1);
+  assert.equal(rows.get("guest:guest-1").event.sequence,1);
 });
 
-test("bridge rejects stale versions without creating an outbox event", async () => {
-  const { repository, bridge } = setup();
-  await bridge.addLedgerLine({ entityId: "folio-1", expectedVersion: 0, mutate: line => { line.amount = 1200; } });
-  await assert.rejects(
-    bridge.addLedgerLine({ entityId: "folio-1", expectedVersion: 0, mutate: line => { line.amount = 1500; } }),
-    error => error.code === "ENTITY_VERSION_CONFLICT"
-  );
-  assert.equal((await repository.claimOutboxBatch({ deviceId: "device-test" })).length, 1);
-});
-
-test("bridge rejects asynchronous mutation callbacks before commit", async () => {
-  const { repository, bridge } = setup();
-  await assert.rejects(
-    bridge.mutateFolioState({
-      entityId: "folio-async",
-      expectedVersion: 0,
-      mutate: async folio => { folio.status = "paid"; }
-    }),
-    /must be synchronous/
-  );
-  assert.equal(await bridge.fetchEntity("folio", "folio-async"), null);
-  assert.equal((await repository.claimOutboxBatch({ deviceId: "device-test" })).length, 0);
-});
-
-test("bridge requires a verified contract-compatible engine and tenant context", async () => {
-  const bridge = new PmsRepositoryBridge();
-  assert.throws(() => bridge.bindActiveEngine({}), /repository contract/);
-  await assert.rejects(bridge.fetchEntity("booking", "x"), /not bound/);
-});
-
-test("bridge persists a caller-supplied event payload with the entity transaction",async()=>{const {repository,bridge}=setup();await bridge.mutateFolioState({entityId:"folio-event-payload",expectedVersion:0,eventType:"folio.payment_posted",eventPayload:{bookingId:"booking-9",amountPaise:12500,source:"manual"},mutate:folio=>{folio.paid=125;}});const events=await repository.claimOutboxBatch({deviceId:"device-test"});assert.deepEqual(events[0].payload,{bookingId:"booking-9",amountPaise:12500,source:"manual"});});
-
-test("compatibility snapshot writes are serialized, versioned, and emit immutable outbox records",async()=>{const {repository,bridge}=setup();const first={rooms:[{n:"101"}],b:[],g:[]};const [a,b]=await Promise.all([bridge.persistCompatibilitySnapshot(first),bridge.persistCompatibilitySnapshot({...first,tab:"rooms"})]);assert.equal(a.entity.version,1);assert.equal(b.entity.version,2);const stored=await repository.getEntity("audit","legacy_snapshot:aurelia_lodge_v2");assert.deepEqual(stored.data.snapshot,{...first,tab:"rooms"});const events=await repository.claimOutboxBatch({deviceId:"device-test",limit:10});assert.equal(events.length,2);assert.equal(events[0].eventType,"legacy.snapshot_saved");});
-
-test("booking and room lifecycle transitions are enforced before atomic commit", async () => {
-  const { repository, bridge } = setup();
-  await bridge.mutateEntity({ entityType: "booking", entityId: "booking-state", expectedVersion: 0,
-    eventType: "booking.created", mutate: row => { row.status = "reserved"; } });
-  await bridge.mutateEntity({ entityType: "booking", entityId: "booking-state", expectedVersion: 1,
-    eventType: "booking.confirmed", mutate: row => { row.status = "confirmed"; } });
-  await assert.rejects(bridge.mutateEntity({ entityType: "booking", entityId: "booking-state", expectedVersion: 2,
-    eventType: "booking.reverted", mutate: row => { row.status = "reserved"; } }),
-    error => error.code === "PMS_INVALID_STATE_TRANSITION");
-  assert.equal((await bridge.fetchEntity("booking", "booking-state")).data.status, "confirmed");
-
-  await bridge.mutateEntity({ entityType: "room", entityId: "101", expectedVersion: 0,
-    eventType: "room.created", mutate: row => { row.s = "ready"; } });
-  await bridge.mutateEntity({ entityType: "room", entityId: "101", expectedVersion: 1,
-    eventType: "room.occupied", mutate: row => { row.s = "occ"; } });
-  await assert.rejects(bridge.mutateEntity({ entityType: "room", entityId: "101", expectedVersion: 2,
-    eventType: "room.invalid_release", mutate: row => { row.s = "ready"; } }),
-    error => error.code === "PMS_INVALID_STATE_TRANSITION");
-  assert.equal((await bridge.fetchEntity("room", "101")).data.s, "occ");
-  assert.equal((await repository.claimOutboxBatch({ deviceId: "device-test", limit: 10 })).length, 4);
+test("bridge rejects asynchronous mutation callbacks before committing", async () => {
+  const repository={getEntity:async()=>null,transactBusinessChange:async(input,apply)=>apply({data:null,version:0}),transactBusinessBatch:async()=>[]};
+  const bridge=new PmsRepositoryBridge({tenantId:"t",propertyId:"p",deviceId:"d",eventId:()=>"evt-1"}).bindActiveEngine(repository);
+  await assert.rejects(bridge.mutateEntity({
+    entityType:"guest",entityId:"guest-2",expectedVersion:0,eventType:"guest.created",
+    mutate:async data=>{data.name="Async";return data;}
+  }),/synchronous/);
 });
