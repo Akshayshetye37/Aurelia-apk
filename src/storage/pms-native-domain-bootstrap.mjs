@@ -50,6 +50,74 @@ async function sha256Hex(value) {
   } finally { bytes.fill(0); }
 }
 
+function stable(value) {
+  return Array.isArray(value) ? value.map(stable) :
+    value && typeof value === "object"
+      ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]))
+      : value;
+}
+const same = (left, right) => JSON.stringify(stable(left)) === JSON.stringify(stable(right));
+
+async function syncEntityRows(bridge, entityType, rows, { idFor, dataFor, immutable = false } = {}) {
+  if (!Array.isArray(rows)) throw new TypeError("PMS " + entityType + " rows must be an array.");
+  const currentRows = await bridge.listEntities(entityType);
+  const current = new Map();
+  for (const row of currentRows) {
+    if (!row || row.type !== entityType || typeof row.id !== "string" ||
+        !Number.isSafeInteger(row.version) || row.version < 1 || !row.data ||
+        typeof row.data !== "object" || Array.isArray(row.data) || current.has(row.id)) {
+      throw new Error("Canonical " + entityType + " repository contains an invalid or duplicate entity.");
+    }
+    current.set(row.id, row);
+  }
+  const desired = new Set();
+  const changes = [];
+  rows.forEach((row, index) => {
+    const id = String(idFor(row, index));
+    if (!id || id.length > 180 || /[\u0000-\u001f]/.test(id) || desired.has(id)) {
+      throw new Error("PMS " + entityType + " collection contains an invalid or duplicate stable identity.");
+    }
+    desired.add(id);
+    const data = dataFor(row, index, id);
+    const old = current.get(id);
+    if (old && same(old.data, data)) return;
+    if (old && immutable) {
+      throw Object.assign(new Error("Immutable PMS " + entityType + " entity " + id + " differs from its canonical record."), {
+        code: "PMS_IMMUTABLE_ENTITY_DIVERGENCE", entityType, entityId: id
+      });
+    }
+    changes.push({
+      entityType, entityId: id, expectedVersion: old?.version ?? 0,
+      eventType: old ? entityType + ".updated" : entityType + ".created",
+      eventPayload: { entityType, entityId: id, source: "workspace_compatibility_projection" },
+      mutate: entity => {
+        for (const key of Object.keys(entity)) delete entity[key];
+        Object.assign(entity, clone(data));
+        return entity;
+      }
+    });
+  });
+  for (let offset = 0; offset < changes.length; offset += 20) {
+    const batch = changes.slice(offset, offset + 20);
+    if (batch.length === 1) await bridge.mutateEntity(batch[0]);
+    else await bridge.mutateEntities(batch);
+  }
+  return Object.freeze({ checked: rows.length, changed: changes.length });
+}
+
+function folioSource(row, index, currency) {
+  const bookingId = String(row.id);
+  const id = String(row.folioId ?? "booking-" + bookingId);
+  return {
+    id,
+    bookingId,
+    legacyPaidTotal: row.p ?? null,
+    legacyPaymentRows: clone(Array.isArray(row.pays) ? row.pays : []),
+    legacyPaymentHistory: clone(Array.isArray(row.payments) ? row.payments : []),
+    legacyCurrencySymbol: currency
+  };
+}
+
 export async function bootstrapNativePmsDomains({ plugin, state } = {}) {
   if (!plugin) throw new TypeError("The registered Capacitor PMS SQLCipher plugin is required.");
   const snapshot = toLegacyDomainSnapshot(state);
@@ -112,17 +180,63 @@ export async function bootstrapNativePmsDomains({ plugin, state } = {}) {
     batchSize: 20
   });
 
+  const repositories = Object.freeze({
+    settings: new PmsSettingsRepository({ bridge }),
+    expenses: new PmsExpenseRepository({ bridge }),
+    inventory: new PmsInventoryRepository({ bridge }),
+    restaurantTables: new PmsRestaurantTableRepository({ bridge }),
+    restaurantSales: new PmsRestaurantSaleRepository({ bridge })
+  });
+
+  async function syncSnapshot(nextState) {
+    const next = toLegacyDomainSnapshot(nextState);
+    const currency = String(next.set.cur ?? "₹");
+    const summary = {};
+    summary.rooms = await syncEntityRows(bridge, "room", next.rooms, {
+      idFor: row => row.id ?? row.n,
+      dataFor: (row, index, id) => ({ ...clone(row), id })
+    });
+    summary.guests = await syncEntityRows(bridge, "guest", next.g, {
+      idFor: (row, index) => row.id ?? "legacy-guest-" + index,
+      dataFor: (row, index, id) => ({ ...clone(row), id })
+    });
+    summary.bookings = await syncEntityRows(bridge, "booking", next.b, {
+      idFor: row => row.id,
+      dataFor: (row, index, id) => ({ ...clone(row), id })
+    });
+    summary.folios = await syncEntityRows(bridge, "folio", next.b, {
+      idFor: row => row.folioId ?? "booking-" + row.id,
+      dataFor: (row, index) => folioSource(row, index, currency)
+    });
+    summary.expenses = await syncEntityRows(bridge, "expense", next.exp, {
+      idFor: (row, index) => row.id ?? "legacy-expense-" + index,
+      dataFor: (row, index, id) => ({ ...clone(row), id })
+    });
+    summary.ledger = await syncEntityRows(bridge, "ledger", next.led, {
+      idFor: (row, index) => "legacy-ledger-" + index,
+      dataFor: (row, index) => ({ sourceCollection: "led", sourceIndex: index, value: clone(row) }),
+      immutable: true
+    });
+    summary.audit = await syncEntityRows(bridge, "audit", next.aud, {
+      idFor: (row, index) => "legacy-audit-" + index,
+      dataFor: (row, index) => ({ sourceCollection: "aud", sourceIndex: index, value: clone(row) }),
+      immutable: true
+    });
+    await repositories.settings.syncSnapshot(next);
+    await repositories.inventory.syncSnapshot(next);
+    await repositories.restaurantTables.syncSnapshot(next);
+    await repositories.restaurantSales.syncSnapshot(next);
+    return Object.freeze(summary);
+  }
+
+  const sync = await syncSnapshot(state);
   return Object.freeze({
     initialized,
     identity: Object.freeze({ ...identity }),
     bridge,
     projection,
-    repositories: Object.freeze({
-      settings: new PmsSettingsRepository({ bridge }),
-      expenses: new PmsExpenseRepository({ bridge }),
-      inventory: new PmsInventoryRepository({ bridge }),
-      restaurantTables: new PmsRestaurantTableRepository({ bridge }),
-      restaurantSales: new PmsRestaurantSaleRepository({ bridge })
-    })
+    sync,
+    syncSnapshot,
+    repositories
   });
 }
