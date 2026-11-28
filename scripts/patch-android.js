@@ -289,11 +289,41 @@ public class MainActivity extends BridgeActivity {
 
   private void launchImagePicker(String requestId) {
     pendingImageRequestId = requestId;
-    Intent intent = Build.VERSION.SDK_INT >= 33 ? new Intent(MediaStore.ACTION_PICK_IMAGES) : new Intent(Intent.ACTION_OPEN_DOCUMENT);
-    intent.setType("image/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
-    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-    try { startActivityForResult(intent, PICK_IMAGE_FILE); }
-    catch (Exception e) { pendingImageRequestId = ""; imageResult(requestId, false, "The Android photo picker could not be opened."); }
+    // Prefer the Android Photo Picker. Do not add CATEGORY_OPENABLE to ACTION_PICK_IMAGES:
+    // several Android 13/14 picker implementations do not resolve that combination.
+    Intent picker = null;
+    if (Build.VERSION.SDK_INT >= 33) {
+      try {
+        picker = new Intent(MediaStore.ACTION_PICK_IMAGES);
+        picker.setType("image/*");
+        picker.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (picker.resolveActivity(getPackageManager()) == null) picker = null;
+      } catch (Exception ignored) { picker = null; }
+    }
+    // Reliable system document-picker fallback for OEMs without a resolvable Photo Picker.
+    if (picker == null) {
+      picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+      picker.setType("image/*");
+      picker.addCategory(Intent.CATEGORY_OPENABLE);
+      picker.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+    }
+    try {
+      startActivityForResult(picker, PICK_IMAGE_FILE);
+    } catch (android.content.ActivityNotFoundException firstFailure) {
+      try {
+        Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
+        fallback.setType("image/*");
+        fallback.addCategory(Intent.CATEGORY_OPENABLE);
+        fallback.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(fallback, PICK_IMAGE_FILE);
+      } catch (Exception secondFailure) {
+        pendingImageRequestId = "";
+        imageResult(requestId, false, "No compatible Android photo or file picker is available.");
+      }
+    } catch (Exception e) {
+      pendingImageRequestId = "";
+      imageResult(requestId, false, "Could not open the Android photo or file picker.");
+    }
   }
   private void imageResult(String id, boolean ok, String payload) {
     js("window.aureliaNativeImagePicked && window.aureliaNativeImagePicked(" + q(id) + "," + q(payload) + "," + ok + ")");
