@@ -180,6 +180,34 @@ export async function bootstrapNativePmsDomains({ plugin, state } = {}) {
     batchSize: 20
   });
 
+  const recoverySnapshotId = "legacy_snapshot:aurelia_lodge_v2";
+  let recoverySnapshot = await bridge.fetchEntity("audit", recoverySnapshotId);
+  if (!recoverySnapshot) {
+    await bridge.mutateEntity({
+      entityType: "audit",
+      entityId: recoverySnapshotId,
+      expectedVersion: 0,
+      eventType: "pms.compatibility_snapshot.initialized",
+      eventPayload: { migrationId, sourceSha256: source.data.sourceSha256 },
+      mutate: entity => {
+        entity.sourceKey = "aurelia_lodge_v2";
+        entity.schemaVersion = 2;
+        entity.snapshot = clone(source.data.snapshot);
+        return entity;
+      }
+    });
+    recoverySnapshot = await bridge.fetchEntity("audit", recoverySnapshotId);
+  }
+  if (!recoverySnapshot || recoverySnapshot.version < 1 ||
+      recoverySnapshot.data?.sourceKey !== "aurelia_lodge_v2" ||
+      !recoverySnapshot.data.snapshot ||
+      !Array.isArray(recoverySnapshot.data.snapshot.inv) ||
+      !Array.isArray(recoverySnapshot.data.snapshot.t) ||
+      !Array.isArray(recoverySnapshot.data.snapshot.led) ||
+      !Array.isArray(recoverySnapshot.data.snapshot.aud)) {
+    throw new Error("Canonical PMS compatibility recovery snapshot is missing or malformed.");
+  }
+
   const repositories = Object.freeze({
     settings: new PmsSettingsRepository({ bridge }),
     expenses: new PmsExpenseRepository({ bridge }),
@@ -226,6 +254,28 @@ export async function bootstrapNativePmsDomains({ plugin, state } = {}) {
     await repositories.inventory.syncSnapshot(next);
     await repositories.restaurantTables.syncSnapshot(next);
     await repositories.restaurantSales.syncSnapshot(next);
+    const currentSnapshot = await bridge.fetchEntity("audit", recoverySnapshotId);
+    if (!currentSnapshot) throw new Error("Canonical PMS recovery snapshot disappeared during domain synchronization.");
+    if (!same(currentSnapshot.data.snapshot, next)) {
+      await bridge.mutateEntity({
+        entityType: "audit",
+        entityId: recoverySnapshotId,
+        expectedVersion: currentSnapshot.version,
+        eventType: "pms.compatibility_snapshot.synchronized",
+        eventPayload: { source: "workspace_save" },
+        mutate: entity => {
+          entity.sourceKey = "aurelia_lodge_v2";
+          entity.schemaVersion = 2;
+          entity.snapshot = clone(next);
+          entity.updatedAt = new Date().toISOString();
+          return entity;
+        }
+      });
+      const verifiedSnapshot = await bridge.fetchEntity("audit", recoverySnapshotId);
+      if (!verifiedSnapshot || !same(verifiedSnapshot.data.snapshot, next)) {
+        throw new Error("PMS compatibility recovery snapshot failed exact read-back verification.");
+      }
+    }
     return Object.freeze(summary);
   }
 
