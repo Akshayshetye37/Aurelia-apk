@@ -438,7 +438,7 @@ public class MainActivity extends BridgeActivity {
       if (published == null) throw new IllegalStateException("Could not publish the verified backup.");
       writeDocument(published, bytes);
       if (!sha256(bytes).equals(sha256(readDocument(published)))) throw new IllegalStateException("Published backup failed SHA-256 read-back verification.");
-      try { DocumentsContract.deleteDocument(getContentResolver(), stage); } catch (Exception ignored) { }
+      try { if (!DocumentsContract.deleteDocument(getContentResolver(), stage)) android.util.Log.w("AureliaBackup", "Could not remove staging backup file."); } catch (Exception cleanupError) { android.util.Log.w("AureliaBackup", "Could not remove staging backup file.", cleanupError); }
       try {
         pruneBackupFilesToRetention(root, published, 3);
         return null;
@@ -447,8 +447,8 @@ public class MainActivity extends BridgeActivity {
         return "WARN:Backup saved and verified, but retention cleanup was incomplete. Check the folder; older backup files may remain.";
       }
     } catch (Exception e) {
-      if (published != null) try { DocumentsContract.deleteDocument(getContentResolver(), published); } catch (Exception ignored) { }
-      if (stage != null) try { DocumentsContract.deleteDocument(getContentResolver(), stage); } catch (Exception ignored) { }
+      if (published != null) try { if (!DocumentsContract.deleteDocument(getContentResolver(), published)) android.util.Log.w("AureliaBackup", "Could not remove failed published backup."); } catch (Exception cleanupError) { android.util.Log.w("AureliaBackup", "Could not remove failed published backup.", cleanupError); }
+      if (stage != null) try { if (!DocumentsContract.deleteDocument(getContentResolver(), stage)) android.util.Log.w("AureliaBackup", "Could not remove failed backup staging file."); } catch (Exception cleanupError) { android.util.Log.w("AureliaBackup", "Could not remove failed backup staging file.", cleanupError); }
       return e.getMessage() == null ? "Backup write or verification failed." : e.getMessage();
     }
   }
@@ -635,7 +635,7 @@ public class MainActivity extends BridgeActivity {
       if (phone != null && !phone.isEmpty()) send.putExtra("jid", phone.replaceAll("\\D", "") + "@s.whatsapp.net");
       startActivity(Intent.createChooser(send, "Share invoice"));
     } catch (Exception e) {
-      try { saveDocument("share-fallback", name, mime, bytes, false); } catch (Exception ignored) { }
+      try { saveDocument("share-fallback", name, mime, bytes, false); } catch (Exception fallbackError) { android.util.Log.e("AureliaShare", "Image sharing and save fallback both failed.", fallbackError); android.widget.Toast.makeText(MainActivity.this, "Could not share or save the invoice image.", android.widget.Toast.LENGTH_LONG).show(); }
     }
   }
 
@@ -716,8 +716,8 @@ public class MainActivity extends BridgeActivity {
             throw restoreError;
           } finally {
             java.io.File[] stagedFiles = stageDir.listFiles();
-            if (stagedFiles != null) for (java.io.File stagedFile : stagedFiles) try { stagedFile.delete(); } catch (Exception ignored) { }
-            try { stageDir.delete(); } catch (Exception ignored) { }
+            if (stagedFiles != null) for (java.io.File stagedFile : stagedFiles) try { if (!stagedFile.delete() && stagedFile.exists()) android.util.Log.w("AureliaPhoto", "Could not remove staged photo restore file."); } catch (Exception cleanupError) { android.util.Log.w("AureliaPhoto", "Could not remove staged photo restore file.", cleanupError); }
+            try { if (!stageDir.delete() && stageDir.exists()) android.util.Log.w("AureliaPhoto", "Could not remove photo restore staging directory."); } catch (Exception cleanupError) { android.util.Log.w("AureliaPhoto", "Could not remove photo restore staging directory.", cleanupError); }
           }
         } else if ("chooseDeviceBackupFolder".equals(type)) {
           runOnUiThread(() -> {
@@ -736,14 +736,14 @@ public class MainActivity extends BridgeActivity {
           recognizer.process(image)
             .addOnSuccessListener(result -> {
               JSONObject payload = new JSONObject();
-              try { payload.put("status", "OK"); payload.put("text", result.getText()); payload.put("imageWidth", bitmap.getWidth()); payload.put("imageHeight", bitmap.getHeight()); org.json.JSONArray lineItems = new org.json.JSONArray(); for (com.google.mlkit.vision.text.Text.TextBlock block : result.getTextBlocks()) { for (com.google.mlkit.vision.text.Text.Line line : block.getLines()) { android.graphics.Rect box = line.getBoundingBox(); JSONObject item = new JSONObject(); item.put("text", line.getText()); if (box != null) { item.put("left", box.left); item.put("top", box.top); item.put("right", box.right); item.put("bottom", box.bottom); } item.put("confidence", line.getConfidence()); item.put("rotation", line.getAngle()); lineItems.put(item); } } payload.put("lines", lineItems); } catch (Exception ignored) { }
+              try { payload.put("status", "OK"); payload.put("text", result.getText()); payload.put("imageWidth", bitmap.getWidth()); payload.put("imageHeight", bitmap.getHeight()); org.json.JSONArray lineItems = new org.json.JSONArray(); for (com.google.mlkit.vision.text.Text.TextBlock block : result.getTextBlocks()) { for (com.google.mlkit.vision.text.Text.Line line : block.getLines()) { android.graphics.Rect box = line.getBoundingBox(); JSONObject item = new JSONObject(); item.put("text", line.getText()); if (box != null) { item.put("left", box.left); item.put("top", box.top); item.put("right", box.right); item.put("bottom", box.bottom); } item.put("confidence", line.getConfidence()); item.put("rotation", line.getAngle()); lineItems.put(item); } } payload.put("lines", lineItems); } catch (Exception serializationError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR result.", serializationError); payload = new JSONObject(); try { payload.put("status", "ERROR"); payload.put("message", "Could not serialize OCR result."); } catch (Exception fallbackError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR error result.", fallbackError); } }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
               bitmap.recycle();
               recognizer.close();
             })
             .addOnFailureListener(error -> {
               JSONObject payload = new JSONObject();
-              try { payload.put("status", "ERROR"); payload.put("message", error == null ? "Text recognition failed" : String.valueOf(error.getMessage())); } catch (Exception ignored) { }
+              try { payload.put("status", "ERROR"); payload.put("message", error == null ? "Text recognition failed" : String.valueOf(error.getMessage())); } catch (Exception serializationError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR failure.", serializationError); payload = new JSONObject(); try { payload.put("status", "ERROR"); payload.put("message", "OCR result serialization failed."); } catch (Exception fallbackError) { android.util.Log.e("AureliaOCR", "Could not serialize OCR fallback error.", fallbackError); } }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
               bitmap.recycle();
               recognizer.close();
