@@ -102,4 +102,9 @@ test('native invoice printing creates at most one Android print job per WebView 
   assert.match(printMethod, /AtomicBoolean printDispatched/);
   assert.match(printMethod, /compareAndSet\(false, true\)/);
   assert.ok(!patch.includes("catch (Exception ignored)"), "native patch must not silently swallow Android failures");
+  assert.match(patch, /MAX_ID_SCAN_BYTES/);
+  assert.match(patch, /MAX_ID_SCAN_BASE64_CHARS/);
+  assert.match(patch, /MAX_ID_SCAN_PIXELS/);
+  assert.match(patch, /inJustDecodeBounds = true/);
+  assert.match(patch, /decodeOptions\.inSampleSize = sampleSize/);
 });
