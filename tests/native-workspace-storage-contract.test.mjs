@@ -87,6 +87,6 @@ test('backup restore exclusion metadata fails closed when malformed', async () =
   const end = patch.indexOf('Uri tree = Uri.parse(saved);', start);
   assert.ok(start >= 0 && end > start, 'backup restore method is present');
   const exclusionParser = patch.slice(start, end);
-  assert.match(exclusionParser, /new org\\.json\\.JSONArray\\(excludedJson == null \? \"\[\]\" : excludedJson\)/);
+  assert.ok(exclusionParser.includes('new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson);'));
   assert.doesNotMatch(exclusionParser, /catch \\(Exception ignored\\)/);
 });
