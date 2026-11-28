@@ -23,6 +23,7 @@ test('SQLCipher repository provides versioned workspace read, copy-first migrati
   assert.match(repository, /ENTITY_VERSION_CONFLICT/);
   assert.match(repository, /beginTransactionNonExclusive/);
   assert.match(repository, /PRAGMA integrity_check/);
+  assert.doesNotMatch(repository, /catch \\(Exception ignored\\) \\{\\s*\\}/, "repository result serialization must not swallow failures");
 });
 
 test('Capacitor bridge exposes only authenticated workspace operations', async () => {
