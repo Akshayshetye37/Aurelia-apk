@@ -141,3 +141,10 @@ No new Aurelia PIN, recovery code, OTP or replacement DEK is generated during th
 The v2 domain repository adapter now validates the actual native SQLCipher contract (android-sqlcipher, contract version 2, device-authenticated key protection, and successful integrity status). A mismatch blocks domain bootstrap.
 
 This is source/CI qualification only. Migration must still be exercised on a physical device with representative v1 databases before release.
+
+
+## Encrypted backup status — 28 November 2026
+
+The client now uses an authenticated encrypted archive envelope: a fresh 256-bit DEK per backup, chunked AES-256-GCM, per-chunk authenticated data, property/backup binding, SHA-256 verification, and a server-wrapped DEK. The app's manual and Android SAF backup/restore paths now accept only this encrypted envelope. Plaintext export and restore fallback are blocked.
+
+The key-recovery client requires a fresh Firebase ID token and an HTTPS key-service endpoint. **The server service is not implemented/deployed and Google owner sessions are not configured**, so encrypted backup and restore remain intentionally unavailable until the server-side Firebase membership checks and Cloud KMS wrapping service are deployed. See docs/BACKUP-KEY-RECOVERY-CONTRACT.md. This is a fail-closed transition, not a claim that portable backup recovery is operational.
