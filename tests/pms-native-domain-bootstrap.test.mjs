@@ -109,6 +109,9 @@ test("native domain bootstrap projects verified SQLCipher workspace once and rep
   const newBooking = await second.bridge.fetchEntity("booking", "8");
   assert.equal(newBooking.data.g, "New guest");
   assert.equal(newBooking.version, 1);
+  const newFolio = await second.bridge.fetchEntity("folio", "booking-8");
+  assert.equal(newFolio.data.bookingId, "8");
+  assert.equal(newFolio.data.legacyPaidTotal, 0);
 });
 
 test("native domain bootstrap refuses a non-SQLCipher or failed-integrity storage adapter", async () => {
@@ -117,4 +120,19 @@ test("native domain bootstrap refuses a non-SQLCipher or failed-integrity storag
     success: true, engine: "android-sqlite", contractVersion: 1, integrity: { ok: true }
   });
   await assert.rejects(bootstrapNativePmsDomains({ plugin, state: workspace() }), /authenticated SQLCipher v2 contract/);
+});
+
+
+test("native domain synchronization never rewrites immutable financial ledger rows", async () => {
+  const plugin = fakeSqlCipherPlugin();
+  const state = workspace();
+  await bootstrapNativePmsDomains({ plugin, state });
+  const changed = workspace();
+  changed.financialLedger[0].amountPaise = 9999;
+  await assert.rejects(
+    bootstrapNativePmsDomains({ plugin, state: changed }),
+    error => error.code === "PMS_IMMUTABLE_ENTITY_DIVERGENCE"
+  );
+  const stored = [...plugin.rows.values()].find(row => row.type === "ledger");
+  assert.equal(stored.data.value.value.amountPaise, 500);
 });
